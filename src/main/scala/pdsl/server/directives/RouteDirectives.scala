@@ -1,16 +1,12 @@
 package pdsl.server.directives
 
 import cats.effect.IO
-import org.http4s.{Response, Status}
-import pdsl.server.{Rejection, RouteResult, StandardRoute}
+import org.http4s.{EntityEncoder, Response, Status}
+import pdsl.server.{Rejection, RouteResult, StandardRoute, ToResponseMarshallable}
 
 object RouteDirectives {
-  def complete(status: Status): StandardRoute = { _ =>
-    IO.pure(RouteResult.Complete(Response[IO](status = status)))
-  }
-
-  def complete(f: IO[Status]): StandardRoute = { _ =>
-    f.map(status => RouteResult.Complete(Response[IO](status = status)))
+  def complete(m: ToResponseMarshallable): StandardRoute = { _ =>
+    m.marshaller.toResponse(m.value).map(RouteResult.Complete)
   }
 
   def reject(rejection: Rejection): StandardRoute = { _ =>
