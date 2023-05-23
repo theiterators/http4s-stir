@@ -18,16 +18,16 @@ import pdsl.server.directives.MethodDirectives._
 import pdsl.server.directives.RouteConcatenation._
 import pdsl.server.directives.PathDirectives._
 import pdsl.server.directives.MarshallingDirectives._
-import collection.JavaConverters._
+import pl.iterators.kebs.Http4s
+import pl.iterators.kebs.circe.KebsCirce
 
+import scala.jdk.CollectionConverters._
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 case class Beer(id: UUID, name: String, style: String, abv: Double)
 
-object Main extends IOApp.Simple {
-  implicit val circeJson = deriveCodec[Beer]
-  implicit val beerCoder = jsonOf[IO, Beer]
+object Main extends IOApp.Simple with KebsCirce with Http4s {
   val beers = new ConcurrentHashMap[UUID, Beer]()
 
   val routes: Route = {
