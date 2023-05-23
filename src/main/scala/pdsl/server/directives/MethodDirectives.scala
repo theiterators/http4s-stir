@@ -4,7 +4,7 @@ import org.http4s.Method
 import pdsl.server.{Directive, Directive0, Directive1, StandardRoute}
 
 object MethodDirectives {
-  def extractMethod: Directive1[Method] = BasicDirectives.extract[Method](_.method)
+  def extractMethod: Directive1[Method] = BasicDirectives.extract[Method](_.request.method)
 
   def method(method: Method): Directive0 = {
     extractMethod.flatMap { m =>

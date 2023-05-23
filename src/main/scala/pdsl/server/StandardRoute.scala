@@ -15,7 +15,7 @@ object StandardRoute {
   def apply(route: Route): StandardRoute = route match {
     case x: StandardRoute => x
     case x => new StandardRoute {
-      def apply(ctx: Request[IO]) = x(ctx)
+      def apply(ctx: RequestContext) = x(ctx)
     }
   }
 

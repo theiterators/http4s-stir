@@ -358,8 +358,9 @@ trait PathMatchers {
    */
   object Slash extends PathMatcher0 {
     def apply(path: Path) = {
-      if (path.isEmpty) Unmatched
-      else Matched(path, ())
+//      if (path.isEmpty) Unmatched
+//      else Matched(path, ())
+      Matched(path, ())
     }
   }
 

@@ -5,14 +5,13 @@ import cats.effect.IO
 import org.http4s.{HttpApp, Request, Response, Status}
 
 package object server {
-  type RequestContext = Request[IO]
   type Route = RequestContext => IO[RouteResult]
 
   implicit class ToHttpRoutes(val route: Route) extends AnyVal {
     def toHttpRoutes: HttpApp[IO] = {
-      Kleisli[IO, Request[IO], Response[IO]](req => route(req).map {
+      Kleisli[IO, Request[IO], Response[IO]](req => route(RequestContext(req)).map {
         case RouteResult.Complete(response) => response
-        case RouteResult.Reject(_) => Response[IO](status = Status.NotFound)
+        case RouteResult.Rejected(_) => Response[IO](status = Status.NotFound)
       })
     }
   }

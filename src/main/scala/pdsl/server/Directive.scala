@@ -1,5 +1,7 @@
 package pdsl.server
 
+import cats.effect.IO
+import pdsl.server.directives.RouteDirectives
 import pdsl.util.{ApplyConverter, ConstructFromTuple, Tuple, TupleOps, Tupler}
 
 abstract class Directive[L](implicit val ev: Tuple[L]) {
@@ -17,13 +19,13 @@ abstract class Directive[L](implicit val ev: Tuple[L]) {
    *
    * Alias for [[or]].
    */
-//  def |[R >: L](that: Directive[R]): Directive[R] = or(that)
+  def |[R >: L](that: Directive[R]): Directive[R] = or(that)
 
   /**
    * Joins two directives into one which runs the second directive if the first one rejects.
    */
-//  def or[R >: L](that: Directive[R]): Directive[R] =
-//    recover(rejections => directives.BasicDirectives.mapRejections(rejections ++ _) & that)(that.ev)
+  def or[R >: L](that: Directive[R]): Directive[R] =
+    recover(rejections => directives.BasicDirectives.mapRejections(rejections ++ _) & that)(that.ev)
 
   /**
    * Joins two directives into one which extracts the concatenation of its base directive extractions.
@@ -43,25 +45,25 @@ abstract class Directive[L](implicit val ev: Tuple[L]) {
    * Converts this directive into one which, instead of a tuple of type `L`, creates an
    * instance of type `A` (which is usually a case class).
    */
-//  def as[A](constructor: ConstructFromTuple[L, A]): Directive1[A] = {
-//    def validatedMap[R](f: L => R)(implicit tupler: Tupler[R]): Directive[tupler.Out] =
-//      Directive[tupler.Out] { inner =>
-//        tapply { values => ctx =>
-//          def futureRouteResult(): Future[RouteResult] = {
-//            val r: R =
-//              try f(values)
-//              catch {
-//                case e: IllegalArgumentException =>
-//                  return ctx.reject(ValidationRejection(e.getMessage.nullAsEmpty, Some(e)))
-//              }
-//            inner(tupler(r))(ctx)
-//          }
-//          futureRouteResult()
-//        }
-//      }(tupler.OutIsTuple)
-//
-//    validatedMap(constructor)
-//  }
+  def as[A](constructor: ConstructFromTuple[L, A]): Directive1[A] = {
+    def validatedMap[R](f: L => R)(implicit tupler: Tupler[R]): Directive[tupler.Out] =
+      Directive[tupler.Out] { inner =>
+        tapply { values => ctx =>
+          def routeResult(): IO[RouteResult] = {
+            val r: R =
+              try f(values)
+              catch {
+                case e: IllegalArgumentException =>
+                  return ctx.reject(ValidationRejection(e.getMessage, Some(e)))
+              }
+            inner(tupler(r))(ctx)
+          }
+          routeResult()
+        }
+      }(tupler.OutIsTuple)
+
+    validatedMap(constructor)
+  }
 
   /**
    * Maps over this directive using the given function, which can produce either a tuple or any other value
@@ -80,52 +82,51 @@ abstract class Directive[L](implicit val ev: Tuple[L]) {
    * Creates a new [[pekko.http.scaladsl.server.Directive0]], which passes if the given predicate matches the current
    * extractions or rejects with the given rejections.
    */
-//  def trequire(predicate: L => Boolean, rejections: Rejection*): Directive0 =
-//    tfilter(predicate, rejections: _*).tflatMap(_ => Directive.Empty)
+  def trequire(predicate: L => Boolean, rejections: Rejection*): Directive0 =
+    tfilter(predicate, rejections: _*).tflatMap(_ => Directive.Empty)
 
   /**
    * Creates a new directive of the same type, which passes if the given predicate matches the current
    * extractions or rejects with the given rejections.
    */
-//  def tfilter(predicate: L => Boolean, rejections: Rejection*): Directive[L] =
-//    Directive[L] { inner =>
-//      tapply { values => ctx => if (predicate(values)) inner(values)(ctx) else ctx.reject(rejections: _*) }
-//    }
+  def tfilter(predicate: L => Boolean, rejections: Rejection*): Directive[L] =
+    Directive[L] { inner =>
+      tapply { values => ctx => if (predicate(values)) inner(values)(ctx) else ctx.reject(rejections: _*) }
+    }
 
   /**
    * If the given [[scala.PartialFunction]] is defined for the input, maps this directive with the given function,
    * which can produce either a tuple or any other value.
    * If it is not defined however, the returned directive will reject with the given rejections.
    */
-//  def tcollect[R](pf: PartialFunction[L, R], rejections: Rejection*)(
-//    implicit tupler: Tupler[R]): Directive[tupler.Out] =
-//    Directive[tupler.Out] { inner =>
-//      tapply { values => ctx =>
-//      { if (pf.isDefinedAt(values)) inner(tupler(pf(values)))(ctx) else ctx.reject(rejections: _*) }
-//      }
-//    }(tupler.OutIsTuple)
+  def tcollect[R](pf: PartialFunction[L, R], rejections: Rejection*)(
+    implicit tupler: Tupler[R]): Directive[tupler.Out] =
+    Directive[tupler.Out] { inner =>
+      tapply { values => ctx =>
+      { if (pf.isDefinedAt(values)) inner(tupler(pf(values)))(ctx) else ctx.reject(rejections: _*) }
+      }
+    }(tupler.OutIsTuple)
 
   /**
    * Creates a new directive that is able to recover from rejections that were produced by `this` Directive
    * **before the inner route was applied**.
    */
-//  def recover[R >: L: Tuple](recovery: immutable.Seq[Rejection] => Directive[R]): Directive[R] =
-//    Directive[R] { inner => ctx =>
-//      import ctx.executionContext
-//      @volatile var rejectedFromInnerRoute = false
-//      tapply { list => c => rejectedFromInnerRoute = true; inner(list)(c) }(ctx).fast.flatMap {
-//        case RouteResult.Rejected(rejections) if !rejectedFromInnerRoute => recovery(rejections).tapply(inner)(ctx)
-//        case x                                                           => FastFuture.successful(x)
-//      }
-//    }
+  def recover[R >: L: Tuple](recovery: Seq[Rejection] => Directive[R]): Directive[R] =
+    Directive[R] { inner => ctx =>
+      @volatile var rejectedFromInnerRoute = false
+      tapply { list => c => rejectedFromInnerRoute = true; inner(list)(c) }(ctx).flatMap {
+        case RouteResult.Rejected(rejections) if !rejectedFromInnerRoute => recovery(rejections).tapply(inner)(ctx)
+        case x                                                           => IO.pure(x)
+      }
+    }
 
   /**
    * Variant of `recover` that only recovers from rejections handled by the given PartialFunction.
    */
-//  def recoverPF[R >: L: Tuple](recovery: PartialFunction[immutable.Seq[Rejection], Directive[R]]): Directive[R] =
-//    recover { rejections =>
-//      recovery.applyOrElse(rejections, (rejs: Seq[Rejection]) => RouteDirectives.reject(rejs: _*))
-//    }
+  def recoverPF[R >: L: Tuple](recovery: PartialFunction[Seq[Rejection], Directive[R]]): Directive[R] =
+    recover { rejections =>
+      recovery.applyOrElse(rejections, (rejs: Seq[Rejection]) => RouteDirectives.reject(rejs: _*))
+    }
 
   // #basic
 }
@@ -180,15 +181,15 @@ object Directive {
     def flatMap[R: Tuple](f: T => Directive[R]): Directive[R] =
       underlying.tflatMap { case Tuple1(value) => f(value) }
 
-//    def require(predicate: T => Boolean, rejections: Rejection*): Directive0 =
-//      underlying.filter(predicate, rejections: _*).tflatMap(_ => Empty)
+    def require(predicate: T => Boolean, rejections: Rejection*): Directive0 =
+      underlying.filter(predicate, rejections: _*).tflatMap(_ => Empty)
 
-//    def filter(predicate: T => Boolean, rejections: Rejection*): Directive1[T] =
-//      underlying.tfilter({ case Tuple1(value) => predicate(value) }, rejections: _*)
+    def filter(predicate: T => Boolean, rejections: Rejection*): Directive1[T] =
+      underlying.tfilter({ case Tuple1(value) => predicate(value) }, rejections: _*)
 
-//    def collect[R](pf: PartialFunction[T, R], rejections: Rejection*)(
-//      implicit tupler: Tupler[R]): Directive[tupler.Out] =
-//      underlying.tcollect({ case Tuple1(value) if pf.isDefinedAt(value) => pf(value) }, rejections: _*)
+    def collect[R](pf: PartialFunction[T, R], rejections: Rejection*)(
+      implicit tupler: Tupler[R]): Directive[tupler.Out] =
+      underlying.tcollect({ case Tuple1(value) if pf.isDefinedAt(value) => pf(value) }, rejections: _*)
   }
 
   /**
@@ -204,13 +205,13 @@ object Directive {
       underlying.map(f)
     def flatMap[R: Tuple](f: T => Directive[R]): Directive[R] =
       underlying.flatMap(f)
-//    def require(predicate: T => Boolean, rejections: Rejection*): Directive0 =
-//      underlying.require(predicate, rejections: _*)
-//    def filter(predicate: T => Boolean, rejections: Rejection*): Directive1[T] =
-//      underlying.filter(predicate, rejections: _*)
-//    def collect[R](pf: PartialFunction[T, R], rejections: Rejection*)(
-//      implicit tupler: Tupler[R]): Directive[tupler.Out] =
-//      underlying.collect(pf, rejections: _*)
+    def require(predicate: T => Boolean, rejections: Rejection*): Directive0 =
+      underlying.require(predicate, rejections: _*)
+    def filter(predicate: T => Boolean, rejections: Rejection*): Directive1[T] =
+      underlying.filter(predicate, rejections: _*)
+    def collect[R](pf: PartialFunction[T, R], rejections: Rejection*)(
+      implicit tupler: Tupler[R]): Directive[tupler.Out] =
+      underlying.collect(pf, rejections: _*)
   }
 }
 
