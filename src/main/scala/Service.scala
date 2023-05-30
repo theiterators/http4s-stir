@@ -1,23 +1,15 @@
 import cats.effect._
-import cats.implicits._
 import com.comcast.ip4s._
-import io.circe.generic.semiauto.deriveCodec
-import org.typelevel.log4cats.Logger
-import org.typelevel.log4cats.syntax._
-import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.http4s._
-import org.http4s.implicits._
 import org.http4s.circe.CirceEntityEncoder._
 import org.http4s.circe.CirceEntityDecoder._
-import org.http4s.circe.jsonOf
-import org.http4s.server.middleware.{Logger => Http4sLogger}
 import org.http4s.ember.server._
-import pdsl.server.Route
-import pdsl.server.directives.RouteDirectives._
-import pdsl.server.directives.MethodDirectives._
-import pdsl.server.directives.RouteConcatenation._
-import pdsl.server.directives.PathDirectives._
-import pdsl.server.directives.MarshallingDirectives._
+import pl.iterators.stir.server.Route
+import pl.iterators.stir.server.directives.RouteDirectives._
+import pl.iterators.stir.server.directives.MethodDirectives._
+import pl.iterators.stir.server.directives.RouteConcatenation._
+import pl.iterators.stir.server.directives.PathDirectives._
+import pl.iterators.stir.server.directives.MarshallingDirectives._
 import pl.iterators.kebs.Http4s
 import pl.iterators.kebs.circe.KebsCirce
 
@@ -56,7 +48,6 @@ object Main extends IOApp.Simple with KebsCirce with Http4s {
   }
 
   val run = {
-    val logger = Slf4jLogger.getLogger[IO]
     EmberServerBuilder
       .default[IO]
       .withHost(ipv4"0.0.0.0")
