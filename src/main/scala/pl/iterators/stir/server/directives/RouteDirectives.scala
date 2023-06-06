@@ -4,7 +4,7 @@ import cats.effect.IO
 import org.http4s.{EntityEncoder, Headers, Request, Response, Status, Uri}
 import pl.iterators.stir.server.{Rejection, RouteResult, StandardRoute, ToResponseMarshallable}
 
-object RouteDirectives {
+trait RouteDirectives {
   /**
    * Rejects the request with an empty set of rejections.
    *
@@ -132,6 +132,8 @@ object RouteDirectives {
       .andThen(res => IO.pure(RouteResult.Complete(res)))
       .applyOrElse[Request[IO], IO[RouteResult]](ctx.request, _ => ctx.reject(rejections: _*))
   }
+}
 
+object RouteDirectives extends RouteDirectives {
   private val _reject = StandardRoute(_.reject())
 }

@@ -7,7 +7,7 @@ import pl.iterators.stir.server.directives.BasicDirectives.cancelRejections
 import pl.iterators.stir.server.directives.RouteDirectives.complete
 import pl.iterators.stir.server.{EntityRejection, ToResponseMarshaller}
 
-object MarshallingDirectives {
+trait MarshallingDirectives {
   /**
    * Unmarshalls the requests entity to the given type passes it to its inner Route.
    * If there is a problem with unmarshalling the request is rejected with the [[Rejection]]
@@ -31,3 +31,5 @@ object MarshallingDirectives {
   def handleWith[A, B](f: A => B)(implicit entityDecoder: EntityDecoder[IO, A], m: ToResponseMarshaller[B]): Route =
     entityAs(entityDecoder) { a => complete(f(a)) }
 }
+
+object MarshallingDirectives extends MarshallingDirectives

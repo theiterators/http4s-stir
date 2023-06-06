@@ -4,7 +4,7 @@ import cats.effect.IO
 import pl.iterators.stir.server.directives.RouteDirectives.reject
 import pl.iterators.stir.server.{Route, RouteResult}
 
-object RouteConcatenation {
+trait RouteConcatenation {
   implicit class RouteWithConcatenation(val route: Route) {
     def ~(other: Route): Route = { req =>
       route(req).flatMap {
@@ -29,3 +29,5 @@ object RouteConcatenation {
    */
   def concat(routes: Route*): Route = routes.foldLeft[Route](reject)(_ ~ _)
 }
+
+object RouteConcatenation extends RouteConcatenation

@@ -1,6 +1,6 @@
 package pl.iterators.stir.server
 
-import org.http4s.DecodeFailure
+import org.http4s.{DecodeFailure, Method}
 
 trait Rejection
 
@@ -43,3 +43,21 @@ final case class MissingQueryParamRejection(parameterName: String) extends Rejec
  * Signals that the request was rejected because a query parameter could not be interpreted.
  */
 final case class MalformedQueryParamRejection(parameterName: String, errorMsg: String, cause: Option[Throwable] = None) extends Rejection
+
+/**
+ * Rejection created by header directives.
+ * Signals that the request was rejected because a header value is malformed.
+ */
+final case class MalformedHeaderRejection(headerName: String, errorMsg: String, cause: Option[Throwable] = None) extends Rejection
+
+/**
+ * Rejection created by header directives.
+ * Signals that the request was rejected because a required header could not be found.
+ */
+final case class MissingHeaderRejection(headerName: String) extends Rejection
+
+/**
+ * Rejection created by method filters.
+ * Signals that the request was rejected because the HTTP method is unsupported.
+ */
+final case class MethodRejection(supported: Method) extends Rejection

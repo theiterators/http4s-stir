@@ -6,7 +6,7 @@ import org.http4s.{EntityBody, Headers, Request, Response, Uri}
 import pl.iterators.stir.server.{Directive, Directive0, Directive1, Rejection, RequestContext, Route, RouteResult}
 import pl.iterators.stir.util.Tuple
 
-object BasicDirectives {
+trait BasicDirectives {
   /**
    * @group basic
    */
@@ -175,3 +175,5 @@ object BasicDirectives {
    */
   def extractRequestEntity: Directive1[EntityBody[IO]] = extract(_.request.body)
 }
+
+object BasicDirectives extends BasicDirectives

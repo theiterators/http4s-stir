@@ -9,7 +9,7 @@ import pl.iterators.stir.server.directives.IODirectives._
 
 import scala.util._
 
-object ParameterDirectives extends ToNameReceptacleEnhancements with ParameterDirectivesInstances {
+trait ParameterDirectives extends ToNameReceptacleEnhancements with ParameterDirectivesInstances {
   /**
    * Extracts the request's query parameters as a `Map[String, String]`.
    *
@@ -130,3 +130,5 @@ object ParameterDirectives extends ToNameReceptacleEnhancements with ParameterDi
       }
   }
 }
+
+object ParameterDirectives extends ParameterDirectives

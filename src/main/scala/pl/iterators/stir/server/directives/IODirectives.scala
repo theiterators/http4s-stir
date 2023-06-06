@@ -6,8 +6,7 @@ import pl.iterators.stir.util.Tupler
 
 import scala.util._
 
-object IODirectives {
-
+trait IODirectives {
   /**
    * "Unwraps" a `IO[T]` and runs the inner route after io
    * completion with the io's value as an extraction of type `Try[T]`.
@@ -24,7 +23,7 @@ object IODirectives {
     }
 
   /**
-   * "Unwraps" a `Future[T]` and runs the inner route after future
+   * "Unwraps" a `IO[T]` and runs the inner route after future
    * completion with the future's value as an extraction of type `T`.
    * If the future fails its failure Throwable is bubbled up to the nearest
    * ExceptionHandler.
@@ -36,7 +35,7 @@ object IODirectives {
   def onSuccess(magnet: OnSuccessMagnet): Directive[magnet.Out] = magnet.directive
 
   /**
-   * "Unwraps" a `Future[T]` and runs the inner route when the future has failed
+   * "Unwraps" a `IO[T]` and runs the inner route when the future has failed
    * with the future's failure exception as an extraction of type `Throwable`.
    * If the future succeeds the request is completed using the values marshaller
    * (This directive therefore requires a marshaller for the futures type to be
@@ -46,6 +45,8 @@ object IODirectives {
    */
   def completeOrRecoverWith(magnet: CompleteOrRecoverWithMagnet): Directive1[Throwable] = magnet.directive
 }
+
+object IODirectives extends IODirectives
 
 trait OnSuccessMagnet {
   type Out
