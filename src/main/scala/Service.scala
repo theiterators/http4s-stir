@@ -10,6 +10,7 @@ import pl.iterators.stir.server.directives.MethodDirectives._
 import pl.iterators.stir.server.directives.RouteConcatenation._
 import pl.iterators.stir.server.directives.PathDirectives._
 import pl.iterators.stir.server.directives.MarshallingDirectives._
+import pl.iterators.stir.server.directives.ParameterDirectives._
 import pl.iterators.kebs.Http4s
 import pl.iterators.kebs.circe.KebsCirce
 
@@ -24,9 +25,9 @@ object Main extends IOApp.Simple with KebsCirce with Http4s {
 
   val routes: Route = {
     pathPrefix("api" / "beers") {
-      (get & pathEndOrSingleSlash) {
+      (get & parameters("pageSize".as[Int].?, "pageNumber".as[Int].?) & pathEndOrSingleSlash) { (pageSize, pageNumber) =>
         complete {
-          Status.Ok -> beers.values().asScala.toList
+          Status.Ok -> beers.values().asScala.toList.slice(pageNumber.getOrElse(0) * pageSize.getOrElse(25), pageNumber.getOrElse(0) * pageSize.getOrElse(25) + pageSize.getOrElse(25))
         }
       } ~
         (post & pathEndOrSingleSlash & entityAs[Beer]) { beer =>

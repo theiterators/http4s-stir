@@ -1,6 +1,7 @@
 package pl.iterators.stir.server
 
 import org.http4s.Uri.Path
+import pl.iterators.stir.common.NameOptionReceptacle
 import pl.iterators.stir.util.Tuple
 import pl.iterators.stir.util.TupleOps.Join
 
@@ -265,8 +266,8 @@ trait ImplicitPathMatcherConstruction {
   /**
    * @group pathmatcherimpl
    */
-//  implicit def _stringNameOptionReceptacle2PathMatcher(nr: NameOptionReceptacle[String]): PathMatcher0 =
-//    PathMatcher(nr.name).?
+  implicit def _stringNameOptionReceptacle2PathMatcher(nr: NameOptionReceptacle[String]): PathMatcher0 =
+    PathMatcher(nr.name).?
 
   /**
    * Creates a PathMatcher that consumes (a prefix of) the first path segment
