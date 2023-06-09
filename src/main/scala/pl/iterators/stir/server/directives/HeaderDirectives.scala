@@ -4,6 +4,7 @@ import org.http4s.Header
 import org.typelevel.ci.CIString
 import pl.iterators.stir.server._
 
+import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 trait HeaderDirectives {
@@ -63,17 +64,19 @@ trait HeaderDirectives {
   def headerValueByName(headerName: String): Directive1[String] =
     headerValue(optionalValue(headerName.toLowerCase)) | reject(MissingHeaderRejection(headerName))
 
-//  /**
-//   * Extracts the first HTTP request header of the given type.
-//   * If no header with a matching type is found the request is rejected with a [[akka.http.scaladsl.server.MissingHeaderRejection]].
-//   *
-//   * Custom headers will only be matched by this directive if they extend [[ModeledCustomHeader]]
-//   * and provide a companion extending [[ModeledCustomHeaderCompanion]].
-//   *
-//   * @group header
-//   */
-//  def headerValueByType[T](magnet: HeaderMagnet[T]): Directive1[T] =
-//    headerValuePF(magnet.extractPF) | reject(MissingHeaderRejection(magnet.headerName))
+  /**
+   * Extracts the first HTTP request header of the given type.
+   * If no header with a matching type is found the request is rejected with a [[MissingHeaderRejection]].
+   *
+   * Custom headers will only be matched by this directive if ev [[Header.Select[T]]] is provided.
+   *
+   * @group header
+   */
+  def headerValueByType[T](implicit ev: Header.Select[T], cls: ClassTag[T]): Directive1[ev.F[T]] =
+    extract(_.request.headers.get(ev)).flatMap {
+      case Some(header) => provide(header)
+      case None         => reject(MissingHeaderRejection(cls.runtimeClass.getSimpleName))
+    }
 
   /**
    * Extracts an optional HTTP header value using the given function.
@@ -109,92 +112,20 @@ trait HeaderDirectives {
       case h: Header.Raw if h.name.equals(CIString(headerName)) => h.value
     })
   }
-//
-//  /**
-//   * Extract the header value of the optional HTTP request header with the given type.
-//   *
-//   * Custom headers will only be matched by this directive if they extend [[ModeledCustomHeader]]
-//   * and provide a companion extending [[ModeledCustomHeaderCompanion]].
-//   *
-//   * @group header
-//   */
-//  def optionalHeaderValueByType[T <: HttpHeader](magnet: HeaderMagnet[T]): Directive1[Option[T]] =
-//    optionalHeaderValuePF(magnet.extractPF)
+
+  /**
+   * Extract the header value of the optional HTTP request header with the given type.
+   *
+   * Custom headers will only be matched by this directive if ev [[Header.Select[T]]] is provided.
+   *
+   * @group header
+   */
+   def optionalHeaderValueByType[T](implicit ev: Header.Select[T]) : Directive1[Option[ev.F[T]]] = extract(_.request.headers.get(ev))
 
   private def optionalValue(lowerCaseName: String): Header.Raw => Option[String] = {
     case h: Header.Raw if h.name.equals(CIString(lowerCaseName)) => Some(h.value)
-    case _                                    => None
+    case _ => None
   }
 }
 
 object HeaderDirectives extends HeaderDirectives
-
-//trait HeaderMagnet[T] {
-//  def classTag: ClassTag[T]
-//  def runtimeClass: Class[T]
-//  def headerName: String = ModeledCompanion.nameFromClass(runtimeClass)
-//
-//  /**
-//   * Returns a partial function that checks if the input value is of runtime type
-//   * T and returns the value if it does. Doesn't take erased information into account.
-//   */
-//  def extractPF: PartialFunction[HttpHeader, T]
-//}
-//object HeaderMagnet extends LowPriorityHeaderMagnetImplicits {
-//
-//  /**
-//   * If possible we want to apply the special logic for [[ModeledCustomHeader]] to extract custom headers by type,
-//   * otherwise the default `fromCompanion` is good enough (for headers that the parser emits in the right type already).
-//   */
-//  implicit def fromCompanionForModeledCustomHeader[T <: ModeledCustomHeader[T], H <: ModeledCustomHeaderCompanion[T]](companion: ModeledCustomHeaderCompanion[T])(implicit tag: ClassTag[T]): HeaderMagnet[T] =
-//    fromClassTagForModeledCustomHeader[T, H](tag, companion)
-//
-//  @deprecated("Pass the companion object to headerValueByType as a parameter instead, e.g. `headerValueByType(Origin)` instead of `headerValueByType[Origin](())`", since = "10.2.0")
-//  implicit def fromUnitForModeledCustomHeader[T <: ModeledCustomHeader[T], H <: ModeledCustomHeaderCompanion[T]](u: Unit)(implicit tag: ClassTag[T], companion: ModeledCustomHeaderCompanion[T]): HeaderMagnet[T] =
-//    fromClassTagForModeledCustomHeader[T, H](tag, companion)
-//
-//  implicit def fromClassForModeledCustomHeader[T <: ModeledCustomHeader[T], H <: ModeledCustomHeaderCompanion[T]](clazz: Class[T], companion: ModeledCustomHeaderCompanion[T]): HeaderMagnet[T] =
-//    fromClassTagForModeledCustomHeader(ClassTag(clazz), companion)
-//
-//  implicit def fromClassTagForModeledCustomHeader[T <: ModeledCustomHeader[T], H <: ModeledCustomHeaderCompanion[T]](tag: ClassTag[T], companion: ModeledCustomHeaderCompanion[T]): HeaderMagnet[T] =
-//    new HeaderMagnet[T] {
-//      override def classTag: ClassTag[T] = tag
-//      override def runtimeClass: Class[T] = tag.runtimeClass.asInstanceOf[Class[T]]
-//      override def extractPF: PartialFunction[HttpHeader, T] = {
-//        case h if h.is(companion.lowercaseName) => companion.apply(h.value)
-//      }
-//      override def headerName: String = companion.name
-//    }
-//
-//}
-
-//trait LowPriorityHeaderMagnetImplicits {
-//  implicit def fromClassNormalHeader[T <: HttpHeader](clazz: Class[T]): HeaderMagnet[T] =
-//    fromClassTagNormalHeader(ClassTag(clazz))
-//
-//  // TODO DRY?
-//  implicit def fromClassNormalJavaHeader[T <: akka.http.javadsl.model.HttpHeader](clazz: Class[T]): HeaderMagnet[T] =
-//    new HeaderMagnet[T] {
-//      override def classTag: ClassTag[T] = ClassTag(clazz)
-//      override def runtimeClass: Class[T] = clazz
-//      override def extractPF: PartialFunction[HttpHeader, T] = {
-//        case x if runtimeClass.isAssignableFrom(x.getClass) => x.asInstanceOf[T]
-//      }
-//    }
-//
-//  implicit def fromCompanionNormalHeader[T <: HttpHeader](companion: ModeledCompanion[T])(implicit tag: ClassTag[T]): HeaderMagnet[T] =
-//    fromClassTagNormalHeader(tag)
-//
-//  @deprecated("Pass the companion object to headerValueByType as a parameter instead, e.g. `headerValueByType(Origin)` instead of `headerValueByType[Origin](())`", since = "10.2.0")
-//  implicit def fromUnitNormalHeader[T <: HttpHeader](u: Unit)(implicit tag: ClassTag[T]): HeaderMagnet[T] =
-//    fromClassTagNormalHeader(tag)
-//
-//  implicit def fromClassTagNormalHeader[T <: HttpHeader](tag: ClassTag[T]): HeaderMagnet[T] =
-//    new HeaderMagnet[T] {
-//      val classTag: ClassTag[T] = tag
-//      val runtimeClass: Class[T] = tag.runtimeClass.asInstanceOf[Class[T]]
-//      val extractPF: PartialFunction[Any, T] = {
-//        case x if runtimeClass.isAssignableFrom(x.getClass) => x.asInstanceOf[T]
-//      }
-//    }
-//}

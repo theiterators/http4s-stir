@@ -61,3 +61,9 @@ final case class MissingHeaderRejection(headerName: String) extends Rejection
  * Signals that the request was rejected because the HTTP method is unsupported.
  */
 final case class MethodRejection(supported: Method) extends Rejection
+
+/**
+ * Rejection created by the `cookie` directive.
+ * Signals that the request was rejected because a cookie was not found.
+ */
+final case class MissingCookieRejection(cookieName: String) extends Rejection

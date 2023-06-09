@@ -1,4 +1,4 @@
-name := "stir"
+name := "http4s-stir"
 organization := "pl.iterators"
 version := "0.0.1-SNAPSHOT"
 scalaVersion := "2.13.10"
