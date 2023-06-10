@@ -1,6 +1,6 @@
 package pl.iterators.stir.server.directives
 
-import org.http4s.{Header, Headers}
+import org.http4s.{ Header, Headers }
 import pl.iterators.stir.server.Directive0
 import scala.collection.immutable
 

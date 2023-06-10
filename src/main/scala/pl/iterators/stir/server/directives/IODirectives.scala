@@ -1,12 +1,13 @@
 package pl.iterators.stir.server.directives
 
 import cats.effect.IO
-import pl.iterators.stir.server.{Directive, Directive1, ToResponseMarshaller}
+import pl.iterators.stir.server.{ Directive, Directive1, ToResponseMarshaller }
 import pl.iterators.stir.util.Tupler
 
 import scala.util._
 
 trait IODirectives {
+
   /**
    * "Unwraps" a `IO[T]` and runs the inner route after io
    * completion with the io's value as an extraction of type `Try[T]`.
@@ -14,12 +15,11 @@ trait IODirectives {
    * @group future
    */
   def onComplete[T](io: => IO[T]): Directive1[Try[T]] =
-    Directive { inner =>
-      ctx =>
-        io.attempt.flatMap {
-          case Right(t) => inner(Tuple1(Success(t)))(ctx)
-          case Left(e) => inner(Tuple1(Failure(e)))(ctx)
-        }
+    Directive { inner => ctx =>
+      io.attempt.flatMap {
+        case Right(t) => inner(Tuple1(Success(t)))(ctx)
+        case Left(e)  => inner(Tuple1(Failure(e)))(ctx)
+      }
     }
 
   /**
@@ -72,7 +72,7 @@ object CompleteOrRecoverWithMagnet {
     new CompleteOrRecoverWithMagnet {
       val directive = Directive[Tuple1[Throwable]] { inner => ctx =>
         io.attempt.flatMap {
-          case Right(res)   => ctx.complete(res)
+          case Right(res)  => ctx.complete(res)
           case Left(error) => inner(Tuple1(error))(ctx)
         }
       }

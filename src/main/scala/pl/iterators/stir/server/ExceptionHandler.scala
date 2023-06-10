@@ -23,7 +23,7 @@ object ExceptionHandler {
   type PF = PartialFunction[Throwable, Route]
   private[stir] def errorMessageTemplate(param1: String, param2: String): String = {
     s"Error during processing of request: '$param1'. Completing with $param2 response. " +
-      "To change default exception handling behavior, provide a custom ExceptionHandler."
+    "To change default exception handling behavior, provide a custom ExceptionHandler."
   }
 
   implicit def apply(pf: PF): ExceptionHandler = apply(knownToBeSealed = false)(pf)
@@ -33,9 +33,9 @@ object ExceptionHandler {
       def isDefinedAt(error: Throwable) = pf.isDefinedAt(error)
       def apply(error: Throwable) = pf(error)
       def withFallback(that: ExceptionHandler): ExceptionHandler =
-        if (!knownToBeSealed) ExceptionHandler(knownToBeSealed = false)(this orElse that) else this
+        if (!knownToBeSealed) ExceptionHandler(knownToBeSealed = false)(this.orElse(that)) else this
       def seal(logAction: Option[(Throwable, String) => IO[Unit]] = None): ExceptionHandler =
-        if (!knownToBeSealed) ExceptionHandler(knownToBeSealed = true)(this orElse default(logAction)) else this
+        if (!knownToBeSealed) ExceptionHandler(knownToBeSealed = true)(this.orElse(default(logAction))) else this
     }
 
   /**
@@ -47,10 +47,10 @@ object ExceptionHandler {
     }
     apply(knownToBeSealed = true) {
       case NonFatal(e) => ctx => {
-        val message = Option(e.getMessage).getOrElse(s"${e.getClass.getName} (No error message supplied)")
-        log(e, errorMessageTemplate(message, InternalServerError.toString())) *>
+          val message = Option(e.getMessage).getOrElse(s"${e.getClass.getName} (No error message supplied)")
+          log(e, errorMessageTemplate(message, InternalServerError.toString())) *>
           ctx.complete(InternalServerError)
-      }
+        }
     }
   }
 

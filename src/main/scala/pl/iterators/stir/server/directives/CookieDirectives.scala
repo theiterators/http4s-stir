@@ -1,8 +1,8 @@
 package pl.iterators.stir.server.directives
 
 import org.http4s.Header.ToRaw
-import org.http4s.headers.{Cookie, `Set-Cookie`}
-import org.http4s.{HttpDate, RequestCookie, ResponseCookie}
+import org.http4s.headers.{ `Set-Cookie`, Cookie }
+import org.http4s.{ HttpDate, RequestCookie, ResponseCookie }
 import pl.iterators.stir.server._
 
 /**

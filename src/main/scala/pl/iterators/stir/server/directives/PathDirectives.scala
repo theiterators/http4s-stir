@@ -39,7 +39,7 @@ trait PathDirectives extends PathMatchers with ImplicitPathMatcherConstruction {
     implicit val LIsTuple = pm.ev
     extract(ctx => pm(ctx.unmatchedPath)).flatMap {
       case Matched(rest, values) => tprovide(values) & mapRequestContext(ctx => ctx.copy(unmatchedPath = rest))
-      case Unmatched => reject
+      case Unmatched             => reject
     }
   }
 
@@ -62,7 +62,7 @@ trait PathDirectives extends PathMatchers with ImplicitPathMatcherConstruction {
     implicit val LIsTuple = pm.ev
     extract(ctx => pm(ctx.unmatchedPath)).flatMap {
       case Matched(_, values) => tprovide(values)
-      case Unmatched => reject
+      case Unmatched          => reject
     }
   }
 
@@ -77,7 +77,8 @@ trait PathDirectives extends PathMatchers with ImplicitPathMatcherConstruction {
   def pathSuffix[L](pm: PathMatcher[L]): Directive[L] = {
     implicit val LIsTuple = pm.ev
     extract(ctx => pm(Path(ctx.unmatchedPath.segments.reverse))).flatMap {
-      case Matched(rest, values) => tprovide(values) & mapRequestContext(ctx => ctx.copy(unmatchedPath = Path(rest.segments.reverse)))
+      case Matched(rest, values) =>
+        tprovide(values) & mapRequestContext(ctx => ctx.copy(unmatchedPath = Path(rest.segments.reverse)))
       case Unmatched => reject
     }
   }
@@ -95,7 +96,7 @@ trait PathDirectives extends PathMatchers with ImplicitPathMatcherConstruction {
     implicit val LIsTuple = pm.ev
     extract(ctx => pm(Path(ctx.unmatchedPath.segments.reverse))).flatMap {
       case Matched(_, values) => tprovide(values)
-      case Unmatched => reject
+      case Unmatched          => reject
     }
   }
 

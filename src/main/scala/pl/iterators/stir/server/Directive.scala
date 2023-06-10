@@ -2,7 +2,7 @@ package pl.iterators.stir.server
 
 import cats.effect.IO
 import pl.iterators.stir.server.directives.RouteDirectives
-import pl.iterators.stir.util.{ApplyConverter, ConstructFromTuple, Tuple, Tupler}
+import pl.iterators.stir.util.{ ApplyConverter, ConstructFromTuple, Tuple, Tupler }
 import pl.iterators.stir.util.TupleOps.Join
 
 abstract class Directive[L](implicit val ev: Tuple[L]) {
@@ -101,10 +101,10 @@ abstract class Directive[L](implicit val ev: Tuple[L]) {
    * If it is not defined however, the returned directive will reject with the given rejections.
    */
   def tcollect[R](pf: PartialFunction[L, R], rejections: Rejection*)(
-    implicit tupler: Tupler[R]): Directive[tupler.Out] =
+      implicit tupler: Tupler[R]): Directive[tupler.Out] =
     Directive[tupler.Out] { inner =>
       tapply { values => ctx =>
-      { if (pf.isDefinedAt(values)) inner(tupler(pf(values)))(ctx) else ctx.reject(rejections: _*) }
+        { if (pf.isDefinedAt(values)) inner(tupler(pf(values)))(ctx) else ctx.reject(rejections: _*) }
       }
     }(tupler.OutIsTuple)
 
@@ -189,7 +189,7 @@ object Directive {
       underlying.tfilter({ case Tuple1(value) => predicate(value) }, rejections: _*)
 
     def collect[R](pf: PartialFunction[T, R], rejections: Rejection*)(
-      implicit tupler: Tupler[R]): Directive[tupler.Out] =
+        implicit tupler: Tupler[R]): Directive[tupler.Out] =
       underlying.tcollect({ case Tuple1(value) if pf.isDefinedAt(value) => pf(value) }, rejections: _*)
   }
 
@@ -211,7 +211,7 @@ object Directive {
     def filter(predicate: T => Boolean, rejections: Rejection*): Directive1[T] =
       underlying.filter(predicate, rejections: _*)
     def collect[R](pf: PartialFunction[T, R], rejections: Rejection*)(
-      implicit tupler: Tupler[R]): Directive[tupler.Out] =
+        implicit tupler: Tupler[R]): Directive[tupler.Out] =
       underlying.collect(pf, rejections: _*)
   }
 }
@@ -223,7 +223,7 @@ trait ConjunctionMagnet[L] {
 
 object ConjunctionMagnet {
   implicit def fromDirective[L, R](other: Directive[R])(
-    implicit join: Join[L, R]): ConjunctionMagnet[L] { type Out = Directive[join.Out] } =
+      implicit join: Join[L, R]): ConjunctionMagnet[L] { type Out = Directive[join.Out] } =
     new ConjunctionMagnet[L] {
       type Out = Directive[join.Out]
       def apply(underlying: Directive[L]) =
@@ -239,10 +239,9 @@ object ConjunctionMagnet {
     }
 
   implicit def fromRouteGenerator[T, R <: Route](
-                                                  generator: T => R): ConjunctionMagnet[Unit] { type Out = RouteGenerator[T] } =
+      generator: T => R): ConjunctionMagnet[Unit] { type Out = RouteGenerator[T] } =
     new ConjunctionMagnet[Unit] {
       type Out = RouteGenerator[T]
       def apply(underlying: Directive0) = value => underlying.tapply(_ => generator(value))
     }
 }
-

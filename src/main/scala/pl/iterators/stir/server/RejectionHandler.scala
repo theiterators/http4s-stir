@@ -1,7 +1,7 @@
 package pl.iterators.stir.server
 
 import cats.effect.IO
-import org.http4s.{Headers, Response}
+import org.http4s.{ Headers, Response }
 import org.http4s.Status._
 import org.http4s.headers.Allow
 import pl.iterators.stir.server.directives.BasicDirectives
@@ -35,11 +35,11 @@ trait RejectionHandler extends (Seq[Rejection] => Option[Route]) { self =>
     (this, that) match {
       case (a: BuiltRejectionHandler, _) if a.isDefault => this // the default handler already handles everything
       case (a: BuiltRejectionHandler, b: BuiltRejectionHandler) =>
-        new BuiltRejectionHandler(a.cases ++ b.cases, a.notFound orElse b.notFound, b.isDefault)
+        new BuiltRejectionHandler(a.cases ++ b.cases, a.notFound.orElse(b.notFound), b.isDefault)
       case _ => new RejectionHandler {
-        def apply(rejections: Seq[Rejection]): Option[Route] =
-          self(rejections) orElse that(rejections)
-      }
+          def apply(rejections: Seq[Rejection]): Option[Route] =
+            self(rejections).orElse(that(rejections))
+        }
     }
 
   /**
@@ -102,8 +102,8 @@ object RejectionHandler {
     }
   }
   private final case class TypeHandler[T <: Rejection](
-                                                        runtimeClass: Class[_], f: Seq[T] => Route) extends Handler with PartialFunction[Rejection, T] {
-    def isDefinedAt(rejection: Rejection): Boolean = runtimeClass isInstance rejection
+      runtimeClass: Class[_], f: Seq[T] => Route) extends Handler with PartialFunction[Rejection, T] {
+    def isDefinedAt(rejection: Rejection): Boolean = runtimeClass.isInstance(rejection)
     def apply(rejection: Rejection): T = rejection.asInstanceOf[T]
 
     override def mapResponse(map: Response[IO] => Response[IO]): TypeHandler[T] = {
@@ -112,19 +112,19 @@ object RejectionHandler {
   }
 
   private class BuiltRejectionHandler(
-                                       val cases:     Vector[Handler],
-                                       val notFound:  Option[Route],
-                                       val isDefault: Boolean) extends RejectionHandler {
+      val cases: Vector[Handler],
+      val notFound: Option[Route],
+      val isDefault: Boolean) extends RejectionHandler {
     def apply(rejections: Seq[Rejection]): Option[Route] =
       if (rejections.nonEmpty) {
         @tailrec def rec(ix: Int): Option[Route] =
           if (ix < cases.length) {
             cases(ix) match {
               case CaseHandler(pf) =>
-                val route = rejections collectFirst pf
+                val route = rejections.collectFirst(pf)
                 if (route.isEmpty) rec(ix + 1) else route
               case x @ TypeHandler(_, f) =>
-                val rejs = rejections collect x
+                val rejs = rejections.collect(x)
                 if (rejs.isEmpty) rec(ix + 1) else Some(f(rejs))
             }
           } else None
@@ -147,7 +147,8 @@ object RejectionHandler {
 //      }
       .handleAll[MethodRejection] { rejections =>
         val (methods, names) = rejections.map(r => r.supported -> r.supported.name).unzip
-        rejectRequestEntityAndComplete((MethodNotAllowed, Headers(Allow(methods.toSet)), "HTTP method not allowed, supported methods: " + names.mkString(", ")))
+        rejectRequestEntityAndComplete((MethodNotAllowed, Headers(Allow(methods.toSet)),
+          "HTTP method not allowed, supported methods: " + names.mkString(", ")))
       }
 //      .handle {
 //        case AuthorizationFailedRejection =>
@@ -170,7 +171,7 @@ object RejectionHandler {
           val rejectionMessage = "The request content was malformed:\n" + msg
           throwable match {
 //            case _: EntityStreamSizeException => rejectRequestEntityAndComplete((PayloadTooLarge, rejectionMessage))
-            case _                            => rejectRequestEntityAndComplete((BadRequest, rejectionMessage))
+            case _ => rejectRequestEntityAndComplete((BadRequest, rejectionMessage))
           }
         }
       }
@@ -200,7 +201,8 @@ object RejectionHandler {
       }
       .handle {
         case InvalidRequiredValueForQueryParamRejection(paramName, requiredValue, _) =>
-          rejectRequestEntityAndComplete((NotFound, s"Request is missing required value '$requiredValue' for query parameter '$paramName'"))
+          rejectRequestEntityAndComplete((NotFound,
+            s"Request is missing required value '$requiredValue' for query parameter '$paramName'"))
       }
       .handle {
         case EntityRejection(e) =>

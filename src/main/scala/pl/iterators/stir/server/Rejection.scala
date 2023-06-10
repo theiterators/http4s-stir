@@ -1,6 +1,6 @@
 package pl.iterators.stir.server
 
-import org.http4s.{DecodeFailure, Method}
+import org.http4s.{ DecodeFailure, Method }
 
 trait Rejection
 
@@ -30,7 +30,8 @@ case class MalformedRequestContentRejection(message: String, cause: Throwable) e
  * Rejection created by parameter filters.
  * Signals that the request was rejected because a query parameter value was not equal to required one.
  */
-final case class InvalidRequiredValueForQueryParamRejection(parameterName: String, expectedValue: String, actualValue: String) extends Rejection
+final case class InvalidRequiredValueForQueryParamRejection(parameterName: String, expectedValue: String,
+    actualValue: String) extends Rejection
 
 /**
  * Rejection created by parameter filters.
@@ -42,13 +43,15 @@ final case class MissingQueryParamRejection(parameterName: String) extends Rejec
  * Rejection created by parameter filters.
  * Signals that the request was rejected because a query parameter could not be interpreted.
  */
-final case class MalformedQueryParamRejection(parameterName: String, errorMsg: String, cause: Option[Throwable] = None) extends Rejection
+final case class MalformedQueryParamRejection(parameterName: String, errorMsg: String, cause: Option[Throwable] = None)
+    extends Rejection
 
 /**
  * Rejection created by header directives.
  * Signals that the request was rejected because a header value is malformed.
  */
-final case class MalformedHeaderRejection(headerName: String, errorMsg: String, cause: Option[Throwable] = None) extends Rejection
+final case class MalformedHeaderRejection(headerName: String, errorMsg: String, cause: Option[Throwable] = None)
+    extends Rejection
 
 /**
  * Rejection created by header directives.

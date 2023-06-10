@@ -8,7 +8,7 @@ trait Unmarshaller[-A, B] {
   def apply(value: A): IO[B]
 
   def transform[C](f: IO[B] => IO[C]): Unmarshaller[A, C] = {
-    a => f(this (a))
+    a => f(this(a))
   }
 
   def map[C](f: B => C): Unmarshaller[A, C] =
@@ -41,7 +41,7 @@ object Unmarshaller extends LowerPriorityGenericUnmarshallers with PredefinedFro
     targetOptionUnmarshaller(um)
 
   implicit def targetOptionUnmarshaller[A, B](implicit um: Unmarshaller[A, B]): Unmarshaller[A, Option[B]] =
-    um map (Some(_)) withDefaultValue None
+    um.map(Some(_)).withDefaultValue(None)
 
   case object NoContentException extends RuntimeException("Message entity must not be empty") with NoStackTrace
 }
@@ -53,6 +53,6 @@ sealed trait LowerPriorityGenericUnmarshallers {
   implicit def sourceOptionUnmarshaller[A, B](implicit um: Unmarshaller[A, B]): Unmarshaller[Option[A], B] =
     Unmarshaller {
       case Some(a) => um(a)
-      case None => IO.raiseError(Unmarshaller.NoContentException)
+      case None    => IO.raiseError(Unmarshaller.NoContentException)
     }
 }

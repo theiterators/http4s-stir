@@ -32,7 +32,7 @@ abstract class PathMatcher[L](implicit val ev: Tuple[L]) extends (Path => PathMa
 
   def or[R >: L: Tuple](other: PathMatcher[_ <: R]): PathMatcher[R] =
     new PathMatcher[R] {
-      def apply(path: Path) = self(path) orElse other(path)
+      def apply(path: Path) = self(path).orElse(other(path))
     }
 
   /** Alias for [[append]]. */
@@ -82,7 +82,8 @@ abstract class PathMatcher[L](implicit val ev: Tuple[L]) extends (Path => PathMa
    * <tr><td>`PathMatcher[L :Tuple]`</td><td>`PathMatcher[List[L]]`</td></tr>
    * </table>
    */
-  def repeat(min: Int, max: Int, separator: PathMatcher0 = PathMatchers.Neutral)(implicit lift: PathMatcher.Lift[L, List]): PathMatcher[lift.Out] =
+  def repeat(min: Int, max: Int, separator: PathMatcher0 = PathMatchers.Neutral)(
+      implicit lift: PathMatcher.Lift[L, List]): PathMatcher[lift.Out] =
     new PathMatcher[lift.Out]()(lift.OutIsTuple) {
       require(min >= 0, "`min` must be >= 0")
       require(max >= min, "`max` must be >= `min`")
@@ -152,7 +153,7 @@ object PathMatcher extends ImplicitPathMatcherConstruction {
     if (prefix.isEmpty) provide(extractions)
     else new PathMatcher[L] {
       def apply(path: Path) = {
-        if (path startsWith prefix) Matched(Path(path.segments.drop(prefix.segments.length)), extractions)(ev)
+        if (path.startsWith(prefix)) Matched(Path(path.segments.drop(prefix.segments.length)), extractions)(ev)
         else Unmatched
       }
     }
@@ -286,31 +287,34 @@ trait ImplicitPathMatcherConstruction {
 
     regex.pattern.matcher("").groupCount() match {
       case 0 => new PathMatcher1[String] {
-        def apply(path: Path) = path.segments match {
-          case segment +: tail => regex findPrefixOf segment.decoded() match {
-            case Some(m) if segment.decoded().substring(m.length).nonEmpty => Matched(Path(Path.Segment(segment.decoded().substring(m.length)) +: tail), Tuple1(m))
-            case Some(m) => Matched(Path(tail), Tuple1(m))
-            case None    => Unmatched
+          def apply(path: Path) = path.segments match {
+            case segment +: tail => regex.findPrefixOf(segment.decoded()) match {
+                case Some(m) if segment.decoded().substring(m.length).nonEmpty =>
+                  Matched(Path(Path.Segment(segment.decoded().substring(m.length)) +: tail), Tuple1(m))
+                case Some(m) => Matched(Path(tail), Tuple1(m))
+                case None    => Unmatched
+              }
+            case _ if path.isEmpty && matchesEmptyPath => PathMatcher.EmptyMatch
+            case _                                     => Unmatched
           }
-          case _ if path.isEmpty && matchesEmptyPath => PathMatcher.EmptyMatch
-          case _                              => Unmatched
         }
-      }
       case 1 => new PathMatcher1[String] {
-        def apply(path: Path) = path.segments match {
-          case segment +: tail => regex findPrefixMatchOf segment.decoded() match {
-            case Some(m) if segment.decoded().substring(m.end).nonEmpty => Matched(Path(Path.Segment(segment.decoded().substring(m.end)) +: tail), Tuple1(m.group(1)))
-            case Some(m) => Matched(Path(tail), Tuple1(m.group(1)))
-            case None    => Unmatched
+          def apply(path: Path) = path.segments match {
+            case segment +: tail => regex.findPrefixMatchOf(segment.decoded()) match {
+                case Some(m) if segment.decoded().substring(m.end).nonEmpty =>
+                  Matched(Path(Path.Segment(segment.decoded().substring(m.end)) +: tail), Tuple1(m.group(1)))
+                case Some(m) => Matched(Path(tail), Tuple1(m.group(1)))
+                case None    => Unmatched
+              }
+            case _ if path.isEmpty && matchesEmptyPath => PathMatcher.EmptyMatch
+            case _                                     => Unmatched
           }
-          case _ if path.isEmpty && matchesEmptyPath => PathMatcher.EmptyMatch
-          case _                              => Unmatched
         }
-      }
       case _ => throw new IllegalArgumentException("Path regex '" + regex.pattern.pattern +
-        "' must not contain more than one capturing group")
+          "' must not contain more than one capturing group")
     }
   }
+
   /**
    * Creates a PathMatcher from the given Map of path segments (prefixes) to extracted values.
    * If the unmatched path starts with a segment having one of the maps keys as a prefix
@@ -448,7 +452,7 @@ trait PathMatchers {
    * @group pathmatcher
    */
   abstract class NumberMatcher[@specialized(Int, Long) T](max: T, base: T)(implicit x: Integral[T])
-    extends PathMatcher1[T] {
+      extends PathMatcher1[T] {
 
     import x._ // import implicit conversions for numeric operators
     val minusOne = x.zero - x.one
@@ -458,10 +462,11 @@ trait PathMatchers {
       case s +: tail =>
         val segment = s.decoded()
         @tailrec def digits(ix: Int = 0, value: T = minusOne): Matching[Tuple1[T]] = {
-          val a = if (ix < segment.length) fromChar(segment charAt ix) else minusOne
+          val a = if (ix < segment.length) fromChar(segment.charAt(ix)) else minusOne
           if (a == minusOne) {
             if (value == minusOne) Unmatched
-            else Matched(if (ix < segment.length) Path(Path.Segment(segment.substring(ix)) +: tail) else Path(tail), Tuple1(value))
+            else Matched(if (ix < segment.length) Path(Path.Segment(segment.substring(ix)) +: tail) else Path(tail),
+              Tuple1(value))
           } else {
             if (value == minusOne) digits(ix + 1, a)
             else if (value <= maxDivBase && value * base <= max - a) // protect from overflow
@@ -479,7 +484,8 @@ trait PathMatchers {
     def fromDecimalChar(c: Char): T = if ('0' <= c && c <= '9') x.fromInt(c - '0') else minusOne
 
     def fromHexChar(c: Char): T =
-      if ('0' <= c && c <= '9') x.fromInt(c - '0') else {
+      if ('0' <= c && c <= '9') x.fromInt(c - '0')
+      else {
         val cn = c | 0x20 // normalize to lowercase
         if ('a' <= cn && cn <= 'f') x.fromInt(cn - 'a' + 10) else minusOne
       }
@@ -492,7 +498,7 @@ trait PathMatchers {
    * @group pathmatcher
    */
   val DoubleNumber: PathMatcher1[Double] =
-    PathMatcher("""[+-]?\d*\.?\d*""".r) flatMap { string =>
+    PathMatcher("""[+-]?\d*\.?\d*""".r).flatMap { string =>
       try Some(java.lang.Double.parseDouble(string))
       catch { case _: NumberFormatException => None }
     }
@@ -523,7 +529,7 @@ trait PathMatchers {
   object Segment extends PathMatcher1[String] {
     def apply(path: Path) = path.segments match {
       case segment +: tail => Matched(Path(tail), Tuple1(segment.decoded()))
-      case _                           => Unmatched
+      case _               => Unmatched
     }
   }
 

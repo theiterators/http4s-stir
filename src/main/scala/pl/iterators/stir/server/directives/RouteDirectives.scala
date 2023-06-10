@@ -1,10 +1,11 @@
 package pl.iterators.stir.server.directives
 
 import cats.effect.IO
-import org.http4s.{EntityEncoder, Headers, Request, Response, Status, Uri}
-import pl.iterators.stir.server.{Rejection, RouteResult, StandardRoute, ToResponseMarshallable}
+import org.http4s.{ EntityEncoder, Headers, Request, Response, Status, Uri }
+import pl.iterators.stir.server.{ Rejection, RouteResult, StandardRoute, ToResponseMarshallable }
 
 trait RouteDirectives {
+
   /**
    * Rejects the request with an empty set of rejections.
    *
@@ -66,14 +67,18 @@ trait RouteDirectives {
    *
    * @group route
    */
-  def handle(handler: Request[IO] => IO[Response[IO]]): StandardRoute = { ctx => handler(ctx.request).map(RouteResult.Complete) }
+  def handle(handler: Request[IO] => IO[Response[IO]]): StandardRoute = { ctx =>
+    handler(ctx.request).map(RouteResult.Complete)
+  }
 
   /**
    * Handle the request using a function.
    *
    * @group route
    */
-  def handleSync(handler: Request[IO] => Response[IO]): StandardRoute = { ctx => IO.pure(RouteResult.Complete(handler(ctx.request))) }
+  def handleSync(handler: Request[IO] => Response[IO]): StandardRoute = { ctx =>
+    IO.pure(RouteResult.Complete(handler(ctx.request)))
+  }
 
   /**
    * Handle the request using an asynchronous partial function.
@@ -98,7 +103,8 @@ trait RouteDirectives {
    * @param rejections The list of rejections to reject with if the handler is not defined for a request.
    * @group route
    */
-  def handle(handler: PartialFunction[Request[IO], IO[Response[IO]]], rejections: Seq[Rejection]): StandardRoute = { ctx =>
+  def handle(
+      handler: PartialFunction[Request[IO], IO[Response[IO]]], rejections: Seq[Rejection]): StandardRoute = { ctx =>
     handler
       .andThen(_.map(RouteResult.Complete))
       .applyOrElse[Request[IO], IO[RouteResult]](ctx.request, _ => ctx.reject(rejections: _*))
@@ -127,7 +133,8 @@ trait RouteDirectives {
    * @param rejections The list of rejections to reject with if the handler is not defined for a request.
    * @group route
    */
-  def handleSync(handler: PartialFunction[Request[IO], Response[IO]], rejections: Seq[Rejection]): StandardRoute = { ctx =>
+  def handleSync(
+      handler: PartialFunction[Request[IO], Response[IO]], rejections: Seq[Rejection]): StandardRoute = { ctx =>
     handler
       .andThen(res => IO.pure(RouteResult.Complete(res)))
       .applyOrElse[Request[IO], IO[RouteResult]](ctx.request, _ => ctx.reject(rejections: _*))

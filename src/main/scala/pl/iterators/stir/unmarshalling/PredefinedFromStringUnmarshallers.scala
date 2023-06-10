@@ -48,7 +48,7 @@ trait PredefinedFromStringUnmarshallers {
   implicit def CsvSeq[T](implicit unmarshaller: Unmarshaller[String, T]): Unmarshaller[String, immutable.Seq[T]] =
     Unmarshaller.strict[String, immutable.Seq[String]] { string =>
       string.split(",", -1).toList
-    } flatMap { strings =>
+    }.flatMap { strings =>
       strings.map(unmarshaller(_)).parSequence
     }
 
@@ -72,7 +72,8 @@ trait PredefinedFromStringUnmarshallers {
 
   private def numberFormatError(value: String, target: String): PartialFunction[Throwable, Nothing] = {
     case e: NumberFormatException =>
-      throw if (value.isEmpty) Unmarshaller.NoContentException else new IllegalArgumentException(s"'$value' is not a valid $target value", e)
+      throw if (value.isEmpty) Unmarshaller.NoContentException
+      else new IllegalArgumentException(s"'$value' is not a valid $target value", e)
   }
 }
 

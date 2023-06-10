@@ -1,6 +1,6 @@
 package pl.iterators.stir.server.directives
 
-import org.http4s.{Method, Status}
+import org.http4s.{ Method, Status }
 import pl.iterators.stir.server._
 
 trait MethodDirectives {
@@ -70,13 +70,13 @@ trait MethodDirectives {
    *
    * @group method
    */
-  //#method
+  // #method
   def method(httpMethod: Method): Directive0 =
     extractMethod.flatMap[Unit] {
       case `httpMethod` if httpMethod == httpMethod => pass
-      case _ => reject(MethodRejection(httpMethod))
+      case _                                        => reject(MethodRejection(httpMethod))
     } & cancelRejections(classOf[MethodRejection])
-  //#method
+  // #method
 
   /**
    * Changes the HTTP method of the request to the value of the specified query string parameter. If the query string
@@ -90,11 +90,11 @@ trait MethodDirectives {
    * @group method
    */
   def overrideMethodWithParameter(paramName: String): Directive0 =
-    parameter(paramName.optional) flatMap {
+    parameter(paramName.optional).flatMap {
       case Some(method) =>
         Method.fromString(method.toUpperCase) match {
           case Right(m) => mapRequest(_.withMethod(m))
-          case _ => complete(Status.NotImplemented)
+          case _        => complete(Status.NotImplemented)
         }
       case None => pass
     }

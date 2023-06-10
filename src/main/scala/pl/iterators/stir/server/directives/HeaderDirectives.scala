@@ -85,12 +85,12 @@ trait HeaderDirectives {
    *
    * @group header
    */
-  //#optionalHeaderValue
+  // #optionalHeaderValue
   def optionalHeaderValue[T](f: Header.Raw => Option[T]): Directive1[Option[T]] =
     headerValue(f).map(Some(_): Option[T]).recoverPF {
       case Nil => provide(None)
     }
-  //#optionalHeaderValue
+  // #optionalHeaderValue
 
   /**
    * Extracts an optional HTTP header value using the given partial function.
@@ -120,11 +120,12 @@ trait HeaderDirectives {
    *
    * @group header
    */
-   def optionalHeaderValueByType[T](implicit ev: Header.Select[T]) : Directive1[Option[ev.F[T]]] = extract(_.request.headers.get(ev))
+  def optionalHeaderValueByType[T](implicit ev: Header.Select[T]): Directive1[Option[ev.F[T]]] =
+    extract(_.request.headers.get(ev))
 
   private def optionalValue(lowerCaseName: String): Header.Raw => Option[String] = {
     case h: Header.Raw if h.name.equals(CIString(lowerCaseName)) => Some(h.value)
-    case _ => None
+    case _                                                       => None
   }
 }
 

@@ -4,7 +4,7 @@ import org.http4s._
 import org.http4s.circe.CirceEntityEncoder._
 import org.http4s.circe.CirceEntityDecoder._
 import org.http4s.ember.server._
-import pl.iterators.stir.server.{ExceptionHandler, RejectionHandler, Route}
+import pl.iterators.stir.server.{ ExceptionHandler, RejectionHandler, Route }
 import pl.iterators.stir.server.Directives._
 import pl.iterators.kebs.Http4s
 import pl.iterators.kebs.circe.KebsCirce
@@ -23,12 +23,15 @@ object Main extends IOApp.Simple with KebsCirce with Http4s {
       handleRejections(RejectionHandler.default) {
         logRequestResult() {
           pathPrefix("api" / "beers") {
-            (get & parameters("pageSize".as[Int].?, "pageNumber".as[Int].?) & pathEndOrSingleSlash) { (pageSize, pageNumber) =>
-              complete {
-                Status.Ok -> beers.values().asScala.toList.slice(pageNumber.getOrElse(0) * pageSize.getOrElse(25), pageNumber.getOrElse(0) * pageSize.getOrElse(25) + pageSize.getOrElse(25))
-              }
+            (get & parameters("pageSize".as[Int].?, "pageNumber".as[Int].?) & pathEndOrSingleSlash) {
+              (pageSize, pageNumber) =>
+                complete {
+                  Status.Ok -> beers.values().asScala.toList.slice(pageNumber.getOrElse(0) * pageSize.getOrElse(25),
+                    pageNumber.getOrElse(0) * pageSize.getOrElse(25) + pageSize.getOrElse(25))
+                }
             } ~
-              (post & pathEndOrSingleSlash & entityAs[Beer] & optionalHeaderValueByName("Authorization")) { (beer, token) =>
+            (post & pathEndOrSingleSlash & entityAs[Beer] & optionalHeaderValueByName("Authorization")) {
+              (beer, token) =>
                 complete {
                   Option(beers.get(beer.id)) match { // yes, race condition here :-D
                     case Some(_) => Status.Conflict -> "Beer already exists"
@@ -37,12 +40,12 @@ object Main extends IOApp.Simple with KebsCirce with Http4s {
                       Status.Created -> beer
                   }
                 }
-              } ~
-              (delete & pathEndOrSingleSlash & path(JavaUUID)) { id =>
-                complete {
-                  IO.delay(beers.remove(id)).map(_ => Status.NoContent -> "Yes, content")
-                }
+            } ~
+            (delete & pathEndOrSingleSlash & path(JavaUUID)) { id =>
+              complete {
+                IO.delay(beers.remove(id)).map(_ => Status.NoContent -> "Yes, content")
               }
+            }
           } ~ path("oops") {
             complete {
               throw new IllegalArgumentException("Oops")

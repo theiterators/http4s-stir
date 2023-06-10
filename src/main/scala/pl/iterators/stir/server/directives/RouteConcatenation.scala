@@ -2,7 +2,7 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.IO
 import pl.iterators.stir.server.directives.RouteDirectives.reject
-import pl.iterators.stir.server.{Route, RouteResult}
+import pl.iterators.stir.server.{ Route, RouteResult }
 
 trait RouteConcatenation {
   implicit class RouteWithConcatenation(val route: Route) {
@@ -11,7 +11,7 @@ trait RouteConcatenation {
         case x: RouteResult.Complete => IO.pure(x)
         case RouteResult.Rejected(innerRejection) =>
           other(req).map {
-            case x: RouteResult.Complete => x
+            case x: RouteResult.Complete              => x
             case RouteResult.Rejected(outerRejection) => RouteResult.Rejected(innerRejection ++ outerRejection)
           }
       }

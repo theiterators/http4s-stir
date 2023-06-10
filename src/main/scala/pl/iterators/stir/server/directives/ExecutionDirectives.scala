@@ -1,7 +1,7 @@
 package pl.iterators.stir.server.directives
 
 import cats.effect.IO
-import pl.iterators.stir.server.{Directive, Directive0, ExceptionHandler, Rejection, RejectionHandler, RouteResult}
+import pl.iterators.stir.server.{ Directive, Directive0, ExceptionHandler, Rejection, RejectionHandler, RouteResult }
 
 import scala.util.control.NonFatal
 
@@ -21,7 +21,7 @@ trait ExecutionDirectives {
   def handleExceptions(handler: ExceptionHandler): Directive0 =
     Directive { innerRouteBuilder => ctx =>
       def handleException: PartialFunction[Throwable, IO[RouteResult]] =
-        handler andThen (_(ctx))
+        handler.andThen(_(ctx))
       try innerRouteBuilder(())(ctx).recoverWith(handleException)
       catch {
         case NonFatal(e) =>
@@ -36,10 +36,11 @@ trait ExecutionDirectives {
    * @group execution
    */
   def handleRejections(handler: RejectionHandler): Directive0 =
-    extractRequestContext flatMap { ctx =>
+    extractRequestContext.flatMap { ctx =>
       val maxIterations = 8
       // allow for up to `maxIterations` nested rejections from RejectionHandler before bailing out
-      def handle(rejections: Seq[Rejection], originalRejections: Seq[Rejection], iterationsLeft: Int = maxIterations): IO[RouteResult] =
+      def handle(rejections: Seq[Rejection], originalRejections: Seq[Rejection], iterationsLeft: Int = maxIterations)
+          : IO[RouteResult] =
         if (iterationsLeft > 0) {
           handler(rejections) match {
             case Some(route) => recoverRejectionsWith(handle(_, originalRejections, iterationsLeft - 1))(route)(ctx)

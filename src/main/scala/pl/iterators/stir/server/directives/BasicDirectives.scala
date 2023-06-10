@@ -2,12 +2,13 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.IO
 import org.http4s.Uri.Path
-import org.http4s.{EntityBody, Headers, Request, Response, Uri}
-import pl.iterators.stir.server.{Directive, Directive0, Directive1, Rejection, RequestContext, Route, RouteResult}
+import org.http4s.{ EntityBody, Headers, Request, Response, Uri }
+import pl.iterators.stir.server.{ Directive, Directive0, Directive1, Rejection, RequestContext, Route, RouteResult }
 import pl.iterators.stir.util.Tuple
 import pl.iterators.stir.server.TransformationRejection
 
 trait BasicDirectives {
+
   /**
    * @group basic
    */
@@ -27,7 +28,7 @@ trait BasicDirectives {
    * @group basic
    */
   def mapRouteResult(f: RouteResult => RouteResult): Directive0 =
-    Directive { inner => ctx => inner(())(ctx)map(f) }
+    Directive { inner => ctx => inner(())(ctx).map(f) }
 
   /**
    * @group basic
@@ -140,7 +141,7 @@ trait BasicDirectives {
    * @group basic
    */
   def cancelRejections(classes: Class[_]*): Directive0 =
-    cancelRejections(r => classes.exists(_ isInstance r))
+    cancelRejections(r => classes.exists(_.isInstance(r)))
 
   /**
    * Adds a TransformationRejection cancelling all rejections for which the given filter function returns true
@@ -149,7 +150,7 @@ trait BasicDirectives {
    * @group basic
    */
   def cancelRejections(cancelFilter: Rejection => Boolean): Directive0 =
-    mapRejections(_ :+ TransformationRejection(_ filterNot cancelFilter))
+    mapRejections(_ :+ TransformationRejection(_.filterNot(cancelFilter)))
 
   /**
    * Transforms the unmatchedPath of the RequestContext using the given function.
