@@ -67,3 +67,25 @@ final case class MethodRejection(supported: Method) extends Rejection
  * Signals that the request was rejected because a cookie was not found.
  */
 final case class MissingCookieRejection(cookieName: String) extends Rejection
+
+/**
+ * A special Rejection that serves as a container for a transformation function on rejections.
+ * It is used by some directives to "cancel" rejections that are added by later directives of a similar type.
+ *
+ * Consider this route structure for example:
+ *
+ * {{{
+ *     put { reject(ValidationRejection("no") } ~ get { ... }
+ * }}}
+ *
+ * If this structure is applied to a PUT request the list of rejections coming back contains three elements:
+ *
+ * 1. A ValidationRejection
+ * 2. A MethodRejection
+ * 3. A TransformationRejection holding a function filtering out the MethodRejection
+ *
+ * so that in the end the RejectionHandler will only see one rejection (the ValidationRejection), because the
+ * MethodRejection added by the `get` directive is canceled by the `put` directive (since the HTTP method
+ * did indeed match eventually).
+ */
+final case class TransformationRejection(transform: Seq[Rejection] => Seq[Rejection]) extends Rejection

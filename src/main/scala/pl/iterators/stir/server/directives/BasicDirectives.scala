@@ -5,6 +5,7 @@ import org.http4s.Uri.Path
 import org.http4s.{EntityBody, Headers, Request, Response, Uri}
 import pl.iterators.stir.server.{Directive, Directive0, Directive1, Rejection, RequestContext, Route, RouteResult}
 import pl.iterators.stir.util.Tuple
+import pl.iterators.stir.server.TransformationRejection
 
 trait BasicDirectives {
   /**
@@ -31,14 +32,32 @@ trait BasicDirectives {
   /**
    * @group basic
    */
+  def mapRouteResultWith(f: RouteResult => IO[RouteResult]): Directive0 =
+    Directive { inner => ctx => inner(())(ctx).flatMap(f) }
+
+  /**
+   * @group basic
+   */
   def mapRouteResultPF(f: PartialFunction[RouteResult, RouteResult]): Directive0 =
     mapRouteResult(f.applyOrElse(_, identity[RouteResult]))
 
   /**
    * @group basic
    */
+  def mapRouteResultWithPF(f: PartialFunction[RouteResult, IO[RouteResult]]): Directive0 =
+    mapRouteResultWith(f.applyOrElse(_, IO.pure[RouteResult]))
+
+  /**
+   * @group basic
+   */
   def recoverRejections(f: Seq[Rejection] => RouteResult): Directive0 =
     mapRouteResultPF { case RouteResult.Rejected(rejections) => f(rejections) }
+
+  /**
+   * @group basic
+   */
+  def recoverRejectionsWith(f: Seq[Rejection] => IO[RouteResult]): Directive0 =
+    mapRouteResultWithPF { case RouteResult.Rejected(rejections) => f(rejections) }
 
   /**
    * @group basic
@@ -130,7 +149,7 @@ trait BasicDirectives {
    * @group basic
    */
   def cancelRejections(cancelFilter: Rejection => Boolean): Directive0 =
-    mapRejections(_.filterNot(cancelFilter))
+    mapRejections(_ :+ TransformationRejection(_ filterNot cancelFilter))
 
   /**
    * Transforms the unmatchedPath of the RequestContext using the given function.

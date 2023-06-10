@@ -10,8 +10,8 @@ trait Directives extends RouteConcatenation
   with CacheConditionDirectives
   with CookieDirectives
   with DebuggingDirectives
-//  with CodingDirectives
-//  with ExecutionDirectives
+  with CodingDirectives
+  with ExecutionDirectives
 //  with FileAndResourceDirectives
 //  with FileUploadDirectives
 //  with FormFieldDirectives
