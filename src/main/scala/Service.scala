@@ -19,27 +19,29 @@ object Main extends IOApp.Simple with KebsCirce with Http4s {
   val beers = new ConcurrentHashMap[UUID, Beer]()
 
   val routes: Route = {
-    pathPrefix("api" / "beers") {
-      (get & parameters("pageSize".as[Int].?, "pageNumber".as[Int].?) & pathEndOrSingleSlash) { (pageSize, pageNumber) =>
-        complete {
-          Status.Ok -> beers.values().asScala.toList.slice(pageNumber.getOrElse(0) * pageSize.getOrElse(25), pageNumber.getOrElse(0) * pageSize.getOrElse(25) + pageSize.getOrElse(25))
-        }
-      } ~
-        (post & pathEndOrSingleSlash & entityAs[Beer] & optionalHeaderValueByName("Authorization")) { (beer, token) =>
+    logRequestResult() {
+      pathPrefix("api" / "beers") {
+        (get & parameters("pageSize".as[Int].?, "pageNumber".as[Int].?) & pathEndOrSingleSlash) { (pageSize, pageNumber) =>
           complete {
-            Option(beers.get(beer.id)) match { // yes, race condition here :-D
-              case Some(_) => Status.Conflict -> "Beer already exists"
-              case None =>
-                beers.put(beer.id, beer)
-                Status.Created -> beer
-            }
+            Status.Ok -> beers.values().asScala.toList.slice(pageNumber.getOrElse(0) * pageSize.getOrElse(25), pageNumber.getOrElse(0) * pageSize.getOrElse(25) + pageSize.getOrElse(25))
           }
         } ~
-        (delete & pathEndOrSingleSlash & path(JavaUUID)) { id =>
-          complete {
-            IO.delay(beers.remove(id)).map(_ => Status.NoContent -> "Yes, content")
+          (post & pathEndOrSingleSlash & entityAs[Beer] & optionalHeaderValueByName("Authorization")) { (beer, token) =>
+            complete {
+              Option(beers.get(beer.id)) match { // yes, race condition here :-D
+                case Some(_) => Status.Conflict -> "Beer already exists"
+                case None =>
+                  beers.put(beer.id, beer)
+                  Status.Created -> beer
+              }
+            }
+          } ~
+          (delete & pathEndOrSingleSlash & path(JavaUUID)) { id =>
+            complete {
+              IO.delay(beers.remove(id)).map(_ => Status.NoContent -> "Yes, content")
+            }
           }
-        }
+      }
     }
   }
 
