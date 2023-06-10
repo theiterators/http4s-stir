@@ -45,7 +45,6 @@ object Main extends IOApp.Simple with KebsCirce with Http4s {
               }
           } ~ path("oops") {
             complete {
-              println("Zaraz poleci")
               throw new IllegalArgumentException("Oops")
             }
           }
@@ -59,7 +58,7 @@ object Main extends IOApp.Simple with KebsCirce with Http4s {
       .default[IO]
       .withHost(ipv4"0.0.0.0")
       .withPort(port"8080")
-      .withHttpApp(routes.toHttpRoutes)
+      .withHttpApp(routes.toHttpRoutes.orNotFound)
       .build
       .use(_ => IO.never)
   }

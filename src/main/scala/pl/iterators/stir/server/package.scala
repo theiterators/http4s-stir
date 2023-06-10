@@ -1,18 +1,30 @@
 package pl.iterators.stir
 
-import cats.data.Kleisli
+import cats.data.{Kleisli, OptionT}
 import cats.effect.IO
-import org.http4s.{HttpApp, Request, Response, Status}
+import org.http4s.{HttpApp, HttpRoutes, Request, Response}
 
 package object server {
   type Route = RequestContext => IO[RouteResult]
 
   implicit class ToHttpRoutes(val route: Route) extends AnyVal {
-    def toHttpRoutes: HttpApp[IO] = {
-      Kleisli[IO, Request[IO], Response[IO]](req => route(RequestContext(req)).map {
+    def toHttpApp: HttpApp[IO] = {
+      val sealedRoute = {
+        import directives.ExecutionDirectives._
+        (handleExceptions(ExceptionHandler.default()) & handleRejections(RejectionHandler.default))
+          .tapply(_ => route)
+      }
+      Kleisli[IO, Request[IO], Response[IO]](req => sealedRoute(RequestContext(req)).map {
         case RouteResult.Complete(response) => response
-        case RouteResult.Rejected(_) => Response[IO](status = Status.NotFound)
+        case RouteResult.Rejected(_) => throw new IllegalStateException("RouteResult.Rejected should not be returned from a sealed route")
       })
+    }
+
+    def toHttpRoutes: HttpRoutes[IO] = {
+      Kleisli(req => OptionT(route(RequestContext(req)).map {
+        case RouteResult.Complete(response) => Some(response)
+        case _ => None
+      }))
     }
   }
 
