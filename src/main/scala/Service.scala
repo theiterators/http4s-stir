@@ -50,6 +50,10 @@ object Main extends IOApp.Simple with KebsCirce with Http4s {
             complete {
               throw new IllegalArgumentException("Oops")
             }
+          } ~ path("file") {
+            getFromFile("../scala-3-http4s-doobie/Main.scala")
+          } ~ pathPrefix("dir") {
+            getFromDirectory("src/main")
           }
         }
       }
