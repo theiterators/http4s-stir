@@ -4,6 +4,7 @@ import org.http4s.Header.ToRaw
 import org.http4s.headers.{ `Set-Cookie`, Cookie }
 import org.http4s.{ HttpDate, RequestCookie, ResponseCookie }
 import pl.iterators.stir.server._
+import pl.iterators.stir.impl.util._
 
 /**
  * @groupname cookie Cookie directives
@@ -62,10 +63,7 @@ trait CookieDirectives {
    * @group cookie
    */
   def deleteCookie(name: String, domain: String = "", path: String = ""): Directive0 =
-    deleteCookie(ResponseCookie(name, "", domain = toOption(domain), path = toOption(path)))
-
-  private def toOption(underlying: String): Option[String] =
-    if ((underlying eq null) || underlying.isEmpty) None else Some(underlying)
+    deleteCookie(ResponseCookie(name, "", domain = domain.toOption, path = path.toOption))
 }
 
 object CookieDirectives extends CookieDirectives

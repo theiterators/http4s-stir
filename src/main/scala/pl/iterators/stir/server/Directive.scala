@@ -4,6 +4,7 @@ import cats.effect.IO
 import pl.iterators.stir.server.directives.RouteDirectives
 import pl.iterators.stir.util.{ ApplyConverter, ConstructFromTuple, Tuple, Tupler }
 import pl.iterators.stir.util.TupleOps.Join
+import pl.iterators.stir.impl.util._
 
 abstract class Directive[L](implicit val ev: Tuple[L]) {
 
@@ -55,7 +56,7 @@ abstract class Directive[L](implicit val ev: Tuple[L]) {
               try f(values)
               catch {
                 case e: IllegalArgumentException =>
-                  return ctx.reject(ValidationRejection(e.getMessage, Some(e)))
+                  return ctx.reject(ValidationRejection(e.getMessage.nullAsEmpty, Some(e)))
               }
             inner(tupler(r))(ctx)
           }

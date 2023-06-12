@@ -2,6 +2,7 @@ package pl.iterators.stir.server.directives
 
 import org.http4s.Header
 import org.typelevel.ci.CIString
+import pl.iterators.stir.impl.util._
 import pl.iterators.stir.server._
 
 import scala.reflect.ClassTag
@@ -37,7 +38,8 @@ trait HeaderDirectives {
     val protectedF: Header.Raw => Option[Either[Rejection, T]] = header =>
       try f(header).map(Right.apply)
       catch {
-        case NonFatal(e) => Some(Left(MalformedHeaderRejection(header.name.toString, e.getMessage, Some(e))))
+        case NonFatal(e) =>
+          Some(Left(MalformedHeaderRejection(header.name.toString, e.getMessage.nullAsEmpty, Some(e))))
       }
 
     extract(_.request.headers.headers.collectFirst(Function.unlift(protectedF))).flatMap {

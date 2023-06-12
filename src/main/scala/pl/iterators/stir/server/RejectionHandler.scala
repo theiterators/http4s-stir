@@ -3,7 +3,8 @@ package pl.iterators.stir.server
 import cats.effect.IO
 import org.http4s.{ Headers, Response }
 import org.http4s.Status._
-import org.http4s.headers.Allow
+import org.http4s.headers.{ `WWW-Authenticate`, Allow }
+import pl.iterators.stir.impl.util._
 import pl.iterators.stir.server.directives.BasicDirectives
 
 import scala.annotation.tailrec
@@ -150,10 +151,11 @@ object RejectionHandler {
         rejectRequestEntityAndComplete((MethodNotAllowed, Headers(Allow(methods.toSet)),
           "HTTP method not allowed, supported methods: " + names.mkString(", ")))
       }
-//      .handle {
-//        case AuthorizationFailedRejection =>
-//          rejectRequestEntityAndComplete((Forbidden, "The supplied authentication is not authorized to access this resource"))
-//      }
+      .handle {
+        case AuthorizationFailedRejection =>
+          rejectRequestEntityAndComplete((Forbidden,
+            "The supplied authentication is not authorized to access this resource"))
+      }
 //      .handle {
 //        case MalformedFormFieldRejection(name, msg, _) =>
 //          rejectRequestEntityAndComplete((BadRequest, "The form field '" + name + "' was malformed:\n" + msg))
@@ -206,7 +208,7 @@ object RejectionHandler {
       }
       .handle {
         case EntityRejection(e) =>
-          rejectRequestEntityAndComplete((BadRequest, "Request entity malformed: " + e.getMessage))
+          rejectRequestEntityAndComplete((BadRequest, "Request entity malformed: " + e.getMessage.nullAsEmpty))
       }
 //      .handle {
 //        case TooManyRangesRejection(_) =>
@@ -221,20 +223,21 @@ object RejectionHandler {
 //          rejectRequestEntityAndComplete((RangeNotSatisfiable, List(`Content-Range`(ContentRange.Unsatisfiable(actualEntityLength))),
 //            unsatisfiableRanges.mkString("None of the following requested Ranges were satisfiable:\n", "\n", "")))
 //      }
-//      .handleAll[AuthenticationFailedRejection] { rejections =>
-//        val rejectionMessage = rejections.head.cause match {
-//          case CredentialsMissing  => "The resource requires authentication, which was not supplied with the request"
-//          case CredentialsRejected => "The supplied authentication is invalid"
-//        }
-//        // Multiple challenges per WWW-Authenticate header are allowed per spec,
-//        // however, it seems many browsers will ignore all challenges but the first.
-//        // Therefore, multiple WWW-Authenticate headers are rendered, instead.
-//        //
-//        // See https://code.google.com/p/chromium/issues/detail?id=103220
-//        // and https://bugzilla.mozilla.org/show_bug.cgi?id=669675
-//        val authenticateHeaders = rejections.map(r => `WWW-Authenticate`(r.challenge))
-//        rejectRequestEntityAndComplete((Unauthorized, authenticateHeaders, rejectionMessage))
-//      }
+      .handleAll[AuthenticationFailedRejection] { rejections =>
+        val rejectionMessage = rejections.head.cause match {
+          case AuthenticationFailedRejection.CredentialsMissing =>
+            "The resource requires authentication, which was not supplied with the request"
+          case AuthenticationFailedRejection.CredentialsRejected => "The supplied authentication is invalid"
+        }
+        // Multiple challenges per WWW-Authenticate header are allowed per spec,
+        // however, it seems many browsers will ignore all challenges but the first.
+        // Therefore, multiple WWW-Authenticate headers are rendered, instead.
+        //
+        // See https://code.google.com/p/chromium/issues/detail?id=103220
+        // and https://bugzilla.mozilla.org/show_bug.cgi?id=669675
+        val authenticateHeaders = Headers(rejections.map(r => `WWW-Authenticate`(r.challenge)))
+        rejectRequestEntityAndComplete((Unauthorized, authenticateHeaders, rejectionMessage))
+      }
 //      .handleAll[UnacceptedResponseContentTypeRejection] { rejections =>
 //        val supported = rejections.flatMap(_.supported)
 //        val msg = supported.map(_.format).mkString("Resource representation is only available with these types:\n", "\n", "")

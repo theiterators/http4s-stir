@@ -5,3 +5,4 @@
 * CodingDirectives
 * directory listing in FileAndResourceDirectives
 * RangeDirectives
+* checkSameOrigin in HeaderDirectives

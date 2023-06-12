@@ -2,8 +2,8 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.IO
 import fs2.io.file.Path
-import org.http4s.Status.{InternalServerError, NotFound}
-import org.http4s.{Response, StaticFile, Uri}
+import org.http4s.Status.{ InternalServerError, NotFound }
+import org.http4s.{ Response, StaticFile, Uri }
 import pl.iterators.stir.server.Route
 
 import java.io.File
@@ -30,11 +30,13 @@ trait FileAndResourceDirectives {
       if (file.isFile && file.canRead) {
         extractRequest { request =>
           complete {
-              StaticFile.fromPath(Path.fromNioPath(file.toPath), Some(request)).getOrElse(Response[IO](InternalServerError))
+            StaticFile.fromPath(Path.fromNioPath(file.toPath), Some(request)).getOrElse(
+              Response[IO](InternalServerError))
           }
         }
       } else reject
     }
+
   /**
    * Completes GET requests with the content of the given class-path resource.
    * If the resource cannot be found or read the Route rejects the request.
@@ -61,7 +63,7 @@ trait FileAndResourceDirectives {
   def getFromDirectory(directoryName: String): Route =
     extractUnmatchedPath { unmatchedPath =>
       safeDirectoryChildPath(withTrailingSlash(directoryName), unmatchedPath) match {
-        case ""       => reject
+        case "" => reject
         case fileName =>
           println(fileName)
           getFromFile(fileName)
@@ -78,16 +80,16 @@ trait FileAndResourceDirectives {
   def getFromResourceDirectory(directoryName: String): Route = {
     val base = if (directoryName.isEmpty) "" else withTrailingSlash(directoryName)
     extractUnmatchedPath { path =>
-        safeJoinPaths(base, path, separator = '/') match {
-          case ""           => reject
-          case resourceName => getFromResource(resourceName)
-        }
+      safeJoinPaths(base, path, separator = '/') match {
+        case ""           => reject
+        case resourceName => getFromResource(resourceName)
       }
+    }
   }
 }
 
 object FileAndResourceDirectives extends FileAndResourceDirectives {
-  private def withTrailingSlash(path: String): String = if (path endsWith "/") path else path + '/'
+  private def withTrailingSlash(path: String): String = if (path.endsWith("/")) path else path + '/'
 
   /**
    * Given a base directory and a (Uri) path, returns a path to a location contained in the base directory,
@@ -103,12 +105,13 @@ object FileAndResourceDirectives extends FileAndResourceDirectives {
    */
   private def safeDirectoryChildPath(basePath: String, path: Uri.Path, separator: Char = File.separatorChar): String =
     safeJoinPaths(basePath, path, separator) match {
-      case "" => ""
+      case ""   => ""
       case path => checkIsSafeDescendant(basePath, path)
     }
 
   private def safeJoinPaths(base: String, path: Uri.Path, separator: Char): String = {
-    base + path.segments.map(_.decoded()).filterNot(s => s.contains('/') || s.contains('\\') || s == "..").mkString(separator.toString)
+    base + path.segments.map(_.decoded()).filterNot(s => s.contains('/') || s.contains('\\') || s == "..").mkString(
+      separator.toString)
   }
 
   /**

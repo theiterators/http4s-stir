@@ -4,10 +4,11 @@ import org.http4s._
 import org.http4s.circe.CirceEntityEncoder._
 import org.http4s.circe.CirceEntityDecoder._
 import org.http4s.ember.server._
-import pl.iterators.stir.server.{ ExceptionHandler, RejectionHandler, Route }
+import pl.iterators.stir.server.{ExceptionHandler, RejectionHandler, Route}
 import pl.iterators.stir.server.Directives._
 import pl.iterators.kebs.Http4s
 import pl.iterators.kebs.circe.KebsCirce
+import pl.iterators.stir.server.directives.CredentialsHelper
 
 import scala.jdk.CollectionConverters._
 import java.util.UUID
@@ -17,6 +18,13 @@ case class Beer(id: UUID, name: String, style: String, abv: Double)
 
 object Main extends IOApp.Simple with KebsCirce with Http4s {
   val beers = new ConcurrentHashMap[UUID, Beer]()
+
+  val authenticator = new Authenticator[String] {
+    override def apply(v1: CredentialsHelper): Option[String] = v1 match {
+      case c @ CredentialsHelper.Provided(identifier) if (c.verify("password"))  => Some(identifier)
+      case _ => None
+    }
+  }
 
   val routes: Route = {
     handleExceptions(ExceptionHandler.default()) {
@@ -50,10 +58,12 @@ object Main extends IOApp.Simple with KebsCirce with Http4s {
             complete {
               throw new IllegalArgumentException("Oops")
             }
-          } ~ path("file") {
-            getFromFile("../scala-3-http4s-doobie/Main.scala")
-          } ~ pathPrefix("dir") {
-            getFromDirectory("src/main")
+          } ~ authenticateBasic("d-and-d-realm", authenticator) { id =>
+            path("file") {
+              getFromFile("../scala-3-http4s-doobie/Main.scala")
+            } ~ pathPrefix("dir") {
+              getFromDirectory("src/main")
+            }
           }
         }
       }

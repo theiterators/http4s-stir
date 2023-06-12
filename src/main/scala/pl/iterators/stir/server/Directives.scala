@@ -28,7 +28,7 @@ trait Directives extends RouteConcatenation
     with RespondWithDirectives
     with RouteDirectives
 //  with SchemeDirectives
-//  with SecurityDirectives
+    with SecurityDirectives
 //  with WebSocketDirectives
 //  with FramedEntityStreamingDirectives
     with AttributeDirectives

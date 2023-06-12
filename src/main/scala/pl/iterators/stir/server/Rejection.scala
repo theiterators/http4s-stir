@@ -1,6 +1,6 @@
 package pl.iterators.stir.server
 
-import org.http4s.{ DecodeFailure, Method }
+import org.http4s.{ Challenge, DecodeFailure, Method }
 
 trait Rejection
 
@@ -92,3 +92,37 @@ final case class MissingCookieRejection(cookieName: String) extends Rejection
  * did indeed match eventually).
  */
 final case class TransformationRejection(transform: Seq[Rejection] => Seq[Rejection]) extends Rejection
+
+/**
+ * Rejection created by the various [[pl.iterators.stir.server.directives.SecurityDirectives]].
+ * Signals that the request was rejected because the user could not be authenticated. The reason for the rejection is
+ * specified in the cause.
+ */
+final case class AuthenticationFailedRejection(cause: AuthenticationFailedRejection.Cause, challenge: Challenge)
+    extends Rejection
+
+object AuthenticationFailedRejection {
+
+  /**
+   * Signals the cause of the failed authentication.
+   */
+  sealed trait Cause
+
+  /**
+   * Signals the cause of the rejecting was that the user could not be authenticated, because the `WWW-Authenticate`
+   * header was not supplied.
+   */
+  case object CredentialsMissing extends Cause
+
+  /**
+   * Signals the cause of the rejecting was that the user could not be authenticated, because the supplied credentials
+   * are invalid.
+   */
+  case object CredentialsRejected extends Cause
+}
+
+/**
+ * Rejection created by the 'authorize' directive.
+ * Signals that the request was rejected because the user is not authorized.
+ */
+case object AuthorizationFailedRejection extends Rejection
