@@ -38,7 +38,7 @@ object Main extends IOApp.Simple with KebsCirce with Http4s {
                     pageNumber.getOrElse(0) * pageSize.getOrElse(25) + pageSize.getOrElse(25))
                 }
             } ~
-            (post & pathEndOrSingleSlash & entityAs[Beer] & optionalHeaderValueByName("Authorization")) {
+            (post & pathEndOrSingleSlash & entity(as[Beer]) & optionalHeaderValueByName("Authorization")) {
               (beer, token) =>
                 complete {
                   Option(beers.get(beer.id)) match { // yes, race condition here :-D

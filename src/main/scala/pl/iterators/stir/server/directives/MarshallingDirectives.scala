@@ -3,11 +3,11 @@ package pl.iterators.stir.server.directives
 import cats.effect.IO
 import org.http4s.EntityDecoder
 import pl.iterators.stir.server._
-import pl.iterators.stir.server.directives.BasicDirectives.cancelRejections
-import pl.iterators.stir.server.directives.RouteDirectives.complete
 import pl.iterators.stir.server.{ EntityRejection, ToResponseMarshaller }
 
 trait MarshallingDirectives {
+  import BasicDirectives._
+  import RouteDirectives._
 
   /**
    * Unmarshalls the requests entity to the given type passes it to its inner Route.
@@ -16,7 +16,7 @@ trait MarshallingDirectives {
    *
    * @group marshalling
    */
-  def entityAs[A](implicit entityDecoder: EntityDecoder[IO, A]): Directive1[A] = Directive[Tuple1[A]] {
+  def entity[T](entityDecoder: EntityDecoder[IO, T]): Directive1[T] = Directive[Tuple1[T]] {
     inner => ctx =>
       entityDecoder.decode(ctx.request, strict = false).value.flatMap {
         case Right(value) => inner(Tuple1(value))(ctx)
@@ -25,13 +25,27 @@ trait MarshallingDirectives {
   } & cancelRejections(classOf[EntityRejection])
 
   /**
+   * Returns the in-scope [[EntityDecoder]] for the given type.
+   *
+   * @group marshalling
+   */
+  def as[T](implicit um: EntityDecoder[IO, T]) = um
+
+  /**
+   * Returns the in-scope Marshaller for the given type.
+   *
+   * @group marshalling
+   */
+  def instanceOf[T](implicit m: ToResponseMarshaller[T]): ToResponseMarshaller[T] = m
+
+  /**
    * Completes the request using the given function. The input to the function is produced with the in-scope
    * entity unmarshaller and the result value of the function is marshalled with the in-scope marshaller.
    *
    * @group marshalling
    */
   def handleWith[A, B](f: A => B)(implicit entityDecoder: EntityDecoder[IO, A], m: ToResponseMarshaller[B]): Route =
-    entityAs(entityDecoder) { a => complete(f(a)) }
+    entity(entityDecoder) { a => complete(f(a)) }
 }
 
 object MarshallingDirectives extends MarshallingDirectives
