@@ -5,12 +5,14 @@ import org.http4s._
 import org.http4s.circe.CirceEntityEncoder._
 import org.http4s.circe.CirceEntityDecoder._
 import org.http4s.ember.server._
-import pl.iterators.stir.server.{ ExceptionHandler, RejectionHandler, Route }
+import org.http4s.server.middleware.Logger
+import pl.iterators.stir.server.{ExceptionHandler, RejectionHandler, Route}
 import pl.iterators.stir.server.Directives._
 import pl.iterators.kebs.Http4s
 import pl.iterators.kebs.circe.KebsCirce
 import pl.iterators.stir.server.directives.CredentialsHelper
 
+import java.io.File
 import scala.jdk.CollectionConverters._
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -81,11 +83,15 @@ object Main extends IOApp.Simple with KebsCirce with Http4s {
                   Random.scalaUtilRandom[IO].flatMap {
                     _.betweenInt(0, 6).flatMap { int =>
                       IO.delay(println(s"Got: $int")).flatMap { _ =>
-                        IO.sleep(int.seconds).map(_ => Status.Ok -> int.toString)
+                        IO.sleep(int.seconds).map(_ => Status.Ok)
                       }
                     }
                   }
                 }
+              }
+            } ~ (path("file-upload") & storeUploadedFile("file", fi => new File("/tmp/" + fi.fileName))) { (fileInfo, file) =>
+              complete {
+                Status.Ok -> s"File $fileInfo uploaded"
               }
             } ~ authenticateBasic("d-and-d-realm", authenticator) { id =>
               path("file") {
