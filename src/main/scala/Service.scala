@@ -53,6 +53,14 @@ object Main extends IOApp.Simple with KebsCirce with Http4s {
               complete {
                 IO.delay(beers.remove(id)).map(_ => Status.NoContent -> "Yes, content")
               }
+            } ~ path("legacy") {
+              (post & pathEndOrSingleSlash & formFields("id".as[UUID], "name", "style", "abv".as[Double])) { (id, name, style, abv) =>
+                complete {
+                  val beer = Beer(id, name, style, abv)
+                  beers.put(beer.id, beer)
+                  Status.Created -> beer
+                }
+              }
             }
           } ~ path("oops") {
             complete {

@@ -1,6 +1,6 @@
 package pl.iterators.stir.server
 
-import org.http4s.{ Challenge, DecodeFailure, Method }
+import org.http4s.{Challenge, DecodeFailure, Method}
 
 trait Rejection
 
@@ -126,3 +126,15 @@ object AuthenticationFailedRejection {
  * Signals that the request was rejected because the user is not authorized.
  */
 case object AuthorizationFailedRejection extends Rejection
+
+/**
+ * Rejection created by form field filters.
+ * Signals that the request was rejected because a form field was not found.
+ */
+final case class MissingFormFieldRejection(fieldName: String) extends Rejection
+
+/**
+ * Rejection created by form field filters.
+ * Signals that the request was rejected because a form field could not be interpreted.
+ */
+final case class MalformedFormFieldRejection(fieldName: String, errorMsg: String, cause: Option[Throwable] = None) extends Rejection
