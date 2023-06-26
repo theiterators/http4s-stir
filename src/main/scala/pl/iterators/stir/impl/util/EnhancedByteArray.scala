@@ -1,6 +1,5 @@
 package pl.iterators.stir.impl.util
 
-
 import scala.annotation.tailrec
 
 /**

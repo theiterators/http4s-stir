@@ -156,10 +156,10 @@ object RejectionHandler {
           rejectRequestEntityAndComplete((Forbidden,
             "The supplied authentication is not authorized to access this resource"))
       }
-//      .handle {
-//        case MalformedFormFieldRejection(name, msg, _) =>
-//          rejectRequestEntityAndComplete((BadRequest, "The form field '" + name + "' was malformed:\n" + msg))
-//      }
+      .handle {
+        case MalformedFormFieldRejection(name, msg, _) =>
+          rejectRequestEntityAndComplete((BadRequest, "The form field '" + name + "' was malformed:\n" + msg))
+      }
       .handle {
         case MalformedHeaderRejection(headerName, msg, _) =>
           rejectRequestEntityAndComplete((BadRequest, s"The value of HTTP header '$headerName' was malformed:\n" + msg))
@@ -181,10 +181,10 @@ object RejectionHandler {
         case MissingCookieRejection(cookieName) =>
           rejectRequestEntityAndComplete((BadRequest, "Request is missing required cookie '" + cookieName + '\''))
       }
-//      .handle {
-//        case MissingFormFieldRejection(fieldName) =>
-//          rejectRequestEntityAndComplete((BadRequest, "Request is missing required form field '" + fieldName + '\''))
-//      }
+      .handle {
+        case MissingFormFieldRejection(fieldName) =>
+          rejectRequestEntityAndComplete((BadRequest, "Request is missing required form field '" + fieldName + '\''))
+      }
       .handle {
         case MissingHeaderRejection(headerName) =>
           rejectRequestEntityAndComplete((BadRequest, "Request is missing required HTTP header '" + headerName + '\''))

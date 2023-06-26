@@ -7,3 +7,10 @@
 * RangeDirectives
 * checkSameOrigin in HeaderDirectives
 * handling of multipart forms in FormFieldDirectives (but I don't like it anyway)
+* Some of how akka configures things
+  * withSizeLimit
+  * withoutSizeLimit
+  * requestEntityEmpty
+  * requestEntityPresent
+  * rejectEmptyResponse
+* AttributeDirectives

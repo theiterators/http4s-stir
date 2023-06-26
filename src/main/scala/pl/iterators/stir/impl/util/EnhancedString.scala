@@ -94,7 +94,7 @@ private[stir] class EnhancedString(val underlying: String) extends AnyVal {
    * @see [[http://rdist.root.org/2009/05/28/timing-attack-in-google-keyczar-library/]]
    * @see [[http://emerose.com/timing-attacks-explained]]
    */
-  def secure_==(other: String): Boolean = asciiBytes secure_== other.asciiBytes
+  def secure_==(other: String): Boolean = asciiBytes.secure_==(other.asciiBytes)
 
   /**
    * Determines whether the underlying String starts with the given character.

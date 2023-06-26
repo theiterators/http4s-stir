@@ -1,6 +1,6 @@
 package pl.iterators.stir.server
 
-import org.http4s.{Challenge, DecodeFailure, Method}
+import org.http4s.{ Challenge, DecodeFailure, Method }
 
 trait Rejection
 
@@ -137,4 +137,5 @@ final case class MissingFormFieldRejection(fieldName: String) extends Rejection
  * Rejection created by form field filters.
  * Signals that the request was rejected because a form field could not be interpreted.
  */
-final case class MalformedFormFieldRejection(fieldName: String, errorMsg: String, cause: Option[Throwable] = None) extends Rejection
+final case class MalformedFormFieldRejection(fieldName: String, errorMsg: String, cause: Option[Throwable] = None)
+    extends Rejection
