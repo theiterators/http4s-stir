@@ -3,7 +3,7 @@ package pl.iterators.stir.server.directives
 import com.comcast.ip4s.IpAddress
 import org.http4s.LanguageTag
 import org.http4s.headers._
-import pl.iterators.stir.server.{directives, _}
+import pl.iterators.stir.server.{ directives, _ }
 
 trait MiscDirectives {
   import RouteDirectives._
@@ -67,7 +67,8 @@ trait MiscDirectives {
     optionalHeaderValueByType[`Accept-Language`].flatMap {
       case Some(acceptLanguage) =>
         val availableLanguages = first +: more
-        val preferredLanguage  = availableLanguages.map(l => (l, acceptLanguage.qValue(l))).filter(_._2.isAcceptable).maxByOption(_._2)
+        val preferredLanguage =
+          availableLanguages.map(l => (l, acceptLanguage.qValue(l))).filter(_._2.isAcceptable).maxByOption(_._2)
         provide(preferredLanguage.map(_._1).getOrElse(first))
       case None => provide(first)
     }

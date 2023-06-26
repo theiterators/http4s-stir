@@ -13,4 +13,6 @@
   * requestEntityEmpty
   * requestEntityPresent
   * rejectEmptyResponse
+  * extractRequestTimeout
+  * withRequestTimeoutResponse
 * AttributeDirectives

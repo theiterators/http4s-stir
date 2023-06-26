@@ -1,4 +1,5 @@
 import cats.effect._
+import cats.effect.std.Random
 import com.comcast.ip4s._
 import org.http4s._
 import org.http4s.circe.CirceEntityEncoder._
@@ -13,6 +14,7 @@ import pl.iterators.stir.server.directives.CredentialsHelper
 import scala.jdk.CollectionConverters._
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import scala.concurrent.duration._
 
 case class Beer(id: UUID, name: String, style: String, abv: Double) {
   require(abv >= 0 && abv <= 100, "ABV must be between 0 and 100")
@@ -72,6 +74,18 @@ object Main extends IOApp.Simple with KebsCirce with Http4s {
             } ~ path("oops") {
               complete {
                 throw new IllegalArgumentException("Oops")
+              }
+            } ~ path("timeout-maybe") {
+              withRequestTimeout(3.second) {
+                complete {
+                  Random.scalaUtilRandom[IO].flatMap {
+                    _.betweenInt(0, 6).flatMap { int =>
+                      IO.delay(println(s"Got: $int")).flatMap { _ =>
+                        IO.sleep(int.seconds).map(_ => Status.Ok -> int.toString)
+                      }
+                    }
+                  }
+                }
               }
             } ~ authenticateBasic("d-and-d-realm", authenticator) { id =>
               path("file") {
