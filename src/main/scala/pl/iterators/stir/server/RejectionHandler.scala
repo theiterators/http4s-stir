@@ -142,10 +142,10 @@ object RejectionHandler {
    */
   final val default =
     new Builder(isDefault = true)
-//      .handleAll[SchemeRejection] { rejections =>
-//        val schemes = rejections.map(_.supported).mkString(", ")
-//        rejectRequestEntityAndComplete((BadRequest, "Uri scheme not allowed, supported schemes: " + schemes))
-//      }
+      .handleAll[SchemeRejection] { rejections =>
+        val schemes = rejections.map(_.supported).mkString(", ")
+        rejectRequestEntityAndComplete((BadRequest, "Uri scheme not allowed, supported schemes: " + schemes))
+      }
       .handleAll[MethodRejection] { rejections =>
         val (methods, names) = rejections.map(r => r.supported -> r.supported.name).unzip
         rejectRequestEntityAndComplete((MethodNotAllowed, Headers(Allow(methods.toSet)),

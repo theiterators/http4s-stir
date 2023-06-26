@@ -139,3 +139,9 @@ final case class MissingFormFieldRejection(fieldName: String) extends Rejection
  */
 final case class MalformedFormFieldRejection(fieldName: String, errorMsg: String, cause: Option[Throwable] = None)
     extends Rejection
+
+/**
+ * Rejection created by scheme filters.
+ * Signals that the request was rejected because the Uri scheme is unsupported.
+ */
+final case class SchemeRejection(supported: String) extends Rejection
