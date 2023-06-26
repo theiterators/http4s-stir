@@ -16,3 +16,4 @@
   * extractRequestTimeout
   * withRequestTimeoutResponse
 * AttributeDirectives
+* FramedEntityStreamingDirectives

@@ -27,10 +27,10 @@ trait Directives extends RouteConcatenation
     with RangeDirectives
     with RespondWithDirectives
     with RouteDirectives
-//  with SchemeDirectives
+    with SchemeDirectives
     with SecurityDirectives
 //  with WebSocketDirectives
-//  with FramedEntityStreamingDirectives
+    with FramedEntityStreamingDirectives
     with AttributeDirectives
 
 /**
