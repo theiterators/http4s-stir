@@ -1,7 +1,8 @@
 package pl.iterators.stir.server.directives
 
 import cats.effect.IO
-import pl.iterators.stir.server.{ Directive, Directive1, ToResponseMarshaller }
+import pl.iterators.stir.marshalling.ToResponseMarshaller
+import pl.iterators.stir.server.{ Directive, Directive1 }
 import pl.iterators.stir.util.Tupler
 
 import scala.util._

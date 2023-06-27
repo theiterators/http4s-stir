@@ -3,6 +3,7 @@ package pl.iterators.stir.server
 import cats.effect.IO
 import org.http4s.{ Request, Response, Status, Uri }
 import org.http4s.Uri.Path
+import pl.iterators.stir.marshalling.ToResponseMarshallable
 
 case class RequestContext(request: Request[IO], unmatchedPath: Path) {
 

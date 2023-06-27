@@ -1,4 +1,6 @@
-package pl.iterators.stir.server
+package pl.iterators.stir.marshalling
+
+import cats.effect.IO
 
 trait ToResponseMarshallable {
   type T
@@ -13,4 +15,8 @@ object ToResponseMarshallable {
       def value: T = _value
       def marshaller: ToResponseMarshaller[T] = _marshaller
     }
+
+  implicit val marshaller: ToResponseMarshaller[ToResponseMarshallable] = {
+    (trm: ToResponseMarshallable) => trm.marshaller.toResponse(trm.value)
+  }
 }

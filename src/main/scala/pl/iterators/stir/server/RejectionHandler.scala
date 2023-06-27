@@ -5,6 +5,7 @@ import org.http4s.{ Headers, Response }
 import org.http4s.Status._
 import org.http4s.headers.{ `WWW-Authenticate`, Allow }
 import pl.iterators.stir.impl.util._
+import pl.iterators.stir.marshalling.ToResponseMarshallable
 import pl.iterators.stir.server.directives.BasicDirectives
 
 import scala.annotation.tailrec

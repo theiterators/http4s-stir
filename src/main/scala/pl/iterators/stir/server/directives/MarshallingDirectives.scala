@@ -2,8 +2,9 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.IO
 import org.http4s.EntityDecoder
+import pl.iterators.stir.marshalling.ToResponseMarshaller
 import pl.iterators.stir.server._
-import pl.iterators.stir.server.{ EntityRejection, ToResponseMarshaller }
+import pl.iterators.stir.server.EntityRejection
 
 trait MarshallingDirectives {
   import BasicDirectives._

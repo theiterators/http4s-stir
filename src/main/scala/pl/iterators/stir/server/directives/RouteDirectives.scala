@@ -2,7 +2,8 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.IO
 import org.http4s.{ EntityEncoder, Headers, Request, Response, Status, Uri }
-import pl.iterators.stir.server.{ Rejection, RouteResult, StandardRoute, ToResponseMarshallable }
+import pl.iterators.stir.marshalling.ToResponseMarshallable
+import pl.iterators.stir.server.{ Rejection, RouteResult, StandardRoute }
 
 trait RouteDirectives {
 

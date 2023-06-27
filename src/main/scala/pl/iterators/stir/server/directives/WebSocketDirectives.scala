@@ -1,10 +1,10 @@
 package pl.iterators.stir.server.directives
 
 import cats.effect.IO
-import fs2.{Stream, Pipe}
+import fs2.{ Pipe, Stream }
 import org.http4s.server.websocket.WebSocketBuilder2
 import org.http4s.websocket.WebSocketFrame
-import pl.iterators.stir.server.{Route, RouteResult}
+import pl.iterators.stir.server.{ Route, RouteResult }
 
 /**
  * @groupname websocket WebSocket directives
@@ -47,7 +47,8 @@ trait WebSocketDirectives {
    *
    * @group websocket
    */
-  def handleWebSocketMessages(ws: WebSocketBuilder2[IO], send: Stream[IO, WebSocketFrame], receive: Pipe[IO, WebSocketFrame, Unit]): Route =
+  def handleWebSocketMessages(ws: WebSocketBuilder2[IO], send: Stream[IO, WebSocketFrame],
+      receive: Pipe[IO, WebSocketFrame, Unit]): Route =
     _ => ws.build(send, receive).map(RouteResult.Complete)
 
 //  /**

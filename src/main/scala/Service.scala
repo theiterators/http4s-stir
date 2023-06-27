@@ -8,10 +8,11 @@ import org.http4s.circe.CirceEntityDecoder._
 import org.http4s.ember.server._
 import org.http4s.server.websocket.WebSocketBuilder2
 import org.http4s.websocket.WebSocketFrame
-import pl.iterators.stir.server.{ ExceptionHandler, RejectionHandler, Route }
+import pl.iterators.stir.server.{ ExceptionHandler, RejectionHandler, Route, StandardRoute }
 import pl.iterators.stir.server.Directives._
 import pl.iterators.kebs.Http4s
 import pl.iterators.kebs.circe.KebsCirce
+import pl.iterators.stir.marshalling.ToResponseMarshallable
 import pl.iterators.stir.server.directives.CredentialsHelper
 
 import java.io.File

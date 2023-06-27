@@ -1,4 +1,4 @@
-package pl.iterators.stir.server
+package pl.iterators.stir.marshalling
 
 import cats.effect.IO
 import org.http4s.{ EntityEncoder, Headers, Response, Status }
