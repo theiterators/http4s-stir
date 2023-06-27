@@ -18,3 +18,9 @@
 * AttributeDirectives
 * FramedEntityStreamingDirectives
 * WebSocketDirectives in large part
+* Testkit needed significant changes
+  * Not async anymore
+  * Chunks not supported
+  * Request building incomplete (missing some minor header methods)
+  * All websocket thingies
+  * Some logic of transparent headers and default host info

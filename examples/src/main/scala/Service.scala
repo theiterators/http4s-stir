@@ -2,6 +2,8 @@ import cats.effect._
 import cats.effect.std.Random
 import com.comcast.ip4s._
 import fs2.{ Pipe, Stream }
+import io.circe.Codec
+import io.circe.generic.semiauto._
 import org.http4s._
 import org.http4s.circe.CirceEntityEncoder._
 import org.http4s.circe.CirceEntityDecoder._
@@ -10,8 +12,6 @@ import org.http4s.server.websocket.WebSocketBuilder2
 import org.http4s.websocket.WebSocketFrame
 import pl.iterators.stir.server.{ ExceptionHandler, RejectionHandler, Route, StandardRoute }
 import pl.iterators.stir.server.Directives._
-import pl.iterators.kebs.Http4s
-import pl.iterators.kebs.circe.KebsCirce
 import pl.iterators.stir.marshalling.ToResponseMarshallable
 import pl.iterators.stir.server.directives.CredentialsHelper
 
@@ -25,7 +25,8 @@ case class Beer(id: UUID, name: String, style: String, abv: Double) {
   require(abv >= 0 && abv <= 100, "ABV must be between 0 and 100")
 }
 
-object Main extends IOApp.Simple with KebsCirce with Http4s {
+object Main extends IOApp.Simple {
+  implicit val beerCodec: Codec[Beer] = deriveCodec[Beer]
   val beers = new ConcurrentHashMap[UUID, Beer]()
 
   val authenticator = new Authenticator[String] {

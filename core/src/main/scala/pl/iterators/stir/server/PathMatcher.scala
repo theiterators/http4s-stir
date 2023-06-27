@@ -376,8 +376,8 @@ trait PathMatchers {
    */
   object PathEnd extends PathMatcher0 {
     def apply(path: Path) = path match {
-      case Path.empty => Matched.Empty
-      case _          => Unmatched
+      case path if path.segments.isEmpty => Matched.Empty
+      case _                             => Unmatched
     }
   }
 

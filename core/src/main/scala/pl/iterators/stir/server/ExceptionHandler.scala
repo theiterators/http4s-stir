@@ -43,7 +43,7 @@ object ExceptionHandler {
    */
   def default(logAction: Option[(Throwable, String) => IO[Unit]] = None): ExceptionHandler = {
     val log = logAction.getOrElse { (t: Throwable, s: String) =>
-      log4cats.slf4j.loggerFactoryforSync[IO].getLogger.error(t)(s)
+      log4cats.slf4j.Slf4jFactory.create[IO].getLogger.error(t)(s)
     }
     apply(knownToBeSealed = true) {
       case NonFatal(e) => ctx => {
