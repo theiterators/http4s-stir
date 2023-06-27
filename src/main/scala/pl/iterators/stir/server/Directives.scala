@@ -29,9 +29,10 @@ trait Directives extends RouteConcatenation
     with RouteDirectives
     with SchemeDirectives
     with SecurityDirectives
-//  with WebSocketDirectives
+    with WebSocketDirectives
     with FramedEntityStreamingDirectives
     with AttributeDirectives
+    with Http4sDirectives
 
 /**
  * Collects all default directives into one object for simple importing.

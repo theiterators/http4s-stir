@@ -1,14 +1,15 @@
 package pl.iterators.stir.server.directives
 
 import cats.effect.IO
-import fs2.{Chunk, Pipe, Stream}
+import fs2.{ Chunk, Pipe, Stream }
 import org.http4s.server.middleware.Logger
-import org.http4s.{Headers, Request, Response}
+import org.http4s.{ Headers, Request, Response }
 import org.typelevel.ci.CIString
 import org.typelevel.log4cats
-import pl.iterators.stir.server.{Directive, Directive0, Route, RouteResult}
+import pl.iterators.stir.server.{ Directive, Directive0, Route, RouteResult }
 
 trait DebuggingDirectives {
+
   /**
    * Produces a log entry for every incoming request.
    *
@@ -28,7 +29,8 @@ trait DebuggingDirectives {
               _.chunks.flatMap(c => Stream.exec(vec.update(_ :+ c)))
             val pipe: Pipe[IO, Byte, Byte] = _.observe(collectChunks)
             val bodyForLog = Stream.eval(vec.get).flatMap(v => Stream.emits(v)).unchunks
-            val logRequest = Logger.logMessage[IO, Request[IO]](ctx.request.withBodyStream(bodyForLog))(logHeaders, logBody, redactHeadersWhen)(log)
+            val logRequest = Logger.logMessage[IO, Request[IO]](ctx.request.withBodyStream(bodyForLog))(logHeaders,
+              logBody, redactHeadersWhen)(log)
             val bodyForRouting = pipe(ctx.request.body)
             val newCtx = ctx.copy(request = ctx.request.withBodyStream(bodyForRouting))
             inner(())(newCtx).flatMap {
@@ -71,14 +73,17 @@ trait DebuggingDirectives {
               // Cannot Be Done Asynchronously - Otherwise All Chunks May Not Be Appended Previous to Finalization
               val logPipe: Pipe[IO, Byte, Byte] =
                 _.observe(_.chunks.flatMap(c => Stream.exec(vec.update(_ :+ c))))
-                  .onFinalizeWeak(Logger.logMessage[IO, Response[IO]](response.withBodyStream(newBody))(logHeaders, logBody, redactHeadersWhen)(log))
+                  .onFinalizeWeak(Logger.logMessage[IO, Response[IO]](response.withBodyStream(newBody))(logHeaders,
+                    logBody, redactHeadersWhen)(log))
               RouteResult.Complete(response.withBodyStream(logPipe(response.body)))
             }
           } else {
-            Logger.logMessage[IO, Response[IO]](response)(logHeaders, logBody, redactHeadersWhen)(log).as(RouteResult.Complete(response))
+            Logger.logMessage[IO, Response[IO]](response)(logHeaders, logBody, redactHeadersWhen)(log).as(
+              RouteResult.Complete(response))
           }
         case RouteResult.Rejected(rejections) =>
-          log(s"Request was rejected with rejections: ${rejections.mkString(", ")}").as(RouteResult.Rejected(rejections))
+          log(s"Request was rejected with rejections: ${rejections.mkString(", ")}").as(
+            RouteResult.Rejected(rejections))
       }
     }
   }
@@ -91,7 +96,8 @@ trait DebuggingDirectives {
   def logRequestResult(logHeaders: Boolean = true, logBody: Boolean = true,
       redactHeadersWhen: CIString => Boolean = Headers.SensitiveHeaders.contains,
       logAction: Option[String => IO[Unit]] = None): Directive0 = {
-    logResult(logHeaders, logBody, redactHeadersWhen, logAction) & logRequest(logHeaders, logBody, redactHeadersWhen, logAction)
+    logResult(logHeaders, logBody, redactHeadersWhen, logAction) & logRequest(logHeaders, logBody, redactHeadersWhen,
+      logAction)
   }
 }
 

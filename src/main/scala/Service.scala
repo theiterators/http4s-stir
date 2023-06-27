@@ -1,12 +1,14 @@
 import cats.effect._
 import cats.effect.std.Random
 import com.comcast.ip4s._
+import fs2.{ Pipe, Stream }
 import org.http4s._
 import org.http4s.circe.CirceEntityEncoder._
 import org.http4s.circe.CirceEntityDecoder._
 import org.http4s.ember.server._
-import org.http4s.server.middleware.Logger
-import pl.iterators.stir.server.{ExceptionHandler, RejectionHandler, Route}
+import org.http4s.server.websocket.WebSocketBuilder2
+import org.http4s.websocket.WebSocketFrame
+import pl.iterators.stir.server.{ ExceptionHandler, RejectionHandler, Route }
 import pl.iterators.stir.server.Directives._
 import pl.iterators.kebs.Http4s
 import pl.iterators.kebs.circe.KebsCirce
@@ -32,7 +34,7 @@ object Main extends IOApp.Simple with KebsCirce with Http4s {
     }
   }
 
-  val routes: Route = {
+  def routes(ws: WebSocketBuilder2[IO]): Route = {
     handleExceptions(ExceptionHandler.default()) {
       handleRejections(RejectionHandler.default) {
         logRequestResult() {
@@ -89,9 +91,9 @@ object Main extends IOApp.Simple with KebsCirce with Http4s {
                   }
                 }
               }
-            } ~ (path("file-upload") & storeUploadedFile("file", fi => new File("/tmp/" + fi.fileName))) { (fileInfo, file) =>
+            } ~ (path("file-upload") & storeUploadedFiles("file", fi => new File("/tmp/" + fi.fileName))) { files =>
               complete {
-                Status.Ok -> s"File $fileInfo uploaded"
+                Status.Ok -> s"File $files uploaded"
               }
             } ~ authenticateBasic("d-and-d-realm", authenticator) { id =>
               path("file") {
@@ -100,9 +102,24 @@ object Main extends IOApp.Simple with KebsCirce with Http4s {
                 getFromDirectory("src/main")
               }
             }
-          }
+          } ~ path("ws") {
+            val send: Stream[IO, WebSocketFrame] =
+              Stream.awakeEvery[IO](1.second).map(_ => WebSocketFrame.Text("Hello"))
+            val receive: Pipe[IO, WebSocketFrame, Unit] = _.evalMap(frame => IO(println(frame)))
+            handleWebSocketMessages(ws, send, receive)
+          } ~ http4sRoutes()
         }
       }
+    }
+  }
+
+  def http4sRoutes(): Route = {
+    import org.http4s.dsl.io._
+    httpRoutesOf {
+      case GET -> Root / "hello" =>
+        Ok("Hello")
+      case GET -> Root / "hello" / name =>
+        Ok(s"Hello $name")
     }
   }
 
@@ -111,7 +128,7 @@ object Main extends IOApp.Simple with KebsCirce with Http4s {
       .default[IO]
       .withHost(ipv4"0.0.0.0")
       .withPort(port"8080")
-      .withHttpApp(routes.toHttpRoutes.orNotFound)
+      .withHttpWebSocketApp(ws => routes(ws).toHttpRoutes.orNotFound)
       .build
       .use(_ => IO.never)
   }

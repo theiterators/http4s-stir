@@ -17,3 +17,4 @@
   * withRequestTimeoutResponse
 * AttributeDirectives
 * FramedEntityStreamingDirectives
+* WebSocketDirectives in large part

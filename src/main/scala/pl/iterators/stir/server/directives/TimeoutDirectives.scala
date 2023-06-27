@@ -1,8 +1,8 @@
 package pl.iterators.stir.server.directives
 
 import cats.effect.IO
-import org.http4s.{Request, Response, Status}
-import pl.iterators.stir.server.{Directive, Directive0, Directive1, RouteResult}
+import org.http4s.{ Request, Response, Status }
+import pl.iterators.stir.server.{ Directive, Directive0, Directive1, RouteResult }
 
 import scala.concurrent.duration.Duration
 
@@ -73,7 +73,7 @@ trait TimeoutDirectives {
     Directive { inner => ctx =>
       lazy val handlerToApply = handler match {
         case Some(h) => h(ctx.request)
-        case _ => Response[IO](Status.RequestTimeout)
+        case _       => Response[IO](Status.RequestTimeout)
       }
       inner(())(ctx).timeoutTo(timeout, IO.pure(RouteResult.Complete(handlerToApply)))
     }
