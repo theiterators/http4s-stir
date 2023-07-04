@@ -1,7 +1,7 @@
 package pl.iterators.stir.testkit
 
 import org.scalatest.exceptions.TestFailedException
-import org.scalatest.{BeforeAndAfterAll, Suite}
+import org.scalatest.{ BeforeAndAfterAll, Suite }
 import pl.iterators.stir.server.ExceptionHandler
 
 trait TestFrameworkInterface {
@@ -34,7 +34,7 @@ object TestFrameworkInterface {
 }
 
 object Specs2FrameworkInterface {
-  import org.specs2.execute.{Failure, FailureException}
+  import org.specs2.execute.{ Failure, FailureException }
   import org.specs2.specification.AfterAll
 
   trait Specs2 extends TestFrameworkInterface with AfterAll {

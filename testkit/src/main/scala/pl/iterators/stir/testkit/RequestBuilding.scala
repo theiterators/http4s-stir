@@ -3,7 +3,7 @@ package pl.iterators.stir.testkit
 import cats.effect.IO
 import org.http4s.Method._
 import org.http4s.headers.Authorization
-import org.http4s.{Credentials, EmptyBody, EntityBody, EntityEncoder, Header, Headers, Method, Request, Uri}
+import org.http4s.{ Credentials, EmptyBody, EntityBody, EntityEncoder, Header, Headers, Method, Request, Uri }
 import org.typelevel.ci.CIString
 
 trait RequestBuilding {
@@ -33,7 +33,7 @@ trait RequestBuilding {
 
     def apply[T](uri: Uri, content: Option[T])(implicit m: EntityEncoder[IO, T]): Request[IO] =
       content match {
-        case None => apply(uri, EmptyBody)
+        case None        => apply(uri, EmptyBody)
         case Some(value) => apply(uri, m.toEntity(value).body)
       }
 
@@ -51,7 +51,8 @@ trait RequestBuilding {
 
   def addHeader(header: Header.ToRaw): RequestTransformer = _.putHeaders(header)
 
-  def addHeader(headerName: String, headerValue: String): RequestTransformer = _.putHeaders(Header.Raw(CIString(headerName), headerValue))
+  def addHeader(headerName: String, headerValue: String): RequestTransformer =
+    _.putHeaders(Header.Raw(CIString(headerName), headerValue))
 
   def addHeaders(first: Header.ToRaw, more: Header.ToRaw*): RequestTransformer = _.putHeaders(Seq(first) ++ more: _*)
 

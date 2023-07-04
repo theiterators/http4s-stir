@@ -14,7 +14,7 @@ import scala.reflect.ClassTag
 import scala.util.DynamicVariable
 
 trait RouteTest extends RequestBuilding with RouteTestResultComponent
-  with MarshallingTestUtils {
+    with MarshallingTestUtils {
   this: TestFrameworkInterface =>
 
   implicit def runtime: IORuntime
@@ -49,15 +49,16 @@ trait RouteTest extends RequestBuilding with RouteTestResultComponent
       s"Could not unmarshal response to type '${implicitly[ClassTag[T]]}' for `responseAs` assertion: $e\n\nResponse was: $responseSafe"
     um.decode(response, strict = false).value.flatMap {
       case Right(t) => IO.pure(t)
-      case Left(e) => IO.raiseError(e)
+      case Left(e)  => IO.raiseError(e)
     }.recover { case error => failTest(msg(error)) }.unsafeRunSync()
   }
-  def contentType: `Content-Type` = rawResponse.contentType.getOrElse(sys.error("Binary entity does not have a ContentType"))
+  def contentType: `Content-Type` =
+    rawResponse.contentType.getOrElse(sys.error("Binary entity does not have a ContentType"))
   def mediaType: MediaType = contentType.mediaType
   def charsetOption: Option[Charset] = contentType.charset
   def charset: Charset = charsetOption.getOrElse(sys.error("Binary entity does not have charset"))
   def headers: Headers = rawResponse.headers
-  def header[T](implicit ev: Header.Select[T], cls: ClassTag[T]) : Option[ev.F[T]] = rawResponse.headers.get(ev)
+  def header[T](implicit ev: Header.Select[T], cls: ClassTag[T]): Option[ev.F[T]] = rawResponse.headers.get(ev)
   def header(name: String): Option[Header.Raw] = rawResponse.headers.get(CIString(name)).map(_.head)
   def status: Status = rawResponse.status
 
@@ -132,8 +133,7 @@ trait RouteTest extends RequestBuilding with RouteTestResultComponent
       type Out = Request[IO]
       def apply(request: Request[IO], f: Request[IO] => Request[IO]) = f(request)
     }
-    implicit def injectIntoRoute
-    : TildeArrow[RequestContext, IO[RouteResult]] { type Out = RouteTestResult } =
+    implicit def injectIntoRoute: TildeArrow[RequestContext, IO[RouteResult]] { type Out = RouteTestResult } =
       new TildeArrow[RequestContext, IO[RouteResult]] {
         type Out = RouteTestResult
         def apply(request: Request[IO], route: Route): Out = {
@@ -167,8 +167,7 @@ trait RouteTest extends RequestBuilding with RouteTestResultComponent
   }
 
   object TildeBangArrow {
-    implicit def injectIntoRoute
-    : TildeBangArrow[RequestContext, IO[RouteResult]] { type Out = RouteTestResult } =
+    implicit def injectIntoRoute: TildeBangArrow[RequestContext, IO[RouteResult]] { type Out = RouteTestResult } =
       new TildeBangArrow[RequestContext, IO[RouteResult]] {
         type Out = RouteTestResult
         def apply(request: Request[IO], route: Route): Out = {
@@ -192,7 +191,9 @@ private[stir] object RouteTest {
       client <- EmberClientBuilder
         .default[IO]
         .build
-      updatedRequest = request.withUri(request.uri.copy(scheme = Some(Uri.Scheme.http), authority = Some(Uri.Authority(None, host = Uri.Host.fromIp4sHost(ipv4"127.0.0.1"), port = Some(server.address.getPort)))))
+      updatedRequest = request.withUri(request.uri.copy(scheme = Some(Uri.Scheme.http),
+        authority = Some(Uri.Authority(None, host = Uri.Host.fromIp4sHost(ipv4"127.0.0.1"),
+          port = Some(server.address.getPort)))))
       response <- client.run(updatedRequest)
     } yield {
       response

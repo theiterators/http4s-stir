@@ -2,9 +2,9 @@ package pl.iterators.stir.testkit
 
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import org.http4s.{EntityDecoder, Request}
+import org.http4s.{ EntityDecoder, Request }
 import org.scalatest.matchers.Matcher
-import org.scalatest.{Suite, matchers}
+import org.scalatest.{ matchers, Suite }
 
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration

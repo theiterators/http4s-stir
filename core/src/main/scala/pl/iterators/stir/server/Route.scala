@@ -18,7 +18,8 @@ object Route {
    *  - Consequently, no route alternatives will be tried that were combined with this route
    *    using the ``~`` on routes or the [[Directive.|]] operator on directives.
    */
-  def seal(route: Route)(implicit rejectionHandler: RejectionHandler = RejectionHandler.default, exceptionHandler: ExceptionHandler = null): Route = {
+  def seal(route: Route)(implicit rejectionHandler: RejectionHandler = RejectionHandler.default,
+      exceptionHandler: ExceptionHandler = null): Route = {
     import directives.ExecutionDirectives._
     (handleExceptions(ExceptionHandler.seal(exceptionHandler)()) & handleRejections(rejectionHandler.seal))
       .tapply(_ => route)

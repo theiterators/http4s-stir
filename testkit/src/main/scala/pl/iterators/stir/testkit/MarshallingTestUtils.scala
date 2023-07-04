@@ -2,13 +2,14 @@ package pl.iterators.stir.testkit
 
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import org.http4s.{EntityBody, EntityDecoder, Request, Response}
+import org.http4s.{ EntityBody, EntityDecoder, Request, Response }
 import pl.iterators.stir.marshalling.ToResponseMarshaller
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{ Failure, Success, Try }
 
 trait MarshallingTestUtils {
-  def marshal[T](t: T)(implicit m: ToResponseMarshaller[T], runtime: IORuntime): EntityBody[IO] = m.toResponse(t).unsafeRunSync().body
+  def marshal[T](t: T)(implicit m: ToResponseMarshaller[T], runtime: IORuntime): EntityBody[IO] =
+    m.toResponse(t).unsafeRunSync().body
 
   def marshalToResponse[T](t: T)(implicit m: ToResponseMarshaller[T], runtime: IORuntime): Response[IO] = {
     m.toResponse(t).unsafeRunSync()

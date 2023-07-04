@@ -3,8 +3,8 @@ package pl.iterators.stir.testkit
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import fs2.Stream
-import org.http4s.{EntityBody, Response}
-import pl.iterators.stir.server.{Rejection, RejectionHandler, RouteResult}
+import org.http4s.{ EntityBody, Response }
+import pl.iterators.stir.server.{ Rejection, RejectionHandler, RouteResult }
 
 trait RouteTestResultComponent {
 
@@ -80,12 +80,12 @@ trait RouteTestResultComponent {
 //      this
 //    }
 
-    private[this] lazy val entityRecreator: IORuntime => EntityBody[IO] = (runtime) =>
+    private[this] lazy val entityRecreator: IORuntime => EntityBody[IO] = runtime =>
       rawResponse.body.compile.toVector.map { bytes =>
         Stream.emits(bytes): Stream[IO, Byte]
       }.unsafeRunSync()(runtime)
 
     private def failNeitherCompletedNorRejected(): Nothing =
-      failTest("Request was neither completed nor rejected" /*within " + timeout */)
+      failTest("Request was neither completed nor rejected" /*within " + timeout */ )
   }
 }
