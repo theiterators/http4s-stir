@@ -39,7 +39,7 @@ trait ParameterDirectives extends ToNameReceptacleEnhancements with ParameterDir
     extract(_.request.uri.query.multiParams)
 
   private val _parameterSeq: Directive1[Seq[(String, String)]] =
-    extract(_.request.uri.query.params.toList)
+    extract(_.request.uri.query.multiParams.toList.flatMap { case (k, vs) => vs.map(v => (k, v)) })
 
   trait ParamSpec {
     type Out

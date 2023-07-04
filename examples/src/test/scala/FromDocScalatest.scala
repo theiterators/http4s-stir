@@ -8,7 +8,7 @@ import pl.iterators.stir.testkit.ScalatestRouteTest
 
 class FromDocScalatest extends AnyWordSpec with Matchers with ScalatestRouteTest {
   override implicit val runtime: IORuntime = IORuntime.global
-  
+
   val smallRoute =
     get {
       concat(
@@ -19,8 +19,7 @@ class FromDocScalatest extends AnyWordSpec with Matchers with ScalatestRouteTest
         },
         path("ping") {
           complete("PONG!")
-        }
-      )
+        })
     }
 
   "The service" should {

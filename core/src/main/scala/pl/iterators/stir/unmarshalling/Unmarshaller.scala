@@ -2,7 +2,7 @@ package pl.iterators.stir.unmarshalling
 
 import cats.effect.IO
 
-import scala.util.control.NoStackTrace
+import scala.util.control.{ NoStackTrace, NonFatal }
 
 trait Unmarshaller[-A, B] {
   def apply(value: A): IO[B]
@@ -30,10 +30,14 @@ trait Unmarshaller[-A, B] {
 }
 
 object Unmarshaller extends LowerPriorityGenericUnmarshallers with PredefinedFromStringUnmarshallers {
-  def apply[A, B](f: A => IO[B]): Unmarshaller[A, B] = f(_)
+  def apply[A, B](f: A => IO[B]): Unmarshaller[A, B] = new Unmarshaller[A, B] {
+    override def apply(value: A): IO[B] =
+      try f(value)
+      catch { case NonFatal(e) => IO.raiseError(e) }
+  }
 
   def strict[A, B](f: A => B): Unmarshaller[A, B] =
-    apply(a => IO.pure(f(a)))
+    Unmarshaller(a => IO.pure(f(a)))
 
   implicit def identityUnmarshaller[T]: Unmarshaller[T, T] = Unmarshaller(IO.pure)
 

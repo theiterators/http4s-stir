@@ -80,6 +80,20 @@ lazy val core = project
     libraryDependencies ++= http4s
   )
 
+lazy val coreTests = project
+  .in(file("core-tests"))
+  .settings(baseSettings: _*)
+  .settings(
+    name := "http4s-stir-tests",
+    libraryDependencies ++= http4s ++ Seq(
+      "org.scalatest" %% "scalatest" % "3.2.15" % Test,
+      "org.specs2" %% "specs2-core" % "4.19.2" % Test
+    )
+  ).dependsOn(
+  testkit % "test",
+  core % "test->test"
+)
+
 lazy val testkit = project
   .in(file("testkit"))
   .settings(baseSettings: _*)
@@ -108,7 +122,8 @@ lazy val stir = project
   .aggregate(
     core,
     testkit,
-    examples
+    examples,
+    coreTests
   )
   .settings(baseSettings: _*)
   .settings(

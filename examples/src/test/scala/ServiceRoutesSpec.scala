@@ -24,7 +24,7 @@ class ServiceRoutesSpec extends Specification with Specs2RouteTest {
 
       request ~> routes ~> check {
         status === Status.Ok
-        responseAs[List[Beer]] shouldEqual  List.empty[Beer]
+        responseAs[List[Beer]] shouldEqual List.empty[Beer]
       }
     }
 
@@ -34,8 +34,9 @@ class ServiceRoutesSpec extends Specification with Specs2RouteTest {
 
       // Create request
       val request = Post(uri = "/api/beers").withEntity(
-       io.circe.parser.parse(s"""{"id": "${beer.id}", "name": "${beer.name}", "style": "${beer.style}", "abv": ${beer.abv}}""").getOrElse(Json.Null)
-      )
+        io.circe.parser.parse(
+          s"""{"id": "${beer.id}", "name": "${beer.name}", "style": "${beer.style}", "abv": ${beer.abv}}""").getOrElse(
+          Json.Null))
 
       // Test
       request ~> addHeader("Authorization", "Bearer someToken") ~> routes ~> check {

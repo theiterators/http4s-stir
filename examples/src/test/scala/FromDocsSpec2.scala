@@ -18,8 +18,7 @@ class FromDocsSpec2 extends Specification with Specs2RouteTest {
         },
         path("ping") {
           complete("PONG!")
-        }
-      )
+        })
     }
 
   "The service" should {
