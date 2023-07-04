@@ -1,7 +1,7 @@
 package pl.iterators.stir.server.directives
 
 import cats.effect.IO
-import org.http4s.{Response, Status}
+import org.http4s.{ Response, Status }
 import org.scalatest.Suite
 import org.scalatest.matchers.should.Matchers
 import pl.iterators.stir.server._

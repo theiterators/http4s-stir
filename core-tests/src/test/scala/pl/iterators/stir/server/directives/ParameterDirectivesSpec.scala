@@ -136,7 +136,7 @@ class ParameterDirectivesSpec extends AnyFreeSpec with GenericRoutingSpec with I
       } ~> check {
         inside(rejection) {
           case MalformedQueryParamRejection("amount", "'1x3' is not a valid 32-bit hexadecimal integer value",
-          Some(_)) =>
+                Some(_)) =>
         }
       }
     }
@@ -176,7 +176,7 @@ class ParameterDirectivesSpec extends AnyFreeSpec with GenericRoutingSpec with I
         } ~> check {
           inside(rejection) {
             case MalformedQueryParamRejection("amount", "'x' is not a valid 32-bit hexadecimal integer value",
-            Some(_)) =>
+                  Some(_)) =>
           }
         }
       }
@@ -317,9 +317,9 @@ class ParameterDirectivesSpec extends AnyFreeSpec with GenericRoutingSpec with I
         (post | parameter("method".requiredValue("post")).tmap(_ => ())) {
           complete("POST")
         } ~
-          get {
-            complete("GET")
-          }
+        get {
+          complete("GET")
+        }
       }
       Get("/?method=post") ~> route ~> check {
         responseAs[String] shouldEqual "POST"
