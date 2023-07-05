@@ -76,9 +76,13 @@ trait PathDirectives extends PathMatchers with ImplicitPathMatcherConstruction {
    */
   def pathSuffix[L](pm: PathMatcher[L]): Directive[L] = {
     implicit val LIsTuple = pm.ev
-    extract(ctx => pm(Path(ctx.unmatchedPath.segments.reverse))).flatMap {
+    extract(ctx =>
+      pm(Path(ctx.unmatchedPath.segments.reverse, ctx.unmatchedPath.endsWithSlash,
+        ctx.unmatchedPath.absolute))).flatMap {
       case Matched(rest, values) =>
-        tprovide(values) & mapRequestContext(ctx => ctx.copy(unmatchedPath = Path(rest.segments.reverse)))
+        tprovide(values) & mapRequestContext(ctx =>
+          ctx.copy(unmatchedPath = Path(rest.segments.reverse, rest.endsWithSlash,
+            rest.absolute)))
       case Unmatched => reject
     }
   }
@@ -94,7 +98,9 @@ trait PathDirectives extends PathMatchers with ImplicitPathMatcherConstruction {
    */
   def pathSuffixTest[L](pm: PathMatcher[L]): Directive[L] = {
     implicit val LIsTuple = pm.ev
-    extract(ctx => pm(Path(ctx.unmatchedPath.segments.reverse))).flatMap {
+    extract(ctx =>
+      pm(Path(ctx.unmatchedPath.segments.reverse, ctx.unmatchedPath.endsWithSlash,
+        ctx.unmatchedPath.absolute))).flatMap {
       case Matched(_, values) => tprovide(values)
       case Unmatched          => reject
     }
@@ -184,11 +190,63 @@ trait PathDirectives extends PathMatchers with ImplicitPathMatcherConstruction {
   def redirectToNoTrailingSlashIfPresent(redirectionType: Status): Directive0 =
     extractUri.flatMap { uri =>
       if (uri.path.endsWithSlash && !uri.path.isEmpty) {
-        val newPath = uri.path.segments.tail.reverse
-        val newUri = uri.withPath(Path(newPath))
-        redirect(newUri, redirectionType)
+        redirect(uri.withPath(uri.path.dropEndsWithSlash), redirectionType)
       } else pass
     }
+
+  /**
+   * Tries to match the inner route and if it fails with an empty rejection, it tries it again
+   * adding (or removing) the trailing slash on the given path.
+   *
+   * @group path
+   */
+
+  /**
+   * Tries to match the inner route and if it fails with an empty rejection, it tries it again
+   * adding (or removing) the trailing slash on the given path.
+   *
+   * @group path
+   */
+  def ignoreTrailingSlash: Directive0 = Directive[Unit] {
+    import PathDirectives._
+
+    /**
+     * Converts a URL that ends with `/` to one without. Or one that ends without `/` to one with it.
+     */
+    def flipTrailingSlash(path: Path): Path = {
+      if (path.endsWithSlash) path.dropEndsWithSlash else path.addEndsWithSlash
+    }
+
+    /**
+     * Transforms empty rejections to [[PathDirectives.TrailingRetryRejection]]
+     * for the only purpose to break the loop of rejection handling
+     */
+    val transformEmptyRejections = recoverRejections(rejections =>
+      if (rejections == Nil) {
+        RouteResult.Rejected(List(TrailingRetryRejection))
+      } else RouteResult.Rejected(rejections))
+
+    inner =>
+      import ExecutionDirectives._
+      val totallyMissingHandler = RejectionHandler.newBuilder()
+        .handleNotFound {
+          mapRequestContext(ctx => ctx.copy(unmatchedPath = flipTrailingSlash(ctx.unmatchedPath))) {
+            // transforming the rejection to break the loop.
+            transformEmptyRejections {
+              inner(())
+            }
+          }
+        }
+        .result()
+
+      cancelRejection(TrailingRetryRejection) {
+        handleRejections(totallyMissingHandler) {
+          inner(())
+        }
+      }
+  }
 }
 
-object PathDirectives extends PathDirectives
+object PathDirectives extends PathDirectives {
+  private[stir] case object TrailingRetryRejection extends Rejection
+}
