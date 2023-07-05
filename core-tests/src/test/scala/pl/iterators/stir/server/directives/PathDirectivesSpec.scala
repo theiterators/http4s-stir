@@ -1,7 +1,7 @@
 package pl.iterators.stir.server.directives
 
 import cats.effect.unsafe.IORuntime
-import org.http4s.{Status, Uri}
+import org.http4s.{ Status, Uri }
 import org.http4s.headers.Location
 import org.scalatest.Inside
 import pl.iterators.stir.server._
@@ -606,20 +606,20 @@ class PathDirectivesSpec extends RoutingSpec with Inside {
 
     "redirect with the given redirection status code" in {
       Get("/foo/bar") ~>
-        redirectToTrailingSlashIfMissing(MovedPermanently) {
-          completeOk
-        } ~>
-        check {
-          status shouldEqual MovedPermanently
-        }
+      redirectToTrailingSlashIfMissing(MovedPermanently) {
+        completeOk
+      } ~>
+      check {
+        status shouldEqual MovedPermanently
+      }
 
       Get("/foo/bar/") ~>
-        redirectToTrailingSlashIfMissing(MovedPermanently) {
-          completeOk
-        } ~>
-        check {
-          status shouldEqual Status.Ok
-        }
+      redirectToTrailingSlashIfMissing(MovedPermanently) {
+        completeOk
+      } ~>
+      check {
+        status shouldEqual Status.Ok
+      }
     }
   }
 
@@ -650,12 +650,12 @@ class PathDirectivesSpec extends RoutingSpec with Inside {
 
     "redirect with the given redirection status code" in {
       Get("/foo/bar/") ~>
-        redirectToNoTrailingSlashIfPresent(MovedPermanently) {
-          completeOk
-        } ~>
-        check {
-          status shouldEqual MovedPermanently
-        }
+      redirectToNoTrailingSlashIfPresent(MovedPermanently) {
+        completeOk
+      } ~>
+      check {
+        status shouldEqual MovedPermanently
+      }
     }
   }
 
@@ -665,12 +665,12 @@ class PathDirectivesSpec extends RoutingSpec with Inside {
       path("foo") {
         complete(s"${counter.get()}")
       } ~
-        (pathPrefix("bar") & pathEndOrSingleSlash) {
-          complete(s"${counter.get()}")
-        } ~
-        path("baz"./) {
-          complete(s"${counter.get()}")
-        }
+      (pathPrefix("bar") & pathEndOrSingleSlash) {
+        complete(s"${counter.get()}")
+      } ~
+      path("baz"./) {
+        complete(s"${counter.get()}")
+      }
     }
 
     "pass if the request path doesn't have a trailing slash" in {

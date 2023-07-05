@@ -6,6 +6,9 @@ import org.http4s.{ EntityBody, Headers, Request, Response, Uri }
 import pl.iterators.stir.server.{ Directive, Directive0, Directive1, Rejection, RequestContext, Route, RouteResult }
 import pl.iterators.stir.util.Tuple
 import pl.iterators.stir.server.TransformationRejection
+import fs2.Stream
+
+import scala.util.control.NonFatal
 
 trait BasicDirectives {
 
@@ -23,6 +26,21 @@ trait BasicDirectives {
    */
   def mapRequest(f: Request[IO] => Request[IO]): Directive0 =
     mapRequestContext { ctx => ctx.copy(request = f(ctx.request)) }
+
+  /**
+   * @group basic
+   */
+  def mapRouteResultIO(f: IO[RouteResult] => IO[RouteResult]): Directive0 =
+    Directive { inner => ctx =>
+      // Convert any exceptions that happened in the inner route to failed futures so the handler
+      // can handle those as well.
+      val innerResult =
+        try inner(())(ctx)
+        catch {
+          case NonFatal(ex) => IO.raiseError(ex)
+        }
+      f(innerResult)
+    }
 
   /**
    * @group basic
@@ -168,6 +186,26 @@ trait BasicDirectives {
   def extractUnmatchedPath: Directive1[Path] = extract(_.unmatchedPath)
 
   /**
+   * Extracts the already matched path from the RequestContext.
+   *
+   * @group basic
+   */
+  def extractMatchedPath: Directive1[Uri.Path] = extractRequestContext.flatMap { ctx =>
+    extractRequest.map { request =>
+      val unmatchedPath = ctx.unmatchedPath.toString
+      val fullPath = ctx.request.uri.path.toString
+
+      require(
+        fullPath.endsWith(unmatchedPath),
+        s"Unmatched path '$unmatchedPath' wasn't a suffix of full path '$fullPath'. " +
+        "This usually means that ctx.unmatchedPath was manipulated inconsistently " +
+        "with ctx.request.uri.path")
+
+      Path.unsafeFromString(fullPath.substring(0, fullPath.length - unmatchedPath.length))
+    }
+  }
+
+  /**
    * Extracts the current [[Request]] instance.
    *
    * @group basic
@@ -194,6 +232,13 @@ trait BasicDirectives {
    * @group basic
    */
   def extractRequestEntity: Directive1[EntityBody[IO]] = extract(_.request.body)
+
+  /**
+   * Extracts the entities `dataBytes` [[fs2.Stream]] from the [[RequestContext]].
+   *
+   * @group basic
+   */
+  def extractDataBytes: Directive1[Stream[IO, Byte]] = extract(_.request.body)
 }
 
 object BasicDirectives extends BasicDirectives

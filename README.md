@@ -1,5 +1,6 @@
 # Missing
 
+* Assuming/converting strict entity
 * CacheConditionDirectives
 * CodingDirectives
 * directory listing in FileAndResourceDirectives
