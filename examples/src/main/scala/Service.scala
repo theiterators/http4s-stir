@@ -99,7 +99,7 @@ object Main extends IOApp.Simple {
               }
             } ~ authenticateBasic("d-and-d-realm", authenticator) { id =>
               path("file") {
-                getFromFile("../scala-3-http4s-doobie/Main.scala")
+                getFromFile("project/plugins.sbt")
               } ~ pathPrefix("dir") {
                 getFromDirectory("src/main")
               }
