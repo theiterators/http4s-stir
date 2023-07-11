@@ -24,9 +24,16 @@ trait FileAndResourceDirectives {
    *
    * @group fileandresource
    */
-  def getFromFile(fileName: String): Route =
+  def getFromFile(fileName: String): Route = getFromFile(new File(fileName))
+
+  /**
+   * Completes GET requests with the content of the given file.
+   * If the file cannot be found or read the request is rejected.
+   *
+   * @group fileandresource
+   */
+  def getFromFile(file: File): Route =
     get {
-      val file = new File(fileName)
       if (file.isFile && file.canRead) {
         extractRequest { request =>
           complete {
@@ -65,7 +72,6 @@ trait FileAndResourceDirectives {
       safeDirectoryChildPath(withTrailingSlash(directoryName), unmatchedPath) match {
         case "" => reject
         case fileName =>
-          println(fileName)
           getFromFile(fileName)
       }
     }

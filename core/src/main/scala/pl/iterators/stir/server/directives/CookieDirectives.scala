@@ -23,8 +23,8 @@ trait CookieDirectives {
    * @group cookie
    */
   def cookie(name: String): Directive1[RequestCookie] =
-    headerValueByType[Cookie].map(findCookie(name)).flatMap {
-      case Some(cookie) => provide(cookie)
+    optionalHeaderValueByType[Cookie].flatMap {
+      case Some(cookie) => findCookie(name)(cookie).map(provide).getOrElse(reject(MissingCookieRejection(name)))
       case None         => reject(MissingCookieRejection(name))
     }
 

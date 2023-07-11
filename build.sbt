@@ -85,7 +85,7 @@ lazy val coreTests = project
   .settings(baseSettings: _*)
   .settings(
     name := "http4s-stir-tests",
-    libraryDependencies ++= http4s ++ Seq(
+    libraryDependencies ++= http4s ++ circe ++ Seq(
       "org.scalatest" %% "scalatest" % "3.2.15" % Test,
       "org.specs2" %% "specs2-core" % "4.19.2" % Test
     )

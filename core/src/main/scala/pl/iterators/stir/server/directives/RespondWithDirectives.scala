@@ -21,7 +21,8 @@ trait RespondWithDirectives {
    *
    * @group response
    */
-  def respondWithDefaultHeader(responseHeader: Header.Raw): Directive0 = respondWithDefaultHeader(responseHeader)
+  def respondWithDefaultHeader(responseHeader: Header.Raw): Directive0 =
+    respondWithDefaultHeaders(immutable.Seq(responseHeader))
 
   /**
    * Unconditionally adds the given response headers to all HTTP responses of its inner Route.

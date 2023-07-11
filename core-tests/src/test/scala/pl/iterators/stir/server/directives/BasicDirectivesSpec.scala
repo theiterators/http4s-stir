@@ -2,8 +2,8 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import org.http4s.{Response, Status}
-import fs2.{Stream, text}
+import org.http4s.{ Response, Status }
+import fs2.{ text, Stream }
 import pl.iterators.stir.server.RouteResult
 
 class BasicDirectivesSpec extends RoutingSpec {

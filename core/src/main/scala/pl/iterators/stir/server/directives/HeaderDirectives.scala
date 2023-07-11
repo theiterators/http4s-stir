@@ -77,7 +77,7 @@ trait HeaderDirectives {
   def headerValueByType[T](implicit ev: Header.Select[T], cls: ClassTag[T]): Directive1[ev.F[T]] =
     extract(_.request.headers.get(ev)).flatMap {
       case Some(header) => provide(header)
-      case None         => reject(MissingHeaderRejection(cls.runtimeClass.getSimpleName))
+      case None         => reject(MissingHeaderRejection(cls.runtimeClass.getSimpleName.replace("$minus", "-")))
     }
 
   /**
