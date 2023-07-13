@@ -1,13 +1,13 @@
 package pl.iterators.stir.server.directives
 
 import cats.effect.unsafe.IORuntime
-import org.http4s.{Charset, ContentCoding, HttpDate, MediaType, Status, Uri}
-import org.http4s.headers.{`Content-Encoding`, `Last-Modified`}
-import org.scalatest.{Inside, Inspectors}
+import org.http4s.{ Charset, ContentCoding, HttpDate, MediaType, Status, Uri }
+import org.http4s.headers.{ `Content-Encoding`, `Last-Modified` }
+import org.scalatest.{ Inside, Inspectors }
 import pl.iterators.stir.impl.util._
 
 import java.io.File
-import java.time.{LocalDate, ZoneId, ZoneOffset}
+import java.time.{ LocalDate, ZoneId, ZoneOffset }
 import scala.util.Properties
 
 class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Inside {
@@ -46,7 +46,8 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
           mediaType shouldEqual MediaType.parse("application/pdf").getOrElse(fail("Media type could not be parsed"))
           charsetOption shouldEqual None
           responseAs[String] shouldEqual "This is PDF"
-          headers.get[`Last-Modified`] should contain(`Last-Modified`(HttpDate.unsafeFromEpochSecond(file.lastModified / 1000)))
+          headers.get[`Last-Modified`] should contain(
+            `Last-Modified`(HttpDate.unsafeFromEpochSecond(file.lastModified / 1000)))
         }
       } finally file.delete
     }
@@ -137,7 +138,9 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
     }
     "reject path traversal attempts" in {
       def route(uri: String) =
-        mapRequestContext(_.copy(unmatchedPath = Uri.Path.unsafeFromString("/" + uri))) { _getFromDirectory("someDir/sub") }
+        mapRequestContext(_.copy(unmatchedPath = Uri.Path.unsafeFromString("/" + uri))) {
+          _getFromDirectory("someDir/sub")
+        }
 
       Get() ~> route("file.html") ~> check { handled shouldEqual true }
 
@@ -146,9 +149,9 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
 //          EventFilter.warning(
 //            start = "File-system path for base",
 //            occurrences = warnings).intercept {
-            Get() ~> route(prefix + "fileA.txt") ~> check {
-              handled shouldEqual false
-            }
+          Get() ~> route(prefix + "fileA.txt") ~> check {
+            handled shouldEqual false
+          }
 //          }
         } catch {
           case err: AssertionError => throw new AssertionError(s"Failure for prefix $prefix", err)
@@ -177,7 +180,8 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
 //        charsetOption shouldEqual Some(Charset.`UTF-8`)
         responseAs[String] shouldEqual "123"
         val lastModified = new File(testRoot, "someDir/fileA.txt").lastModified()
-        headers.get[`Last-Modified`] should contain(`Last-Modified`(HttpDate.unsafeFromEpochSecond(lastModified / 1000)))
+        headers.get[`Last-Modified`] should contain(
+          `Last-Modified`(HttpDate.unsafeFromEpochSecond(lastModified / 1000)))
       }
     }
     "return the file content with the MediaType matching the file extension (unicode chars in filename)" in {
@@ -186,17 +190,18 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
         charsetOption shouldEqual None
         responseAs[String] shouldEqual "This is PDF"
         val lastModified = new File(testRoot, "sübdir/sample späce.PDF").lastModified()
-        headers.get[`Last-Modified`] should contain(`Last-Modified`(HttpDate.unsafeFromEpochSecond(lastModified / 1000)))
+        headers.get[`Last-Modified`] should contain(
+          `Last-Modified`(HttpDate.unsafeFromEpochSecond(lastModified / 1000)))
       }
     }
     "not follow symbolic links to find a file" in {
 //      EventFilter.warning(pattern = ".* points to a location that is not part of .*", occurrences = 1).intercept {
-        Get("linked-dir/empty.pdf") ~> _getFromDirectory("dirWithLink") ~> check {
-          handled shouldBe false
-          /* TODO: resurrect following links under an option
+      Get("linked-dir/empty.pdf") ~> _getFromDirectory("dirWithLink") ~> check {
+        handled shouldBe false
+        /* TODO: resurrect following links under an option
           responseAs[String] shouldEqual "123"
           mediaType shouldEqual `application/pdf`*/
-        }
+      }
 //      }
     }
   }
@@ -236,7 +241,8 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
           forAtLeast(1, headers.get[`Last-Modified`].toList) { h =>
             inside(h) {
               case `Last-Modified`(dt) =>
-                HttpDate.unsafeFromInstant(LocalDate.of(2011, 7, 1).atTime(0, 0, 0).toInstant(ZoneOffset.UTC)) should be < dt
+                HttpDate.unsafeFromInstant(LocalDate.of(2011, 7, 1).atTime(0, 0, 0).toInstant(
+                  ZoneOffset.UTC)) should be < dt
                 dt.epochSecond should be < System.currentTimeMillis() / 1000
             }
           }
@@ -304,7 +310,7 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
       Get("sub/") ~> getFromResourceDirectory("someDir") ~> check { status shouldEqual Status.NotFound }
     }
     "reject requests to directory resources from an archive" in {
-      Get() ~> getFromResourceDirectory("com/typesafe/config") ~> check {  handled shouldEqual false }
+      Get() ~> getFromResourceDirectory("com/typesafe/config") ~> check { handled shouldEqual false }
     }
     "reject requests to directory resources from an archive with trailing slash" in {
       Get() ~> getFromResourceDirectory("com/typesafe/config/") ~> check { handled shouldEqual false }

@@ -73,7 +73,7 @@ trait TimeoutDirectives {
     Directive { inner => ctx =>
       lazy val handlerToApply = handler match {
         case Some(h) => h(ctx.request)
-        case _       => Response[IO](Status.RequestTimeout)
+        case _       => Response[IO](Status.ServiceUnavailable)
       }
       inner(())(ctx).timeoutTo(timeout, IO.pure(RouteResult.Complete(handlerToApply)))
     }

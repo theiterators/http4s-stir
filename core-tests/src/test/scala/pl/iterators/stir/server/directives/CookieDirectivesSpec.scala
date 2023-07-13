@@ -1,8 +1,8 @@
 package pl.iterators.stir.server.directives
 
 import cats.effect.unsafe.IORuntime
-import org.http4s.{HttpDate, RequestCookie, ResponseCookie, Status}
-import org.http4s.headers.{Cookie, `Set-Cookie`}
+import org.http4s.{ HttpDate, RequestCookie, ResponseCookie, Status }
+import org.http4s.headers.{ `Set-Cookie`, Cookie }
 import pl.iterators.stir.server._
 
 class CookieDirectivesSpec extends RoutingSpec {
@@ -11,7 +11,7 @@ class CookieDirectivesSpec extends RoutingSpec {
 
   "The 'cookie' directive" should {
     "extract the respectively named cookie" in {
-      Get() ~> addHeader(Cookie(RequestCookie("fancy",  "pants"))) ~> {
+      Get() ~> addHeader(Cookie(RequestCookie("fancy", "pants"))) ~> {
         cookie("fancy") { echoComplete }
       } ~> check { responseAs[String] shouldEqual "fancy=pants" }
     }
@@ -21,7 +21,7 @@ class CookieDirectivesSpec extends RoutingSpec {
       } ~> check { rejection shouldEqual MissingCookieRejection("fancy") }
     }
     "properly pass through inner rejections" in {
-      Get() ~> addHeader(Cookie(RequestCookie("fancy",  "pants"))) ~> {
+      Get() ~> addHeader(Cookie(RequestCookie("fancy", "pants"))) ~> {
         cookie("fancy") { c => reject(ValidationRejection("Dont like " + c.content, None)) }
       } ~> check { rejection shouldEqual ValidationRejection("Dont like pants", None) }
     }
@@ -33,7 +33,8 @@ class CookieDirectivesSpec extends RoutingSpec {
         deleteCookie("myCookie", "test.com") { completeOk }
       } ~> check {
         status shouldEqual Status.Ok
-        header[`Set-Cookie`].head.head shouldEqual `Set-Cookie`(ResponseCookie("myCookie", "deleted", expires = Option(deletedTimeStamp),
+        header[`Set-Cookie`].head.head shouldEqual `Set-Cookie`(ResponseCookie("myCookie", "deleted",
+          expires = Option(deletedTimeStamp),
           domain = Some("test.com")))
       }
     }

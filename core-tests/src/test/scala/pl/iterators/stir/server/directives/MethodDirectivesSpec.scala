@@ -1,7 +1,7 @@
 package pl.iterators.stir.server.directives
 
 import cats.effect.unsafe.IORuntime
-import org.http4s.{Method, Status}
+import org.http4s.{ Method, Status }
 import pl.iterators.stir.server._
 
 class MethodDirectivesSpec extends RoutingSpec {
@@ -44,7 +44,7 @@ class MethodDirectivesSpec extends RoutingSpec {
     "only result in a single Rejection" in {
       Put() ~> {
         get { completeOk } ~
-          get { completeOk }
+        get { completeOk }
       } ~> check {
         rejections shouldEqual List(MethodRejection(Method.GET))
       }
@@ -55,13 +55,13 @@ class MethodDirectivesSpec extends RoutingSpec {
     "change the request method" in {
       Get("/?_method=put") ~> overrideMethodWithParameter("_method") {
         get { complete("GET") } ~
-          put { complete("PUT") }
+        put { complete("PUT") }
       } ~> check { responseAs[String] shouldEqual "PUT" }
     }
     "not affect the request when not specified" in {
       Get() ~> overrideMethodWithParameter("_method") {
         get { complete("GET") } ~
-          put { complete("PUT") }
+        put { complete("PUT") }
       } ~> check { responseAs[String] shouldEqual "GET" }
     }
 //    "complete with 501 Not Implemented when not a valid method" in {

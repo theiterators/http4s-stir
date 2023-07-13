@@ -11,7 +11,8 @@ class MiscDirectivesSpec extends RoutingSpec {
 
   "the extractClientIP directive" should {
     "extract from a X-Forwarded-For header" in {
-      Get() ~> addHeaders(`X-Forwarded-For`(remoteAddress("2.3.4.5")), Header.Raw(CIString("x-real-ip"), "1.2.3.4")) ~> {
+      Get() ~> addHeaders(`X-Forwarded-For`(remoteAddress("2.3.4.5")),
+        Header.Raw(CIString("x-real-ip"), "1.2.3.4")) ~> {
         extractClientIP { echoComplete }
       } ~> check { responseAs[String] shouldEqual "Some(2.3.4.5)" }
     }
@@ -26,7 +27,8 @@ class MiscDirectivesSpec extends RoutingSpec {
       } ~> check { responseAs[String] shouldEqual "Some(1.2.3.4)" }
     }
     "select X-Real-Ip when both X-Real-Ip and Remote-Address headers are present" in {
-      Get() ~> addHeaders(Header.Raw(CIString("X-Real-Ip"), "1.2.3.4"), Header.Raw(CIString("Remote-Address"), "1.2.3.4")) ~> {
+      Get() ~> addHeaders(Header.Raw(CIString("X-Real-Ip"), "1.2.3.4"),
+        Header.Raw(CIString("Remote-Address"), "1.2.3.4")) ~> {
         extractClientIP { echoComplete }
       } ~> check { responseAs[String] shouldEqual "Some(1.2.3.4)" }
     }

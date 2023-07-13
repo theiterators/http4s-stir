@@ -3,7 +3,7 @@ package pl.iterators.stir.server.directives
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import org.http4s.headers.Location
-import org.http4s.{Header, Method, Request, Response, Status, Uri}
+import org.http4s.{ Header, Method, Request, Response, Status, Uri }
 import org.scalatest.wordspec.AnyWordSpec
 import org.typelevel.ci.CIString
 import pl.iterators.stir.marshalling.ToResponseMarshallable
@@ -20,10 +20,10 @@ class RouteDirectivesSpec extends AnyWordSpec with GenericRoutingSpec {
       var i = 0
       Put() ~> {
         get { complete { i += 1; "get" } } ~
-          put {
-            complete { i += 1; "put" }
-          } ~
-          (post & complete { i += 1; "post" })
+        put {
+          complete { i += 1; "put" }
+        } ~
+        (post & complete { i += 1; "post" })
       } ~> check {
         responseAs[String] shouldEqual "put"
         i shouldEqual 1
@@ -33,10 +33,10 @@ class RouteDirectivesSpec extends AnyWordSpec with GenericRoutingSpec {
       var i = 0
       Put() ~> {
         get { complete(Status.Ok, { i += 1; "get" }) } ~
-          put {
-            complete(Status.Ok, { i += 1; "put" })
-          } ~
-          (post & complete(Status.Ok, { i += 1; "post" }))
+        put {
+          complete(Status.Ok, { i += 1; "put" })
+        } ~
+        (post & complete(Status.Ok, { i += 1; "post" }))
       } ~> check {
         responseAs[String] shouldEqual "put"
         i shouldEqual 1
@@ -52,14 +52,14 @@ class RouteDirectivesSpec extends AnyWordSpec with GenericRoutingSpec {
         Get() ~> complete(IO.pure("yes")) ~> check { responseAs[String] shouldEqual "yes" }
       }
       object TestException extends RuntimeException("Boom")
-      "for failed futures and marshalling" in //EventFilter[TestException.type](
+      "for failed futures and marshalling" in // EventFilter[TestException.type](
 //        occurrences = 1,
 //        message = BasicRouteSpecs.defaultExnHandler500Error("Boom")).intercept {
-        Get() ~> complete(IO.raiseError[String](TestException)) ~>
-          check {
-            status shouldEqual Status.InternalServerError
-            responseAs[String] shouldEqual ""
-          }
+      Get() ~> complete(IO.raiseError[String](TestException)) ~>
+      check {
+        status shouldEqual Status.InternalServerError
+        responseAs[String] shouldEqual ""
+      }
 //      }
 //      "for futures failed with a RejectionError" in {
 //        Get() ~> complete(IO.raiseError[String](RejectionError(AuthorizationFailedRejection)).future) ~>
@@ -68,8 +68,6 @@ class RouteDirectivesSpec extends AnyWordSpec with GenericRoutingSpec {
 //          }
 //      }
     }
-
-
 
     "allow easy handling of futured ToResponseMarshallers" in {
       trait RegistrationStatus
@@ -227,15 +225,15 @@ class RouteDirectivesSpec extends AnyWordSpec with GenericRoutingSpec {
     }
 
     "fail if the function returns a failure" in // EventFilter[RuntimeException](occurrences = 1).intercept {
-      Get("/fail") ~> route ~> check {
-        status shouldBe Status.InternalServerError
-      }
+    Get("/fail") ~> route ~> check {
+      status shouldBe Status.InternalServerError
+    }
 //    }
 
     "fail if the function throws" in // EventFilter[RuntimeException](occurrences = 1).intercept {
-      Get("/throw") ~> route ~> check {
-        status shouldBe Status.InternalServerError
-      }
+    Get("/throw") ~> route ~> check {
+      status shouldBe Status.InternalServerError
+    }
 //    }
   }
 
@@ -261,10 +259,10 @@ class RouteDirectivesSpec extends AnyWordSpec with GenericRoutingSpec {
       }
     }
 
-    "fail if the function throws" in //EventFilter[RuntimeException](occurrences = 1).intercept {
-      Get("/throw") ~> route ~> check {
-        status shouldEqual Status.InternalServerError
-      }
+    "fail if the function throws" in // EventFilter[RuntimeException](occurrences = 1).intercept {
+    Get("/throw") ~> route ~> check {
+      status shouldEqual Status.InternalServerError
+    }
 //    }
   }
 

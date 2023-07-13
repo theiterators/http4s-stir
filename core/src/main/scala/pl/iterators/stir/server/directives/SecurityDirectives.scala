@@ -335,9 +335,7 @@ object CredentialsHelper {
           def verify(secret: String, hasher: String => String): Boolean = secret.secure_==(hasher(token))
           def provideVerify(verifier: String => Boolean): Boolean = verifier(token)
         }
-      case Some(c) =>
-        throw new UnsupportedOperationException(s"Credentials does not support scheme '${c.authScheme}'.")
-      case None => CredentialsHelper.Missing
+      case _ => CredentialsHelper.Missing
     }
   }
 }

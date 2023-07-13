@@ -1,7 +1,7 @@
 package pl.iterators.stir.server.directives
 
 import cats.effect.unsafe.IORuntime
-import org.http4s.{Status, UrlForm}
+import org.http4s.{ Status, UrlForm }
 import pl.iterators.stir.unmarshalling.Unmarshaller._
 import pl.iterators.stir.server._
 import pl.iterators.stir.unmarshalling.Unmarshaller

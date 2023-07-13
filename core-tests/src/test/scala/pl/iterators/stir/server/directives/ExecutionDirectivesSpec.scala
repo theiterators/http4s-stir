@@ -2,7 +2,7 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import org.http4s.{Response, Status}
+import org.http4s.{ Response, Status }
 import pl.iterators.stir.server._
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -107,22 +107,22 @@ class ExecutionDirectivesSpec extends RoutingSpec {
       val rejectionHandler: RejectionHandler = RejectionHandler.newBuilder()
         .handleNotFound {
 //          encodeResponseWith(Coders.Gzip) {
-            complete(Status.NotFound, "Not here!")
+          complete(Status.NotFound, "Not here!")
 //          }
         }.result()
 
       Get("/hell0") ~>
-        get {
-          handleRejections(rejectionHandler) {
+      get {
+        handleRejections(rejectionHandler) {
 //            encodeResponseWith(Coders.Gzip) {
-              path("hello") {
-                get {
-                  complete(Response[IO](status = Status.Ok).withEntity("world"))
-                }
-              }
-//            }
+          path("hello") {
+            get {
+              complete(Response[IO](status = Status.Ok).withEntity("world"))
+            }
           }
-        } ~> check {
+//            }
+        }
+      } ~> check {
 //        response should haveContentEncoding(gzip)
         status shouldEqual Status.NotFound
       }

@@ -118,26 +118,27 @@ class IODirectivesSpec extends RoutingSpec with Inside {
         responseAs[String] shouldEqual "yes"
       }
     }
-    "propagate the exception in the failure case" in //EventFilter[TestException.type](
+    "propagate the exception in the failure case" in // EventFilter[TestException.type](
 //      occurrences = 1,
 //      message = BasicRouteSpecs.defaultExnHandler500Error("XXX")).intercept {
-      Get() ~> onSuccess(IO.raiseError[Int](TestException)) { echoComplete } ~> check {
-        status shouldEqual Status.InternalServerError
+    Get() ~> onSuccess(IO.raiseError[Int](TestException)) { echoComplete } ~> check {
+      status shouldEqual Status.InternalServerError
 //      }
     }
     "catch an exception in the success case" in {
       Get() ~> showEx(onSuccess(IO.pure("ok")) { throwTestException("EX when ") }) ~> check {
         status shouldEqual Status.InternalServerError
-        responseAs[String] shouldEqual s"Oops. pl.iterators.stir.server.directives.IODirectivesSpec$$TestException: EX when ok"
+        responseAs[
+          String] shouldEqual s"Oops. pl.iterators.stir.server.directives.IODirectivesSpec$$TestException: EX when ok"
       }
     }
     "catch an exception in the failure case" in // EventFilter[TestException.type](
 //      occurrences = 1,
 //      message = BasicRouteSpecs.defaultExnHandler500Error("XXX")).intercept {
-      Get() ~> onSuccess(IO.raiseError[Unit](TestException)) { throwTestException("EX when ") } ~> check {
-        status shouldEqual Status.InternalServerError
-        responseAs[String] shouldEqual ""
-      }
+    Get() ~> onSuccess(IO.raiseError[Unit](TestException)) { throwTestException("EX when ") } ~> check {
+      status shouldEqual Status.InternalServerError
+      responseAs[String] shouldEqual ""
+    }
 //    }
   }
 

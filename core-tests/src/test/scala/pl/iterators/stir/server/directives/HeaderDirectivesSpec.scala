@@ -2,9 +2,9 @@ package pl.iterators.stir.server.directives
 
 import cats.data.NonEmptyList
 import cats.effect.unsafe.IORuntime
-import org.http4s.{Header, Uri}
+import org.http4s.{ Header, Uri }
 import org.http4s.headers.Origin.HostList
-import org.http4s.headers.{Connection, Host, Origin, `User-Agent`}
+import org.http4s.headers.{ `User-Agent`, Connection, Host, Origin }
 import org.scalatest.Inside
 import org.typelevel.ci.CIString
 import pl.iterators.stir.server._
@@ -12,7 +12,10 @@ import pl.iterators.stir.server._
 class HeaderDirectivesSpec extends RoutingSpec with Inside {
   override implicit def runtime: IORuntime = IORuntime.global
   "The headerValuePF directive" should {
-    lazy val myHeaderValue = headerValuePF { case h if Connection.parse(h.value).isRight => Connection.parse(h.value).getOrElse(throw new IllegalStateException("")).values.head }
+    lazy val myHeaderValue = headerValuePF {
+      case h if Connection.parse(h.value).isRight =>
+        Connection.parse(h.value).getOrElse(throw new IllegalStateException("")).values.head
+    }
 
     "extract the respective header value if a matching request header is present" in {
       Get("/abc") ~> addHeader(Connection(CIString("close"))) ~> myHeaderValue { echoComplete } ~> check {
@@ -139,8 +142,9 @@ class HeaderDirectivesSpec extends RoutingSpec with Inside {
 
   "The optionalHeaderValue directive" should {
     lazy val myHeaderValue = optionalHeaderValue {
-      case h if Connection.parse(h.value).isRight => Some(Connection.parse(h.value).getOrElse(throw new IllegalStateException("")).values.head)
-      case _                  => None
+      case h if Connection.parse(h.value).isRight =>
+        Some(Connection.parse(h.value).getOrElse(throw new IllegalStateException("")).values.head)
+      case _ => None
     }
 
     "extract the respective header value if a matching request header is present" in {
