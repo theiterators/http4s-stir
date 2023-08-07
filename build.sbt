@@ -111,5 +111,5 @@ lazy val stir = project
   .settings(baseSettings: _*)
   .settings(
     name := "stir",
-    description := "Akka-like (Pekko-like) DSL for http4s"
+    description := "Pekko HTTP-style (Akka HTTP-style) DSL for http4s"
   )
