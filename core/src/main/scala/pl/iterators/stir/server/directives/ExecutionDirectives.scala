@@ -31,7 +31,7 @@ trait ExecutionDirectives {
 
   /**
    * Transforms rejections produced by its inner route using the given
-   * [[akka.http.scaladsl.server.RejectionHandler]].
+   * [[pl.iterators.stir.server.RejectionHandler]].
    *
    * @group execution
    */

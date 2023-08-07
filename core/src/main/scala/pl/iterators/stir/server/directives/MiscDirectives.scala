@@ -3,7 +3,7 @@ package pl.iterators.stir.server.directives
 import com.comcast.ip4s.IpAddress
 import org.http4s.LanguageTag
 import org.http4s.headers._
-import pl.iterators.stir.server.{ directives, _ }
+import pl.iterators.stir.server._
 
 trait MiscDirectives {
   import RouteDirectives._
@@ -103,8 +103,6 @@ trait MiscDirectives {
 object MiscDirectives extends MiscDirectives {
   import BasicDirectives._
   import HeaderDirectives._
-  import RouteDirectives._
-  import RouteResult._
 
   private val _extractClientIP: Directive1[Option[IpAddress]] =
     optionalHeaderValueByType[`X-Forwarded-For`].flatMap { xForwardedFor =>

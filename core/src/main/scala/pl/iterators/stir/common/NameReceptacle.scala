@@ -14,12 +14,12 @@ class NameReceptacle[T](val name: String) {
 
   /**
    * Extract the value as the specified type.
-   * You need a matching [[akka.http.scaladsl.unmarshalling.Unmarshaller]] in scope for that to work.
+   * You need a matching [[Unmarshaller]] in scope for that to work.
    */
   def as[B] = new NameReceptacle[B](name)
 
   /**
-   * Extract the value as the specified type with the given [[akka.http.scaladsl.unmarshalling.Unmarshaller]].
+   * Extract the value as the specified type with the given [[Unmarshaller]].
    */
   def as[B](unmarshaller: Unmarshaller[T, B])(implicit fsu: FSU[T]) =
     new NameUnmarshallerReceptacle(name, fsu.transform[B] { _.flatMap(unmarshaller.apply) })
@@ -75,7 +75,7 @@ class NameUnmarshallerReceptacle[T](val name: String, val um: FSU[T]) {
 
   /**
    * Extract the value as the specified type.
-   * You need a matching [[akka.http.scaladsl.unmarshalling.Unmarshaller]] in scope for that to work.
+   * You need a matching [[Unmarshaller]] in scope for that to work.
    */
   def as[B](implicit unmarshaller: Unmarshaller[T, B]) =
     new NameUnmarshallerReceptacle(name, um.transform[B] { _.flatMap(unmarshaller.apply) })

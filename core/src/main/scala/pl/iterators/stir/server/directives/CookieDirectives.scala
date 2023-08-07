@@ -40,7 +40,7 @@ trait CookieDirectives {
   private def findCookie(name: String): Cookie => Option[RequestCookie] = _.values.find(_.name == name)
 
   /**
-   * Adds a [[Set-Cookie]] response header with the given cookies.
+   * Adds a [[`Set-Cookie`]] response header with the given cookies.
    *
    * @group cookie
    */

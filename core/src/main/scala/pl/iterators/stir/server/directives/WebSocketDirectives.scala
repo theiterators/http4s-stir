@@ -34,22 +34,22 @@ trait WebSocketDirectives {
 //
   /**
    * Handles WebSocket requests with the given handler and responses to other requests with an
-   * [[NotImplemented]] status code.
+   * [[org.http4s.Status.NotImplemented]] status code.
    *
    * @group websocket
    */
   def handleWebSocketMessages(ws: WebSocketBuilder2[IO], handler: Pipe[IO, WebSocketFrame, WebSocketFrame]): Route =
-    _ => ws.build(handler).map(RouteResult.Complete)
+    _ => ws.build(handler).map(RouteResult.Complete(_))
 
   /**
    * Handles WebSocket requests with the given handlers and responses to other requests with an
-   * [[NotImplemented]] status code.
+   * [[org.http4s.Status.NotImplemented]] status code.
    *
    * @group websocket
    */
   def handleWebSocketMessages(ws: WebSocketBuilder2[IO], send: Stream[IO, WebSocketFrame],
       receive: Pipe[IO, WebSocketFrame, Unit]): Route =
-    _ => ws.build(send, receive).map(RouteResult.Complete)
+    _ => ws.build(send, receive).map(RouteResult.Complete(_))
 
 //  /**
 //   * Handles WebSocket requests with the given handler if the given subprotocol is offered in the request and

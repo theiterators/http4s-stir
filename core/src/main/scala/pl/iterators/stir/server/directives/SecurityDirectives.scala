@@ -1,7 +1,7 @@
 package pl.iterators.stir.server.directives
 
 import cats.effect.IO
-import org.http4s.headers.Authorization
+import org.http4s.headers._
 import org.http4s.{ BasicCredentials, Challenge, Credentials }
 import org.typelevel.ci.CIString
 import pl.iterators.stir.server.{

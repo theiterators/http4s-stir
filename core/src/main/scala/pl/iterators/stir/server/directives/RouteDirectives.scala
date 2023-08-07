@@ -69,7 +69,7 @@ trait RouteDirectives {
    * @group route
    */
   def handle(handler: Request[IO] => IO[Response[IO]]): StandardRoute = { ctx =>
-    handler(ctx.request).map(RouteResult.Complete)
+    handler(ctx.request).map(RouteResult.Complete(_))
   }
 
   /**
@@ -107,7 +107,7 @@ trait RouteDirectives {
   def handle(
       handler: PartialFunction[Request[IO], IO[Response[IO]]], rejections: Seq[Rejection]): StandardRoute = { ctx =>
     handler
-      .andThen(_.map(RouteResult.Complete))
+      .andThen(_.map(RouteResult.Complete(_)))
       .applyOrElse[Request[IO], IO[RouteResult]](ctx.request, _ => ctx.reject(rejections: _*))
   }
 

@@ -5,8 +5,6 @@ package pl.iterators.stir.server.directives
  * @groupprio cachecondition 20
  */
 trait CacheConditionDirectives {
-  import BasicDirectives._
-  import RouteDirectives._
 //
 //  /**
 //   * Wraps its inner route with support for Conditional Requests as defined

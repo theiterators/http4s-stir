@@ -3,20 +3,13 @@ package pl.iterators.stir.testkit
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import org.http4s.{ Header, Response }
-import org.scalatest.exceptions.TestFailedException
-import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.freespec.AnyFreeSpec
-import org.scalatest.matchers.should.Matchers
 import org.typelevel.ci.CIString
 import pl.iterators.stir.server.Directives._
 import pl.iterators.stir.server._
 import org.http4s.Status._
 import fs2._
 import org.http4s.Method.{ GET, PUT }
-import org.http4s.headers.`X-Forwarded-Proto`
 import org.specs2.mutable.Specification
-
-import scala.concurrent.duration._
 
 class Specs2RouteTestSpec extends Specification with Specs2RouteTest {
   override implicit val runtime: IORuntime = IORuntime.global

@@ -6,7 +6,7 @@ import org.http4s.server.middleware.Logger
 import org.http4s.{ Headers, Request, Response }
 import org.typelevel.ci.CIString
 import org.typelevel.log4cats
-import pl.iterators.stir.server.{ Directive, Directive0, Route, RouteResult }
+import pl.iterators.stir.server.{ Directive, Directive0, RouteResult }
 
 trait DebuggingDirectives {
 

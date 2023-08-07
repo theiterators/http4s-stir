@@ -1,7 +1,5 @@
 package pl.iterators.stir.server.directives
 
-import scala.collection.{ immutable, Seq }
-
 /**
  * @groupname range Range directives
  * @groupprio range 180

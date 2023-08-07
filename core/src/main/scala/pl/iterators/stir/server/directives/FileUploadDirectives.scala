@@ -1,7 +1,7 @@
 package pl.iterators.stir.server.directives
 
-import cats.implicits._
 import cats.effect.IO
+import cats.syntax.all._
 import org.http4s.headers.`Content-Type`
 import org.http4s.multipart.Multipart
 import pl.iterators.stir.server._
@@ -15,7 +15,6 @@ import java.io.File
  * @groupprio fileupload 80
  */
 trait FileUploadDirectives {
-  import BasicDirectives._
   import IODirectives._
   import MarshallingDirectives._
 
@@ -34,7 +33,7 @@ trait FileUploadDirectives {
         val path = Path.fromNioPath(dest.toPath)
         val uploadedF: IO[(FileInfo, File)] =
           bytes.through(Files[IO].writeAll(path)).compile.drain.map(_ => (fileInfo, dest)).onError(_ =>
-            IO.delay(dest.delete()))
+            IO.delay(dest.delete()).as(()))
         onSuccess(uploadedF)
     }
   }
@@ -56,7 +55,7 @@ trait FileUploadDirectives {
           val dest = destFn(fileInfo)
           val path = Path.fromNioPath(dest.toPath)
           part.body.through(Files[IO].writeAll(path)).compile.drain.map(_ => (fileInfo, dest)).onError(_ =>
-            IO.delay(dest.delete()))
+            IO.delay(dest.delete()).as(()))
         }.parSequence
       onSuccess(uploadedF)
     }
@@ -103,7 +102,7 @@ trait FileUploadDirectives {
       files.map {
         case (fileInfo, src) =>
           val path = Path.fromNioPath(src.toPath)
-          val byteSource: Stream[IO, Byte] = Files[IO].readAll(path).onFinalize(IO.delay(src.delete()))
+          val byteSource: Stream[IO, Byte] = Files[IO].readAll(path).onFinalize(IO.delay(src.delete()).as(()))
           (fileInfo, byteSource)
       }
     }

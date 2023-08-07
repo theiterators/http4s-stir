@@ -556,7 +556,7 @@ class PathDirectivesSpec extends RoutingSpec with Inside {
             case _ =>
           }
 
-          Get(uri.group(2)) ~> route ~> check {
+          val _ = Get(uri.group(2)) ~> route ~> check {
             if (expectedResponse eq null) handled shouldEqual false
             else responseAs[String] shouldEqual expectedResponse
           }

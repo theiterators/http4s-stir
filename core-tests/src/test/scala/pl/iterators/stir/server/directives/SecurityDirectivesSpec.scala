@@ -2,10 +2,10 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import org.http4s.{AuthScheme, BasicCredentials, Challenge, Credentials, Header, Status}
-import org.http4s.headers.{Authorization, `WWW-Authenticate`}
+import org.http4s.{ AuthScheme, BasicCredentials, Challenge, Credentials, Header, Status }
+import org.http4s.headers.{ `WWW-Authenticate`, Authorization }
 import org.typelevel.ci.CIString
-import pl.iterators.stir.server.AuthenticationFailedRejection.{CredentialsMissing, CredentialsRejected}
+import pl.iterators.stir.server.AuthenticationFailedRejection.{ CredentialsMissing, CredentialsRejected }
 import pl.iterators.stir.server._
 
 class SecurityDirectivesSpec extends RoutingSpec {
@@ -23,10 +23,13 @@ class SecurityDirectivesSpec extends RoutingSpec {
   def OAuth2BearerToken(token: String): Credentials = Credentials.Token(AuthScheme.Bearer, token)
 
   def doBasicAuthVerify(secret: String) =
-    authenticateBasicPF("MyRealm", { case p @ CredentialsHelper.Provided(identifier) if p.verify(secret) => identifier })
+    authenticateBasicPF("MyRealm",
+      { case p @ CredentialsHelper.Provided(identifier) if p.verify(secret) => identifier })
   def doBasicAuthProvideVerify(secret: String) =
     authenticateBasicPF("MyRealm",
-      { case p @ CredentialsHelper.Provided(identifier) if p.provideVerify(password => secret == password) => identifier })
+      {
+        case p @ CredentialsHelper.Provided(identifier) if p.provideVerify(password => secret == password) => identifier
+      })
 
   "basic authentication" should {
     "reject requests without Authorization header with an AuthenticationFailedRejection" in {
@@ -85,11 +88,11 @@ class SecurityDirectivesSpec extends RoutingSpec {
 //        occurrences = 1,
 //        start =
 //          "Error during processing of request: 'Boom'. Completing with 500 Internal Server Error response.").intercept {
-        Get() ~> addHeader(Authorization(BasicCredentials("Alice", ""))) ~> {
-          Route.seal {
-            doBasicAuth { _ => throw TestException }
-          }
-        } ~> check { status shouldEqual Status.InternalServerError }
+      Get() ~> addHeader(Authorization(BasicCredentials("Alice", ""))) ~> {
+        Route.seal {
+          doBasicAuth { _ => throw TestException }
+        }
+      } ~> check { status shouldEqual Status.InternalServerError }
 //      }
     }
   }
@@ -148,11 +151,11 @@ class SecurityDirectivesSpec extends RoutingSpec {
 //        occurrences = 1,
 //        start =
 //          "Error during processing of request: 'Boom'. Completing with 500 Internal Server Error response.").intercept {
-        Get() ~> addHeader(Authorization(OAuth2BearerToken("myToken"))) ~> {
-          Route.seal {
-            doOAuth2Auth { _ => throw TestException }
-          }
-        } ~> check { status shouldEqual Status.InternalServerError }
+      Get() ~> addHeader(Authorization(OAuth2BearerToken("myToken"))) ~> {
+        Route.seal {
+          doOAuth2Auth { _ => throw TestException }
+        }
+      } ~> check { status shouldEqual Status.InternalServerError }
 //      }
     }
   }

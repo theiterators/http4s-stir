@@ -2,7 +2,6 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import org.http4s.headers.Location
 import org.http4s.{ Header, Method, Request, Response, Status, Uri }
 import org.scalatest.wordspec.AnyWordSpec
 import org.typelevel.ci.CIString

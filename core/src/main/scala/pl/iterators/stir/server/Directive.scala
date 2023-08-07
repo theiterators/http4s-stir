@@ -2,7 +2,7 @@ package pl.iterators.stir.server
 
 import cats.effect.IO
 import pl.iterators.stir.server.directives.RouteDirectives
-import pl.iterators.stir.util.{ ApplyConverter, ConstructFromTuple, Tuple, Tupler }
+import pl.iterators.stir.util._
 import pl.iterators.stir.util.TupleOps.Join
 import pl.iterators.stir.impl.util._
 
@@ -81,7 +81,7 @@ abstract class Directive[L](implicit val ev: Tuple[L]) {
     Directive[R] { inner => tapply { values => f(values).tapply(inner) } }
 
   /**
-   * Creates a new [[pekko.http.scaladsl.server.Directive0]], which passes if the given predicate matches the current
+   * Creates a new [[Directive0]], which passes if the given predicate matches the current
    * extractions or rejects with the given rejections.
    */
   def trequire(predicate: L => Boolean, rejections: Rejection*): Directive0 =
@@ -174,7 +174,7 @@ object Directive {
   /**
    * "Standard" transformers for [[Directive1]].
    * Easier to use than `tmap`, `tflatMap`, etc. defined on [[Directive]] itself,
-   * because they provide transparent conversion from [[Tuple1]].
+   * because they provide transparent conversion from [[scala.Tuple1]].
    */
   implicit class SingleValueTransformers[T](val underlying: Directive1[T]) extends AnyVal {
     def map[R](f: T => R)(implicit tupler: Tupler[R]): Directive[tupler.Out] =

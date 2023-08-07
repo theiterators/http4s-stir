@@ -2,7 +2,7 @@ package pl.iterators.stir.testkit
 
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import com.comcast.ip4s.IpLiteralSyntax
+import com.comcast.ip4s._
 import org.http4s._
 import org.http4s.ember.client.EmberClientBuilder
 import org.http4s.ember.server._

@@ -1,13 +1,13 @@
 package pl.iterators.stir.server.directives
 
 import cats.effect.unsafe.IORuntime
-import org.http4s.{ Charset, ContentCoding, HttpDate, MediaType, Status, Uri }
-import org.http4s.headers.{ `Content-Encoding`, `Last-Modified` }
+import org.http4s.{ HttpDate, MediaType, Status, Uri }
+import org.http4s.headers.`Last-Modified`
 import org.scalatest.{ Inside, Inspectors }
 import pl.iterators.stir.impl.util._
 
 import java.io.File
-import java.time.{ LocalDate, ZoneId, ZoneOffset }
+import java.time.{ LocalDate, ZoneOffset }
 import scala.util.Properties
 
 class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Inside {
@@ -25,7 +25,7 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
 //    pekko.http.routing.range-coalescing-threshold = 1
 //  """
 
-  def writeAllText(text: String, file: File): Unit =
+  def writeAllText(text: String, file: File) =
     java.nio.file.Files.write(file.toPath, text.getBytes("UTF-8"))
 
   "getFromFile" should {
@@ -49,7 +49,10 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
           headers.get[`Last-Modified`] should contain(
             `Last-Modified`(HttpDate.unsafeFromEpochSecond(file.lastModified / 1000)))
         }
-      } finally file.delete
+      } finally {
+        file.delete
+        ()
+      }
     }
     "return the file content with MediaType 'application/octet-stream' on unknown file extensions" in {
       val file = File.createTempFile("pekkoHttpTest", null)
@@ -58,7 +61,10 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
         Get() ~> getFromFile(file) ~> check {
           responseAs[String] shouldEqual "Some content"
         }
-      } finally file.delete
+      } finally {
+        file.delete
+        ()
+      }
     }
 
 //    "return a single range from a file" in {
@@ -96,7 +102,10 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
         Get() ~> getFromFile(file) ~> check {
           responseAs[String] shouldEqual ""
         }
-      } finally file.delete
+      } finally {
+        file.delete
+        ()
+      }
     }
 
     "support precompressed files with registered MediaType" in {
@@ -108,7 +117,10 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
 //          header[`Content-Encoding`].get shouldEqual Some(`Content-Encoding`(ContentCoding.gzip))
           responseAs[String] shouldEqual "123"
         }
-      } finally file.delete
+      } finally {
+        file.delete
+        ()
+      }
     }
 
     "support files with registered MediaType and .gz suffix" in {
@@ -120,7 +132,10 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
 //          header[`Content-Encoding`] shouldEqual Some(`Content-Encoding`(HttpEncodings.gzip))
           responseAs[String] shouldEqual "456"
         }
-      } finally file.delete
+      } finally {
+        file.delete
+        ()
+      }
     }
   }
 

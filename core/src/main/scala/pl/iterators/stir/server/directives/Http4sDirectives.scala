@@ -7,7 +7,7 @@ import pl.iterators.stir.server.{ Route, RouteResult }
 trait Http4sDirectives {
   def httpRoutesOf(pf: PartialFunction[Request[IO], IO[Response[IO]]]): Route = ctx => {
     pf.lift(ctx.request) match {
-      case Some(response) => response.map(RouteResult.Complete)
+      case Some(response) => response.map(RouteResult.Complete(_))
       case None           => IO.pure(RouteResult.Rejected(Nil))
     }
   }

@@ -4,7 +4,7 @@ import cats.data.NonEmptyList
 import cats.effect.unsafe.IORuntime
 import org.http4s.{ Header, Uri }
 import org.http4s.headers.Origin.HostList
-import org.http4s.headers.{ `User-Agent`, Connection, Host, Origin }
+import org.http4s.headers.{ `User-Agent`, Connection, Origin }
 import org.scalatest.Inside
 import org.typelevel.ci.CIString
 import pl.iterators.stir.server._

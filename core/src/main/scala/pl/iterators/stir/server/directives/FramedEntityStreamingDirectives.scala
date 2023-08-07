@@ -1,11 +1,11 @@
 package pl.iterators.stir.server.directives
 
-/**
- * Allows the [[MarshallingDirectives.entity]] directive to extract a [[akka.stream.scaladsl.Source]] of elements.
- *
- * See [[common.EntityStreamingSupport]] for useful default framing `Flow` instances and
- * support traits such as `SprayJsonSupport` (or your other favourite JSON library) to provide the needed [[Marshaller]] s.
- */
+///**
+// * Allows the [[MarshallingDirectives.entity]] directive to extract a [[akka.stream.scaladsl.Source]] of elements.
+// *
+// * See [[common.EntityStreamingSupport]] for useful default framing `Flow` instances and
+// * support traits such as `SprayJsonSupport` (or your other favourite JSON library) to provide the needed [[Marshaller]] s.
+// */
 trait FramedEntityStreamingDirectives extends MarshallingDirectives {
 //
 //  type RequestToSourceUnmarshaller[T] = FromRequestUnmarshaller[Source[T, NotUsed]]

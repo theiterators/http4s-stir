@@ -11,7 +11,7 @@ case class RequestContext(request: Request[IO], unmatchedPath: Path) {
    * Completes the request with the given ToResponseMarshallable.
    */
   def complete(obj: ToResponseMarshallable): IO[RouteResult] =
-    obj.marshaller.toResponse(obj.value).map(RouteResult.Complete)
+    obj.marshaller.toResponse(obj.value).map(RouteResult.Complete(_))
 
   /**
    * Rejects the request with the given rejections.

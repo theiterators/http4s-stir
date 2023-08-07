@@ -1,7 +1,5 @@
 package pl.iterators.stir.marshalling
 
-import cats.effect.IO
-
 trait ToResponseMarshallable {
   type T
   def value: T
