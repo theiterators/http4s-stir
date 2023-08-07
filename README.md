@@ -195,8 +195,6 @@ Certain directives from the original are either absent or have been modified:
 
 Of course! Here's a sample "Support" section for your README or documentation:
 
----
-
 ## Support
 
 ### Encountering a Problem?
@@ -224,10 +222,6 @@ Please create a new issue in our [http4-stir](https://github.com/theiterators/ht
 By providing detailed information, you'll help us address your concerns more efficiently.
 
 Thank you for your contributions and for helping make this project better for everyone!
-
----
-
-Feel free to customize this based on your project's specific needs and tone!
 
 ## License
 
