@@ -59,7 +59,7 @@ trait HeaderDirectives {
 
   /**
    * Extracts the value of the HTTP request header with the given name.
-   * If no header with a matching name is found the request is rejected with a [[pl.iterators.stir.server..MissingHeaderRejection]].
+   * If no header with a matching name is found the request is rejected with a [[pl.iterators.stir.server.MissingHeaderRejection]].
    *
    * @group header
    */
