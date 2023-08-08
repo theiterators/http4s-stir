@@ -2,7 +2,7 @@
 
 Welcome to http4s-stir, a library designed to bridge the gap between Pekko HTTP (Akka HTTP) and http4s. This README provides an overview of the library, its usage, project status, and more.
 
-http4s-stir offers [Pekko HTTP](https://github.com/apache/incubator-pekko-http)-style (Akka HTTP-style) DSL directives for [http4s](https://github.com/http4s/http4s). About 85% of all directives have been ported. Some were omitted due to a lack of support in http4s, while others were modified to fit http4s' distinct architecture. For specifics, refer to the [Missing](#missing) section below.
+http4s-stir offers [Pekko HTTP](https://github.com/apache/incubator-pekko-http)-style (Akka HTTP-style) DSL directives for [http4s](https://github.com/http4s/http4s) using cats-effect's IO as an effect system. About 85% of all directives have been ported. Some were omitted due to a lack of support in http4s, while others were modified to fit http4s' distinct architecture. For specifics, refer to the [Missing](#missing) section below.
 
 Additionally, there's a compatibility layer, [`Http4sDirectives`](https://github.com/theiterators/http4s-stir/blob/master/core/src/main/scala/pl/iterators/stir/server/directives/Http4sDirectives.scala), for http4s-dsl routes.
 
@@ -192,8 +192,6 @@ Certain directives from the original are either absent or have been modified:
   * Request building incomplete (missing some minor header methods)
   * All websocket thingies
   * Some logic of transparent headers and default host info
-
-Of course! Here's a sample "Support" section for your README or documentation:
 
 ## Support
 
