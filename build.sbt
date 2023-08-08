@@ -1,3 +1,5 @@
+import sbt.url
+
 val scala_2_13             = "2.13.10"
 val scala_3                = "3.3.0"
 val mainScalaVersion       = scala_3
@@ -5,6 +7,12 @@ val supportedScalaVersions = Seq(scala_2_13, scala_3)
 
 ThisBuild / crossScalaVersions := supportedScalaVersions
 ThisBuild / scalaVersion := mainScalaVersion
+
+lazy val noPublishSettings =
+  Seq(
+    publishArtifact   := false,
+    skip / publish    := true
+  )
 
 lazy val baseSettings = Seq(
   organization := "pl.iterators",
@@ -31,6 +39,16 @@ lazy val baseSettings = Seq(
         )
       })
   },
+  licenses := Seq("Apache-2.0" -> url("https://www.apache.org/licenses/LICENSE-2.0")),
+  developers := List(
+    Developer(id = "lsowa",
+      name = "Łukasz Sowa",
+      email = "lsowa@iteratorshq.com",
+      url = url("https://github.com/luksow"))
+  ),
+  scmInfo := Some(
+    ScmInfo(browseUrl = url("https://github.com/theiterators/http4s-stir"), connection = "scm:git:https://github.com/theiterators/http4s-stir.git")),
+  crossScalaVersions            := supportedScalaVersions,
   scalafmtOnCompile := true
 )
 
@@ -54,7 +72,9 @@ val logback = Seq(
   "ch.qos.logback" % "logback-classic" % "1.4.7"
 )
 
-lazy val core = project
+lazy val core = crossProject(JSPlatform, JVMPlatform, NativePlatform)
+  .withoutSuffixFor(JVMPlatform)
+  .crossType(CrossType.Pure)
   .in(file("core"))
   .settings(baseSettings: _*)
   .settings(
@@ -66,6 +86,7 @@ lazy val core = project
 lazy val coreTests = project
   .in(file("core-tests"))
   .settings(baseSettings: _*)
+  .settings(noPublishSettings: _*)
   .settings(
     name := "http4s-stir-tests",
     libraryDependencies ++= http4s ++ circe ++ Seq(
@@ -73,11 +94,13 @@ lazy val coreTests = project
       "org.specs2" %% "specs2-core" % "4.19.2" % Test
     )
   ).dependsOn(
-  testkit % "test",
-  core % "test->test"
+  testkit.jvm % "test",
+  core.jvm % "test->test"
 )
 
-lazy val testkit = project
+lazy val testkit = crossProject(JSPlatform, JVMPlatform, NativePlatform)
+  .withoutSuffixFor(JVMPlatform)
+  .crossType(CrossType.Pure)
   .in(file("testkit"))
   .settings(baseSettings: _*)
   .settings(
@@ -91,6 +114,7 @@ lazy val testkit = project
 lazy val examples = project
   .in(file("examples"))
   .settings(baseSettings: _*)
+  .settings(noPublishSettings: _*)
   .settings(
     name := "http4s-stir-examples",
     libraryDependencies ++= http4s ++ circe ++ logback ++ Seq(
@@ -98,13 +122,13 @@ lazy val examples = project
       "org.scalatest" %% "scalatest" % "3.2.15" % Test
     )
   )
-  .dependsOn(core, testkit % Test)
+  .dependsOn(core.jvm, testkit.jvm % Test)
 
 lazy val stir = project
   .in(file("."))
   .aggregate(
-    core,
-    testkit,
+    core.jvm,
+    testkit.jvm,
     examples,
     coreTests
   )
