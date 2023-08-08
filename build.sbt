@@ -19,6 +19,7 @@ lazy val baseSettings = Seq(
   organizationName := "Iterators",
   organizationHomepage := Some(url("https://www.iteratorshq.com")),
   version := "0.0.1-SNAPSHOT",
+  pomIncludeRepository := const(true),
   scalacOptions ++= {
     Seq(
       "-encoding",
@@ -128,7 +129,11 @@ lazy val stir = project
   .in(file("."))
   .aggregate(
     core.jvm,
+    core.js,
+    core.native,
     testkit.jvm,
+    testkit.js,
+    testkit.native,
     examples,
     coreTests
   )
