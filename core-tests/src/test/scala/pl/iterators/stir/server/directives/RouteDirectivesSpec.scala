@@ -75,7 +75,7 @@ class RouteDirectivesSpec extends AnyWordSpec with GenericRoutingSpec {
       case class Registered(name: String) extends RegistrationStatus
       case object AlreadyRegistered extends RegistrationStatus
 
-      @nowarn val route =
+      val route =
         get {
           path("register" / Segment) { name =>
             def registerUser(name: String): IO[RegistrationStatus] = IO {
