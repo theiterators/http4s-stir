@@ -7,7 +7,8 @@ val supportedScalaVersions = Seq(scala_2_13, scala_3)
 
 ThisBuild / crossScalaVersions := supportedScalaVersions
 ThisBuild / scalaVersion := mainScalaVersion
-
+ThisBuild / githubWorkflowJavaVersions := Seq(JavaSpec.temurin("11"), JavaSpec.temurin("17"))
+ThisBuild / githubWorkflowPublishTargetBranches := Seq()
 lazy val noPublishSettings =
   Seq(
     publishArtifact   := false,
