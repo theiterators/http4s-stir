@@ -9,7 +9,7 @@ ThisBuild / crossScalaVersions := supportedScalaVersions
 ThisBuild / scalaVersion := mainScalaVersion
 
 ThisBuild / githubWorkflowJavaVersions := Seq(JavaSpec.temurin("11"), JavaSpec.temurin("17"))
-ThisBuild / githubWorkflowPublishTargetBranches := Seq(RefPredicate.Equals(Ref.Branch("master")))
+ThisBuild / githubWorkflowPublishTargetBranches := Seq(RefPredicate.StartsWith(Ref.Tag("v")), RefPredicate.Equals(Ref.Branch("master")))
 ThisBuild / tlBaseVersion := "0.1"
 ThisBuild / tlCiHeaderCheck := false
 ThisBuild / tlSonatypeUseLegacyHost := true
