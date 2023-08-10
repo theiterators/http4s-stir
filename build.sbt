@@ -1,4 +1,3 @@
-import sbt.url
 
 val scala_2_13             = "2.13.10"
 val scala_3                = "3.3.0"
@@ -7,8 +6,10 @@ val supportedScalaVersions = Seq(scala_2_13, scala_3)
 
 ThisBuild / crossScalaVersions := supportedScalaVersions
 ThisBuild / scalaVersion := mainScalaVersion
+
 ThisBuild / githubWorkflowJavaVersions := Seq(JavaSpec.temurin("11"), JavaSpec.temurin("17"))
 ThisBuild / githubWorkflowPublishTargetBranches := Seq()
+ThisBuild / tlBaseVersion := "0.1"
 lazy val noPublishSettings =
   Seq(
     publishArtifact   := false,
@@ -19,7 +20,6 @@ lazy val baseSettings = Seq(
   organization := "pl.iterators",
   organizationName := "Iterators",
   organizationHomepage := Some(url("https://www.iteratorshq.com")),
-  version := "0.0.1-SNAPSHOT",
   pomIncludeRepository := const(true),
   scalacOptions ++= {
     Seq(
@@ -126,20 +126,4 @@ lazy val examples = project
   )
   .dependsOn(core.jvm, testkit.jvm % Test)
 
-lazy val stir = project
-  .in(file("."))
-  .aggregate(
-    core.jvm,
-    core.js,
-    core.native,
-    testkit.jvm,
-    testkit.js,
-    testkit.native,
-    examples,
-    coreTests
-  )
-  .settings(baseSettings: _*)
-  .settings(
-    name := "stir",
-    description := "Pekko HTTP-style (Akka HTTP-style) DSL for http4s"
-  )
+lazy val root = tlCrossRootProject.aggregate(core, testkit, examples, coreTests)
