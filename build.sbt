@@ -116,3 +116,4 @@ lazy val examples = project
   .dependsOn(core.jvm, testkit.jvm % Test)
 
 lazy val root = tlCrossRootProject.aggregate(core, testkit, examples, coreTests)
+  .settings(baseSettings: _*)
