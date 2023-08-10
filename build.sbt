@@ -9,7 +9,8 @@ ThisBuild / crossScalaVersions := supportedScalaVersions
 ThisBuild / scalaVersion := mainScalaVersion
 
 ThisBuild / githubWorkflowJavaVersions := Seq(JavaSpec.temurin("11"), JavaSpec.temurin("17"))
-ThisBuild / githubWorkflowPublishTargetBranches := Seq(RefPredicate.StartsWith(Ref.Tag("v")), RefPredicate.Equals(Ref.Branch("master")))
+ThisBuild / githubWorkflowPublishTargetBranches := Seq(RefPredicate.StartsWith(Ref.Tag("v")),
+  RefPredicate.Equals(Ref.Branch("master")))
 ThisBuild / tlBaseVersion := "0.1"
 ThisBuild / tlCiHeaderCheck := false
 ThisBuild / tlSonatypeUseLegacyHost := true
@@ -114,3 +115,7 @@ lazy val examples = project
   .dependsOn(core.jvm, testkit.jvm % Test)
 
 lazy val root = tlCrossRootProject.aggregate(core, testkit, examples, coreTests)
+  .settings(baseSettings: _*)
+  .settings(
+    name := "http4s-stir",
+    description := "Akka-like (Pekko-like) DSL for http4s")
