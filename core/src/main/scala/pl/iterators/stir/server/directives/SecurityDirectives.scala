@@ -261,7 +261,7 @@ trait SecurityDirectives {
    * @group security
    */
   def authorizeAsync(check: => IO[Boolean]): Directive0 =
-    authorizeAsync(ctx => check)
+    authorizeAsync(_ => check)
 
   /**
    * Asynchronous version of [[authorize]].

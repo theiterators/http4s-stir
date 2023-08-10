@@ -18,6 +18,7 @@ import java.io.File
 import scala.jdk.CollectionConverters._
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import scala.annotation.nowarn
 import scala.concurrent.duration._
 
 case class Beer(id: UUID, name: String, style: String, abv: Double) {
@@ -25,6 +26,7 @@ case class Beer(id: UUID, name: String, style: String, abv: Double) {
 }
 
 object Main extends IOApp.Simple {
+  @nowarn
   implicit val beerCodec: Codec[Beer] = deriveCodec[Beer]
   val beers = new ConcurrentHashMap[UUID, Beer]()
 
@@ -50,7 +52,7 @@ object Main extends IOApp.Simple {
                   }
               } ~
               (post & pathEndOrSingleSlash & entity(as[Beer]) & optionalHeaderValueByName("Authorization")) {
-                (beer, token) =>
+                (beer, _) =>
                   complete {
                     Option(beers.get(beer.id)) match { // yes, race condition here :-D
                       case Some(_) => Status.Conflict -> "Beer already exists"
@@ -96,7 +98,7 @@ object Main extends IOApp.Simple {
               complete {
                 Status.Ok -> s"File $files uploaded"
               }
-            } ~ authenticateBasic("d-and-d-realm", authenticator) { id =>
+            } ~ authenticateBasic("d-and-d-realm", authenticator) { _ =>
               path("file") {
                 getFromFile("project/plugins.sbt")
               } ~ pathPrefix("dir") {

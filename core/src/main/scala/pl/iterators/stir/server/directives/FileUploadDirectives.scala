@@ -9,6 +9,7 @@ import fs2.Stream
 import fs2.io.file.{ Files, Path }
 
 import java.io.File
+import scala.annotation.unused
 
 /**
  * @groupname fileupload File upload directives
@@ -92,7 +93,7 @@ trait FileUploadDirectives {
    * @group fileupload
    */
   def fileUploadAll(fieldName: String): Directive1[Seq[(FileInfo, Stream[IO, Byte])]] = {
-    def tempDest(fileInfo: FileInfo): File = {
+    def tempDest(@unused fileInfo: FileInfo): File = {
       val dest = File.createTempFile("http4s-stir-upload", ".tmp")
       dest.deleteOnExit()
       dest

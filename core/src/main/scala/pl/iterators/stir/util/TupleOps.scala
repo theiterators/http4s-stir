@@ -1,5 +1,7 @@
 package pl.iterators.stir.util
 
+import scala.annotation.nowarn
+
 class TupleOps[T](val tuple: T) extends AnyVal {
   import TupleOps._
 
@@ -20,6 +22,7 @@ class TupleOps[T](val tuple: T) extends AnyVal {
 }
 
 object TupleOps {
+  @nowarn
   implicit def enhanceTuple[T: Tuple](tuple: T): TupleOps[T] = new TupleOps(tuple)
 
   trait AppendOne[P, S] {

@@ -6,7 +6,7 @@ import pl.iterators.stir.util.Tuple
 import pl.iterators.stir.util.TupleOps.Join
 
 import java.util.UUID
-import scala.annotation.tailrec
+import scala.annotation.{ nowarn, tailrec }
 import scala.util.matching.Regex
 
 /**
@@ -114,12 +114,14 @@ abstract class PathMatcher[L](implicit val ev: Tuple[L]) extends (Path => PathMa
 }
 
 object PathMatcher extends ImplicitPathMatcherConstruction {
+  @nowarn
   sealed abstract class Matching[+L: Tuple] {
     def map[R: Tuple](f: L => R): Matching[R]
     def flatMap[R: Tuple](f: L => Option[R]): Matching[R]
     def andThen[R: Tuple](f: (Path, L) => Matching[R]): Matching[R]
     def orElse[R >: L](other: => Matching[R]): Matching[R]
   }
+
   case class Matched[L: Tuple](pathRest: Path, extractions: L) extends Matching[L] {
     def map[R: Tuple](f: L => R) = Matched(pathRest, f(extractions))
     def flatMap[R: Tuple](f: L => Option[R]) = f(extractions) match {

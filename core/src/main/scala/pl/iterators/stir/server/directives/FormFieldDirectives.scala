@@ -9,7 +9,7 @@ import pl.iterators.stir.server._
 import pl.iterators.stir.server.directives.MarshallingDirectives._
 import pl.iterators.stir.unmarshalling.Unmarshaller
 
-import scala.annotation.tailrec
+import scala.annotation.{ tailrec, unused }
 import scala.collection.immutable
 import scala.util.{ Failure, Success }
 
@@ -146,7 +146,7 @@ object FormFieldDirectives {
       case Failure(x)                               => reject(MalformedFormFieldRejection(fieldName, x.getMessage.nullAsEmpty, Option(x.getCause)))
     }
 
-    private def strictFormUnmarshaller(ctx: RequestContext): SFU =
+    private def strictFormUnmarshaller(@unused ctx: RequestContext): SFU =
       UrlForm.entityDecoder
 
     val stringFromStrictForm: FSFFU[String] = Unmarshaller.identityUnmarshaller
