@@ -8,8 +8,6 @@ import org.typelevel.ci.CIString
 import pl.iterators.stir.marshalling.ToResponseMarshallable
 import pl.iterators.stir.server._
 
-import scala.annotation.nowarn
-
 class RouteDirectivesSpec extends AnyWordSpec with GenericRoutingSpec {
   override implicit def runtime: IORuntime = IORuntime.global
 
