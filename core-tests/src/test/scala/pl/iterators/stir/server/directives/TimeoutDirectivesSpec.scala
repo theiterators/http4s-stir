@@ -41,7 +41,7 @@ class TimeoutDirectivesSpec extends RoutingSpec {
 //      } ~
       path("equivalent") {
         // updates timeout and handler at
-        withRequestTimeout(1.second, request => timeoutResponse) {
+        withRequestTimeout(1.second, _ => timeoutResponse) {
           val response: IO[String] = slowIO() // very slow
           complete(response)
         }

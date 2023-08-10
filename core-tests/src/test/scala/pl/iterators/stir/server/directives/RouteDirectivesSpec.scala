@@ -8,6 +8,8 @@ import org.typelevel.ci.CIString
 import pl.iterators.stir.marshalling.ToResponseMarshallable
 import pl.iterators.stir.server._
 
+import scala.annotation.nowarn
+
 class RouteDirectivesSpec extends AnyWordSpec with GenericRoutingSpec {
   override implicit def runtime: IORuntime = IORuntime.global
 
@@ -73,7 +75,7 @@ class RouteDirectivesSpec extends AnyWordSpec with GenericRoutingSpec {
       case class Registered(name: String) extends RegistrationStatus
       case object AlreadyRegistered extends RegistrationStatus
 
-      val route =
+      @nowarn val route =
         get {
           path("register" / Segment) { name =>
             def registerUser(name: String): IO[RegistrationStatus] = IO {
@@ -83,21 +85,22 @@ class RouteDirectivesSpec extends AnyWordSpec with GenericRoutingSpec {
               }
             }
             complete {
+
               registerUser(name).map[ToResponseMarshallable] {
                 case Registered(_) => ""
                 case AlreadyRegistered =>
                   import org.http4s.circe.CirceEntityEncoder._
 
-//                  import SprayJsonSupport._
-//
-//                  // FIXME: Scala 3 workaround, which cannot figure out the implicit itself
-//                  // Needs to avoid importing more implicits accidentally from DefaultJsonProtocol to avoid ambiguity in
-//                  // Scala 2
-//                  implicit val mapFormat: spray.json.RootJsonFormat[Map[String, String]] = {
-//                    import spray.json.DefaultJsonProtocol
-//                    import DefaultJsonProtocol._
-//                    DefaultJsonProtocol.mapFormat
-//                  }
+                  //                  import SprayJsonSupport._
+                  //
+                  //                  // FIXME: Scala 3 workaround, which cannot figure out the implicit itself
+                  //                  // Needs to avoid importing more implicits accidentally from DefaultJsonProtocol to avoid ambiguity in
+                  //                  // Scala 2
+                  //                  implicit val mapFormat: spray.json.RootJsonFormat[Map[String, String]] = {
+                  //                    import spray.json.DefaultJsonProtocol
+                  //                    import DefaultJsonProtocol._
+                  //                    DefaultJsonProtocol.mapFormat
+                  //                  }
 
                   Status.BadRequest -> Map[String, String]("error" -> "User already Registered")
               }
@@ -186,14 +189,14 @@ class RouteDirectivesSpec extends AnyWordSpec with GenericRoutingSpec {
     "fail the request when the future fails" in {
       Get(Uri.unsafeFromString("https://pekko.apache.org/foo")) ~> {
         concat(
-          handle(req => IO.raiseError(new IllegalStateException("Some error"))),
+          handle(_ => IO.raiseError(new IllegalStateException("Some error"))),
           complete(Status.ImATeapot))
       } ~> check { response.status shouldEqual Status.InternalServerError }
     }
     "fail the request when the function throws" in {
       Get(Uri.unsafeFromString("https://pekko.apache.org/foo")) ~> {
         concat(
-          handle(req => throw new IllegalStateException("Some error")),
+          handle(_ => throw new IllegalStateException("Some error")),
           complete(Status.ImATeapot))
       } ~> check { response.status shouldEqual Status.InternalServerError }
     }

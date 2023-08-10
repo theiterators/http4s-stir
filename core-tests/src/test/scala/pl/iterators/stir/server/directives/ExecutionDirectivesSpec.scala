@@ -20,21 +20,21 @@ class ExecutionDirectivesSpec extends RoutingSpec {
   "The `handleExceptions` directive" should {
     "handle an exception strictly thrown in the inner route with the supplied exception handler" in {
       exceptionShouldBeHandled {
-        handleExceptions(handler) { ctx =>
+        handleExceptions(handler) { _ =>
           throw MyException
         }
       }
     }
     "handle an Future.failed RouteResult with the supplied exception handler" in {
       exceptionShouldBeHandled {
-        handleExceptions(handler) { ctx =>
+        handleExceptions(handler) { _ =>
           IO.raiseError(MyException)
         }
       }
     }
     "handle an eventually failed Future[RouteResult] with the supplied exception handler" in {
       exceptionShouldBeHandled {
-        handleExceptions(handler) { ctx =>
+        handleExceptions(handler) { _ =>
           IO.fromFuture(IO(Future {
             Thread.sleep(100)
             throw MyException

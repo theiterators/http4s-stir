@@ -162,7 +162,7 @@ class SecurityDirectivesSpec extends RoutingSpec {
   "authentication directives" should {
     "properly stack" in {
       val otherChallenge = Challenge("MyAuth", "MyRealm2")
-      val otherAuth: Directive1[String] = authenticateOrRejectWithChallenge { (cred: Option[Credentials]) =>
+      val otherAuth: Directive1[String] = authenticateOrRejectWithChallenge { (_: Option[Credentials]) =>
         IO.pure(Left(otherChallenge))
       }
       val bothAuth = dontBasicAuth | otherAuth

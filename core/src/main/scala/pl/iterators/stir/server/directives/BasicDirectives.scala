@@ -191,7 +191,7 @@ trait BasicDirectives {
    * @group basic
    */
   def extractMatchedPath: Directive1[Uri.Path] = extractRequestContext.flatMap { ctx =>
-    extractRequest.map { request =>
+    extractRequest.map { _ =>
       val unmatchedPath = ctx.unmatchedPath.toString
       val fullPath = ctx.request.uri.path.toString
 

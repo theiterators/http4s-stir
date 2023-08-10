@@ -10,6 +10,7 @@ import org.http4s.headers.`Content-Type`
 import org.typelevel.ci.CIString
 import pl.iterators.stir.server._
 
+import scala.annotation.unused
 import scala.reflect.ClassTag
 import scala.util.DynamicVariable
 
@@ -58,7 +59,7 @@ trait RouteTest extends RequestBuilding with RouteTestResultComponent
   def charsetOption: Option[Charset] = contentType.charset
   def charset: Charset = charsetOption.getOrElse(sys.error("Binary entity does not have charset"))
   def headers: Headers = rawResponse.headers
-  def header[T](implicit ev: Header.Select[T], cls: ClassTag[T]): Option[ev.F[T]] = rawResponse.headers.get(ev)
+  def header[T](implicit ev: Header.Select[T], @unused cls: ClassTag[T]): Option[ev.F[T]] = rawResponse.headers.get(ev)
   def header(name: String): Option[Header.Raw] = rawResponse.headers.get(CIString(name)).map(_.head)
   def status: Status = rawResponse.status
 

@@ -10,7 +10,6 @@ ThisBuild / githubWorkflowJavaVersions := Seq(JavaSpec.temurin("11"), JavaSpec.t
 ThisBuild / githubWorkflowPublishTargetBranches := Seq()
 ThisBuild / tlBaseVersion := "0.1"
 ThisBuild / tlCiHeaderCheck := false
-ThisBuild / tlFatalWarnings := false
 
 lazy val noPublishSettings =
   Seq(

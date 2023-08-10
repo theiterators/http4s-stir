@@ -1,5 +1,6 @@
 package pl.iterators.stir.util
 
+import scala.annotation.unused
 import scala.reflect.ClassTag
 
 /** A magnet that wraps a ClassTag */
@@ -15,7 +16,7 @@ trait ClassMagnet[T] {
 }
 object ClassMagnet {
   implicit def fromClass[T](c: Class[T]): ClassMagnet[T] = ClassMagnet(ClassTag(c))
-  implicit def fromUnit[T](u: Unit)(implicit tag: ClassTag[T]): ClassMagnet[T] = ClassMagnet(tag)
+  implicit def fromUnit[T](@unused u: Unit)(implicit tag: ClassTag[T]): ClassMagnet[T] = ClassMagnet(tag)
 
   def apply[T](implicit tag: ClassTag[T]): ClassMagnet[T] =
     new ClassMagnet[T] {

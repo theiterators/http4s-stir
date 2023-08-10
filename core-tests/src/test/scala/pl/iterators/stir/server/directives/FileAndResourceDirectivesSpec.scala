@@ -8,6 +8,7 @@ import pl.iterators.stir.impl.util._
 
 import java.io.File
 import java.time.{ LocalDate, ZoneOffset }
+import scala.annotation.unused
 import scala.util.Properties
 
 class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Inside {
@@ -159,7 +160,7 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
 
       Get() ~> route("file.html") ~> check { handled shouldEqual true }
 
-      def shouldReject(prefix: String, warnings: Int = 1) =
+      def shouldReject(prefix: String, @unused warnings: Int = 1) =
         try {
 //          EventFilter.warning(
 //            start = "File-system path for base",

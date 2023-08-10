@@ -19,7 +19,7 @@ private[stir] class EnhancedString(val underlying: String) extends AnyVal {
    */
   def fastSplit(delimiter: Char): immutable.LinearSeq[String] = {
     @tailrec def split(end: Int = underlying.length, elements: List[String] = Nil): List[String] = {
-      val ix = underlying.lastIndexOf(delimiter, end - 1)
+      val ix = underlying.lastIndexOf(delimiter.toInt, end - 1)
       if (ix < 0)
         underlying.substring(0, end) :: elements
       else
@@ -39,7 +39,7 @@ private[stir] class EnhancedString(val underlying: String) extends AnyVal {
    */
   def lazySplit(delimiter: Char): LazyList[String] = {
     def split(start: Int = 0): LazyList[String] = {
-      val ix = underlying.indexOf(delimiter, start)
+      val ix = underlying.indexOf(delimiter.toInt, start)
       if (ix < 0)
         underlying.substring(start) #:: LazyList.empty
       else

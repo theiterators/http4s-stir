@@ -271,7 +271,7 @@ class ParameterDirectivesSpec extends AnyFreeSpec with GenericRoutingSpec with I
     }
     "reject the request with a MissingQueryParamRejection if a required parameter is missing" in {
       Get("/?name=Parsons&sex=female") ~> {
-        parameters("name", "FirstName", "age") { (name, firstName, age) =>
+        parameters("name", "FirstName", "age") { (_, _, _) =>
           completeOk
         }
       } ~> check {
