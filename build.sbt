@@ -1,3 +1,5 @@
+import scala.collection.immutable.Seq
+
 val scala_2_13 = "2.13.10"
 val scala_3 = "3.3.0"
 val mainScalaVersion = scala_3
@@ -7,7 +9,7 @@ ThisBuild / crossScalaVersions := supportedScalaVersions
 ThisBuild / scalaVersion := mainScalaVersion
 
 ThisBuild / githubWorkflowJavaVersions := Seq(JavaSpec.temurin("11"), JavaSpec.temurin("17"))
-ThisBuild / githubWorkflowPublishTargetBranches := Seq()
+ThisBuild / githubWorkflowPublishTargetBranches := Seq(RefPredicate.Equals(Ref.Branch("master")))
 ThisBuild / tlBaseVersion := "0.1"
 ThisBuild / tlCiHeaderCheck := false
 
