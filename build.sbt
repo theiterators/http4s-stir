@@ -22,6 +22,7 @@ lazy val noPublishSettings =
 
 lazy val baseSettings = Seq(
   organization := "pl.iterators",
+  sonatypeProfileName := organization.value,
   organizationName := "Iterators",
   organizationHomepage := Some(url("https://www.iteratorshq.com")),
   pomIncludeRepository := const(true),
@@ -115,7 +116,3 @@ lazy val examples = project
   .dependsOn(core.jvm, testkit.jvm % Test)
 
 lazy val root = tlCrossRootProject.aggregate(core, testkit, examples, coreTests)
-  .settings(baseSettings: _*)
-  .settings(
-    name := "http4s-stir",
-    description := "Akka-like (Pekko-like) DSL for http4s")
