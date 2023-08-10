@@ -12,6 +12,7 @@ ThisBuild / githubWorkflowJavaVersions := Seq(JavaSpec.temurin("11"), JavaSpec.t
 ThisBuild / githubWorkflowPublishTargetBranches := Seq(RefPredicate.Equals(Ref.Branch("master")))
 ThisBuild / tlBaseVersion := "0.1"
 ThisBuild / tlCiHeaderCheck := false
+ThisBuild / tlSonatypeUseLegacyHost := true
 
 lazy val noPublishSettings =
   Seq(
