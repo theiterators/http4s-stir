@@ -15,8 +15,8 @@ http4s-stir also furnishes a test kit akin to Pekko's (Akka's).
 In SBT:
 
 ```scala
-libraryDependencies += "pl.iterators" %% "http4s-stir" % "0.0.1"
-libraryDependencies += "pl.iterators" %% "http4s-stir-testkit" % "0.0.1" % Test // if you need this
+libraryDependencies += "pl.iterators" %% "http4s-stir" % "0.1"
+libraryDependencies += "pl.iterators" %% "http4s-stir-testkit" % "0.1" % Test // if you need this
 ```
 
 For `scala-cli` see [this example](#example).
@@ -33,7 +33,7 @@ Here's an example in Scala 3 that you can run using scala-cli:
 //> using dep org.http4s::http4s-circe:0.23.23
 //> using dep io.circe::circe-core:0.14.5
 //> using dep io.circe::circe-generic:0.14.5
-//> using dep pl.iterators::http4s-stir:0.0.1
+//> using dep pl.iterators::http4s-stir:0.1
 
 import org.http4s.Status
 import org.http4s.ember.server.EmberServerBuilder
@@ -104,7 +104,7 @@ object Main extends IOApp.Simple {
 ```scala 3
 // Main.test.scala
 //> using test.dep org.specs2::specs2-core:4.19.2
-//> using test.dep pl.iterators::http4s-stir-testkit:0.0.1
+//> using test.dep pl.iterators::http4s-stir-testkit:0.1
 
 import org.http4s.Status
 import org.http4s.circe.CirceEntityEncoder.*
