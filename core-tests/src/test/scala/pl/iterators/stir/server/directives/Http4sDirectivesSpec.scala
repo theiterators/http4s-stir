@@ -2,7 +2,7 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import org.http4s.Status
+import org.http4s.{ Response, Status }
 import org.scalatest.Inside
 import org.http4s.dsl.io._
 
@@ -10,10 +10,10 @@ class Http4sDirectivesSpec extends RoutingSpec with Inside {
   override implicit def runtime: IORuntime = IORuntime.global
 
   val route = httpRoutesOf {
-    case GET -> Root / "test" => Status.Ok()
+    case GET -> Root / "test" => IO.pure(Response[IO](Status.Ok))
   } ~ pathPrefix("api" / Segment) { version =>
     httpRoutesOf {
-        case GET -> Root / "test" => Status.Ok(version)
+      case GET -> Root / "test" => IO.pure(Response[IO](Status.Ok).withEntity(version))
     }
   }
 
