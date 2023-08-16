@@ -11,7 +11,7 @@ ThisBuild / scalaVersion := mainScalaVersion
 ThisBuild / githubWorkflowJavaVersions := Seq(JavaSpec.temurin("11"), JavaSpec.temurin("17"))
 ThisBuild / githubWorkflowPublishTargetBranches := Seq(RefPredicate.StartsWith(Ref.Tag("v")),
   RefPredicate.Equals(Ref.Branch("master")))
-ThisBuild / tlBaseVersion := "0.1"
+ThisBuild / tlBaseVersion := "0.2"
 ThisBuild / tlCiHeaderCheck := false
 ThisBuild / tlSonatypeUseLegacyHost := true
 
@@ -56,20 +56,20 @@ lazy val baseSettings = Seq(
   scalafmtOnCompile := true)
 
 val http4s = Seq(
-  "org.http4s" %% "http4s-dsl" % "0.23.21",
-  "org.http4s" %% "http4s-ember-server" % "0.23.21")
+  "org.http4s" %% "http4s-dsl" % "0.23.23",
+  "org.http4s" %% "http4s-ember-server" % "0.23.23")
 
 val http4sClient = Seq(
-  "org.http4s" %% "http4s-ember-client" % "0.23.21")
+  "org.http4s" %% "http4s-ember-client" % "0.23.23")
 
 val circe = Seq(
   "io.circe" %% "circe-core" % "0.14.5",
   "io.circe" %% "circe-generic" % "0.14.5",
   "io.circe" %% "circe-parser" % "0.14.5",
-  "org.http4s" %% "http4s-circe" % "0.23.21")
+  "org.http4s" %% "http4s-circe" % "0.23.23")
 
 val logback = Seq(
-  "ch.qos.logback" % "logback-classic" % "1.4.7")
+  "ch.qos.logback" % "logback-classic" % "1.4.11")
 
 lazy val core = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .withoutSuffixFor(JVMPlatform)
@@ -88,8 +88,8 @@ lazy val coreTests = project
   .settings(
     name := "http4s-stir-tests",
     libraryDependencies ++= http4s ++ circe ++ Seq(
-      "org.scalatest" %% "scalatest" % "3.2.15" % Test,
-      "org.specs2" %% "specs2-core" % "4.19.2" % Test)).dependsOn(
+      "org.scalatest" %% "scalatest" % "3.2.16" % Test,
+      "org.specs2" %% "specs2-core" % "4.20.2" % Test)).dependsOn(
     testkit.jvm % "test",
     core.jvm % "test->test")
 
@@ -101,8 +101,8 @@ lazy val testkit = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .settings(
     name := "http4s-stir-testkit",
     libraryDependencies ++= http4s ++ http4sClient ++ Seq(
-      "org.scalatest" %% "scalatest" % "3.2.15" % "provided",
-      "org.specs2" %% "specs2-core" % "4.19.2" % "provided")).dependsOn(core)
+      "org.scalatest" %% "scalatest" % "3.2.16" % "provided",
+      "org.specs2" %% "specs2-core" % "4.20.2" % "provided")).dependsOn(core)
 
 lazy val examples = project
   .in(file("examples"))
@@ -111,8 +111,8 @@ lazy val examples = project
   .settings(
     name := "http4s-stir-examples",
     libraryDependencies ++= http4s ++ circe ++ logback ++ Seq(
-      "org.specs2" %% "specs2-core" % "4.19.2" % Test,
-      "org.scalatest" %% "scalatest" % "3.2.15" % Test))
+      "org.specs2" %% "specs2-core" % "4.20.2" % Test,
+      "org.scalatest" %% "scalatest" % "3.2.16" % Test))
   .dependsOn(core.jvm, testkit.jvm % Test)
 
 lazy val root = tlCrossRootProject.aggregate(core, testkit, examples, coreTests)

@@ -6,7 +6,7 @@ import pl.iterators.stir.server.{ Route, RouteResult }
 
 trait Http4sDirectives {
   def httpRoutesOf(pf: PartialFunction[Request[IO], IO[Response[IO]]]): Route = ctx => {
-    pf.lift(ctx.request) match {
+    pf.lift(ctx.request.withPathInfo(ctx.unmatchedPath)) match {
       case Some(response) => response.map(RouteResult.Complete(_))
       case None           => IO.pure(RouteResult.Rejected(Nil))
     }
