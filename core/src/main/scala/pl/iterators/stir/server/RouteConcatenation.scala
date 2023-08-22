@@ -1,8 +1,7 @@
-package pl.iterators.stir.server.directives
+package pl.iterators.stir.server
 
 import cats.effect.IO
 import pl.iterators.stir.server.directives.RouteDirectives.reject
-import pl.iterators.stir.server.{ Route, RouteResult }
 
 trait RouteConcatenation {
   implicit class RouteWithConcatenation(val route: Route) {
