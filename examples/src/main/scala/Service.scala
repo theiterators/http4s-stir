@@ -41,8 +41,7 @@ object Main extends IOApp.Simple {
     handleExceptions(ExceptionHandler.default()) {
       handleRejections(RejectionHandler.default) {
         logRequestResult() {
-          extractClientIP { clientIp =>
-            println(s"Client IP: $clientIp")
+          extractClientIP { _ =>
             pathPrefix("api" / "beers") {
               (get & parameters("pageSize".as[Int].?, "pageNumber".as[Int].?) & pathEndOrSingleSlash) {
                 (pageSize, pageNumber) =>
@@ -62,7 +61,15 @@ object Main extends IOApp.Simple {
                     }
                   }
               } ~
-              (delete & pathEndOrSingleSlash & path(JavaUUID)) { id =>
+              (get & path(JavaUUID) & pathEndOrSingleSlash) { id =>
+                complete {
+                  Option(beers.get(id)) match {
+                    case Some(beer) => Status.Ok -> beer
+                    case None       => Status.NotFound -> "Beer not found"
+                  }
+                }
+              } ~
+              (delete & path(JavaUUID) & pathEndOrSingleSlash) { id =>
                 complete {
                   IO.delay(beers.remove(id)).map(_ => Status.NoContent -> "Yes, content")
                 }
