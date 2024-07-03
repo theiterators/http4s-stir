@@ -1,7 +1,7 @@
 package pl.iterators.stir.server.directives
 
 import cats.effect.IO
-import fs2.{ Chunk, Pipe, Stream }
+import fs2.{ Chunk, Stream }
 import org.http4s.server.middleware.Logger
 import org.http4s.{ Headers, Request, Response }
 import org.typelevel.ci.CIString
