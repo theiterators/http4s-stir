@@ -1,7 +1,5 @@
-import scala.collection.immutable.Seq
-
-val scala_2_13 = "2.13.10"
-val scala_3 = "3.3.0"
+val scala_2_13 = "2.13.14"
+val scala_3 = "3.3.3"
 val mainScalaVersion = scala_3
 val supportedScalaVersions = Seq(scala_2_13, scala_3)
 
@@ -56,26 +54,26 @@ lazy val baseSettings = Seq(
   scalafmtOnCompile := true)
 
 val http4s = Seq(
-  "org.http4s" %% "http4s-dsl" % "0.23.23",
-  "org.http4s" %% "http4s-ember-server" % "0.23.23")
+  "org.http4s" %% "http4s-dsl" % "0.23.27",
+  "org.http4s" %% "http4s-ember-server" % "0.23.27")
 
 val http4sClient = Seq(
-  "org.http4s" %% "http4s-ember-client" % "0.23.23")
+  "org.http4s" %% "http4s-ember-client" % "0.23.27")
 
 val circe = Seq(
-  "io.circe" %% "circe-core" % "0.14.5",
-  "io.circe" %% "circe-generic" % "0.14.5",
-  "io.circe" %% "circe-parser" % "0.14.5",
-  "org.http4s" %% "http4s-circe" % "0.23.23")
+  "io.circe" %% "circe-core" % "0.14.9",
+  "io.circe" %% "circe-generic" % "0.14.9",
+  "io.circe" %% "circe-parser" % "0.14.9",
+  "org.http4s" %% "http4s-circe" % "0.23.27")
 
 val logback = Seq(
-  "ch.qos.logback" % "logback-classic" % "1.4.11")
+  "ch.qos.logback" % "logback-classic" % "1.5.6")
 
 lazy val core = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .withoutSuffixFor(JVMPlatform)
   .crossType(CrossType.Pure)
   .in(file("core"))
-  .settings(baseSettings: _*)
+  .settings(baseSettings *)
   .settings(
     name := "http4s-stir",
     libraryDependencies ++= http4s,
@@ -83,13 +81,13 @@ lazy val core = crossProject(JSPlatform, JVMPlatform, NativePlatform)
 
 lazy val coreTests = project
   .in(file("core-tests"))
-  .settings(baseSettings: _*)
-  .settings(noPublishSettings: _*)
+  .settings(baseSettings *)
+  .settings(noPublishSettings *)
   .settings(
     name := "http4s-stir-tests",
     libraryDependencies ++= http4s ++ circe ++ Seq(
-      "org.scalatest" %% "scalatest" % "3.2.16" % Test,
-      "org.specs2" %% "specs2-core" % "4.20.2" % Test)).dependsOn(
+      "org.scalatest" %% "scalatest" % "3.2.19" % Test,
+      "org.specs2" %% "specs2-core" % "4.20.7" % Test)).dependsOn(
     testkit.jvm % "test",
     core.jvm % "test->test")
 
@@ -97,23 +95,23 @@ lazy val testkit = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .withoutSuffixFor(JVMPlatform)
   .crossType(CrossType.Pure)
   .in(file("testkit"))
-  .settings(baseSettings: _*)
+  .settings(baseSettings *)
   .settings(
     name := "http4s-stir-testkit",
     libraryDependencies ++= http4s ++ http4sClient ++ Seq(
-      "org.scalatest" %% "scalatest" % "3.2.16" % "provided",
-      "org.specs2" %% "specs2-core" % "4.20.2" % "provided")).dependsOn(core)
+      "org.scalatest" %% "scalatest" % "3.2.19" % "provided",
+      "org.specs2" %% "specs2-core" % "4.20.7" % "provided")).dependsOn(core)
 
 lazy val examples = project
   .in(file("examples"))
-  .settings(baseSettings: _*)
-  .settings(noPublishSettings: _*)
+  .settings(baseSettings *)
+  .settings(noPublishSettings *)
   .settings(
     name := "http4s-stir-examples",
     libraryDependencies ++= http4s ++ circe ++ logback ++ Seq(
-      "org.specs2" %% "specs2-core" % "4.20.2" % Test,
-      "org.scalatest" %% "scalatest" % "3.2.16" % Test))
+      "org.specs2" %% "specs2-core" % "4.20.7" % Test,
+      "org.scalatest" %% "scalatest" % "3.2.19" % Test))
   .dependsOn(core.jvm, testkit.jvm % Test)
 
 lazy val root = tlCrossRootProject.aggregate(core, testkit, examples, coreTests)
-  .settings(baseSettings: _*)
+  .settings(baseSettings *)

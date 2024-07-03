@@ -340,7 +340,7 @@ class ParameterDirectivesSpec extends AnyFreeSpec with GenericRoutingSpec with I
           echoComplete
         }
       } ~> check {
-        responseAs[String] shouldEqual "Vector()"
+        responseAs[String] shouldEqual "List()"
       }
     }
     "extract all occurrences into an Iterable when parameter is present" in {
@@ -349,7 +349,7 @@ class ParameterDirectivesSpec extends AnyFreeSpec with GenericRoutingSpec with I
           echoComplete
         }
       } ~> check {
-        responseAs[String] shouldEqual "Vector(cooking, reading)"
+        responseAs[String] shouldEqual "List(cooking, reading)"
       }
     }
     "extract as Iterable[Int]" in {
@@ -358,7 +358,7 @@ class ParameterDirectivesSpec extends AnyFreeSpec with GenericRoutingSpec with I
           echoComplete
         }
       } ~> check {
-        responseAs[String] shouldEqual "Vector(3, 5)"
+        responseAs[String] shouldEqual "List(3, 5)"
       }
     }
     "extract as Iterable[Int] with an explicit deserializer" in {
@@ -367,7 +367,7 @@ class ParameterDirectivesSpec extends AnyFreeSpec with GenericRoutingSpec with I
           echoComplete
         }
       } ~> check {
-        responseAs[String] shouldEqual "Vector(3, 10)"
+        responseAs[String] shouldEqual "List(3, 10)"
       }
     }
   }
