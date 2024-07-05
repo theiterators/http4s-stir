@@ -11,7 +11,7 @@ ThisBuild / githubWorkflowPublishTargetBranches := Seq(RefPredicate.StartsWith(R
   RefPredicate.Equals(Ref.Branch("master")))
 ThisBuild / tlBaseVersion := "0.3"
 ThisBuild / tlCiHeaderCheck := false
-ThisBuild / tlSonatypeUseLegacyHost := false
+ThisBuild / tlSonatypeUseLegacyHost := true
 
 lazy val noPublishSettings =
   Seq(
