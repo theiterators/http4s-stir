@@ -1,5 +1,5 @@
-val scala_2_13 = "2.13.14"
-val scala_3 = "3.3.3"
+val scala_2_13 = "2.13.15"
+val scala_3 = "3.3.4"
 val mainScalaVersion = scala_3
 val supportedScalaVersions = Seq(scala_2_13, scala_3)
 
@@ -54,20 +54,20 @@ lazy val baseSettings = Seq(
   scalafmtOnCompile := true)
 
 val http4s = Seq(
-  "org.http4s" %% "http4s-dsl" % "0.23.27",
-  "org.http4s" %% "http4s-ember-server" % "0.23.27")
+  "org.http4s" %% "http4s-dsl" % "0.23.28",
+  "org.http4s" %% "http4s-ember-server" % "0.23.28")
 
 val http4sClient = Seq(
-  "org.http4s" %% "http4s-ember-client" % "0.23.27")
+  "org.http4s" %% "http4s-ember-client" % "0.23.28")
 
 val circe = Seq(
-  "io.circe" %% "circe-core" % "0.14.9",
-  "io.circe" %% "circe-generic" % "0.14.9",
-  "io.circe" %% "circe-parser" % "0.14.9",
-  "org.http4s" %% "http4s-circe" % "0.23.27")
+  "io.circe" %% "circe-core" % "0.14.10",
+  "io.circe" %% "circe-generic" % "0.14.10",
+  "io.circe" %% "circe-parser" % "0.14.10",
+  "org.http4s" %% "http4s-circe" % "0.23.28")
 
 val logback = Seq(
-  "ch.qos.logback" % "logback-classic" % "1.5.6")
+  "ch.qos.logback" % "logback-classic" % "1.5.8")
 
 lazy val core = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .withoutSuffixFor(JVMPlatform)
@@ -87,7 +87,7 @@ lazy val coreTests = project
     name := "http4s-stir-tests",
     libraryDependencies ++= http4s ++ circe ++ Seq(
       "org.scalatest" %% "scalatest" % "3.2.19" % Test,
-      "org.specs2" %% "specs2-core" % "4.20.7" % Test)).dependsOn(
+      "org.specs2" %% "specs2-core" % "4.20.8" % Test)).dependsOn(
     testkit.jvm % "test",
     core.jvm % "test->test")
 
@@ -100,7 +100,7 @@ lazy val testkit = crossProject(JSPlatform, JVMPlatform, NativePlatform)
     name := "http4s-stir-testkit",
     libraryDependencies ++= http4s ++ http4sClient ++ Seq(
       "org.scalatest" %% "scalatest" % "3.2.19" % "provided",
-      "org.specs2" %% "specs2-core" % "4.20.7" % "provided")).dependsOn(core)
+      "org.specs2" %% "specs2-core" % "4.20.8" % "provided")).dependsOn(core)
 
 lazy val examples = project
   .in(file("examples"))
@@ -109,7 +109,7 @@ lazy val examples = project
   .settings(
     name := "http4s-stir-examples",
     libraryDependencies ++= http4s ++ circe ++ logback ++ Seq(
-      "org.specs2" %% "specs2-core" % "4.20.7" % Test,
+      "org.specs2" %% "specs2-core" % "4.20.8" % Test,
       "org.scalatest" %% "scalatest" % "3.2.19" % Test))
   .dependsOn(core.jvm, testkit.jvm % Test)
 
