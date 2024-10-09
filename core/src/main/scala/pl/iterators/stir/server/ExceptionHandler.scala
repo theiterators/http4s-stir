@@ -1,8 +1,8 @@
 package pl.iterators.stir.server
 
 import cats.effect.IO
+import cats.effect.std.Console
 import org.http4s.Status.InternalServerError
-import org.typelevel.log4cats
 
 import scala.util.control.NonFatal
 
@@ -43,7 +43,7 @@ object ExceptionHandler {
    */
   def default(logAction: Option[(Throwable, String) => IO[Unit]] = None): ExceptionHandler = {
     val log = logAction.getOrElse { (t: Throwable, s: String) =>
-      log4cats.slf4j.Slf4jFactory.create[IO].getLogger.error(t)(s)
+      Console[IO].errorln(s) *> Console[IO].printStackTrace(t)
     }
     apply(knownToBeSealed = true) {
       case NonFatal(e) => ctx => {

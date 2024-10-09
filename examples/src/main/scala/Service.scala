@@ -109,7 +109,7 @@ object Main extends IOApp.Simple {
               path("file") {
                 getFromFile("project/plugins.sbt")
               } ~ pathPrefix("dir") {
-                getFromDirectory("src/main")
+                getFromDirectory("core/src/main")
               }
             }
           } ~ path("ws") {

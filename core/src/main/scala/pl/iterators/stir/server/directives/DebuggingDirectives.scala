@@ -1,11 +1,12 @@
 package pl.iterators.stir.server.directives
 
 import cats.effect.IO
-import fs2.{ Chunk, Stream }
+import cats.effect.std.Console
+import cats.implicits.toFlatMapOps
+import fs2.{ Chunk, Pull, Stream }
 import org.http4s.server.middleware.Logger
-import org.http4s.{ Headers, Request, Response }
+import org.http4s.{ EntityBody, Headers, Request, Response }
 import org.typelevel.ci.CIString
-import org.typelevel.log4cats
 import pl.iterators.stir.server.{ Directive, Directive0, RouteResult }
 
 trait DebuggingDirectives {
@@ -17,27 +18,33 @@ trait DebuggingDirectives {
    */
   def logRequest(logHeaders: Boolean = true, logBody: Boolean = true,
       redactHeadersWhen: CIString => Boolean = Headers.SensitiveHeaders.contains,
-      maxLogLength: Int = Int.MaxValue,
+      maxBodyBytes: Int = DebuggingDirectives.DefaultLogLength,
       logAction: Option[String => IO[Unit]] = None): Directive0 = {
-    val log = trimLog(maxLogLength).andThen(logAction.getOrElse { (s: String) =>
-      DebuggingDirectives.logger.info(s)
-    })
-
     Directive { inner => ctx =>
+      val log = logAction.getOrElse { (s: String) =>
+        DebuggingDirectives.logger(s)
+      }
+      val logWithTrimmingIndicator = indicateTrimming(maxBodyBytes, ctx.request.contentLength).andThen(log)
       if (logBody && !ctx.request.isChunked) {
-        IO.ref(Vector.empty[Chunk[Byte]])
-          .flatMap { vec =>
-            val newBody = Stream.eval(vec.get)
-              .flatMap(chunks => Stream.emits(chunks).covary[IO])
-              .flatMap(chunks => Stream.chunk(chunks).covary[IO])
-            val newRequest = ctx.request.withBodyStream(
-              ctx.request.body.observe(_.chunks.flatMap(chunk => Stream.eval(vec.update(_ :+ chunk)).drain)))
-
-            val newCtx = ctx.copy(request = ctx.request.withBodyStream(newBody))
-            Logger.logMessage[IO, Request[IO]](newRequest)(logHeaders, logBody = true, redactHeadersWhen)(log).flatMap(
-              _ =>
-                inner(())(newCtx))
-          }
+        ctx.request.body.pull.unconsN(maxBodyBytes).flatMap {
+          case Some((head, tail)) =>
+            Pull.eval {
+              Logger.logMessage[IO, Request[IO]](ctx.request.withBodyStream(Stream.chunk(head)))(logHeaders,
+                logBody = true,
+                redactHeadersWhen)(logWithTrimmingIndicator).flatMap { _ =>
+                val newBody = Stream.chunk(head) ++ tail
+                val newRequest = ctx.request.withBodyStream(newBody)
+                val newCtx = ctx.copy(request = newRequest)
+                inner(())(newCtx)
+              }
+            }.flatMap(r => Pull.output1(r))
+          case None =>
+            Pull.eval {
+              Logger.logMessage[IO, Request[IO]](ctx.request)(logHeaders, logBody = false, redactHeadersWhen)(
+                log).flatMap(_ =>
+                inner(())(ctx))
+            }.flatMap(r => Pull.output1(r))
+        }.stream.compile.onlyOrError
       } else {
         Logger.logMessage[IO, Request[IO]](ctx.request)(logHeaders, logBody = false, redactHeadersWhen)(log).flatMap(
           _ =>
@@ -53,18 +60,21 @@ trait DebuggingDirectives {
    */
   def logResult(logHeaders: Boolean = true, logBody: Boolean = true,
       redactHeadersWhen: CIString => Boolean = Headers.SensitiveHeaders.contains,
-      maxLogLength: Int = Int.MaxValue,
+      maxBodyBytes: Int = DebuggingDirectives.DefaultLogLength,
       logAction: Option[String => IO[Unit]] = None): Directive0 = {
-    val log = trimLog(maxLogLength).andThen(logAction.getOrElse { (s: String) =>
-      DebuggingDirectives.logger.info(s)
-    })
-
     Directive { inner => ctx =>
+      val log = logAction.getOrElse { (s: String) =>
+        DebuggingDirectives.logger(s)
+      }
       inner(())(ctx).flatMap {
         case RouteResult.Complete(response) =>
+          val logWithTrimmingIndicator = indicateTrimming(maxBodyBytes, response.contentLength).andThen(log)
           if (logBody && !response.isChunked) {
-            Logger.logMessage[IO, Response[IO]](response)(logHeaders, logBody = true, redactHeadersWhen)(log).as(
-              RouteResult.Complete(response))
+            val bodyToLog = response.body.take(maxBodyBytes.toLong).chunks.flatMap(Stream.chunk)
+            Logger.logMessage[IO, Response[IO]](response.withBodyStream(bodyToLog))(
+              logHeaders,
+              logBody = true,
+              redactHeadersWhen)(logWithTrimmingIndicator).as(RouteResult.Complete(response))
           } else {
             Logger.logMessage[IO, Response[IO]](response)(logHeaders, logBody = false, redactHeadersWhen)(log).as(
               RouteResult.Complete(response))
@@ -83,19 +93,27 @@ trait DebuggingDirectives {
    */
   def logRequestResult(logHeaders: Boolean = true, logBody: Boolean = true,
       redactHeadersWhen: CIString => Boolean = Headers.SensitiveHeaders.contains,
-      maxLogLength: Int = Int.MaxValue,
+      maxBodyBytes: Int = DebuggingDirectives.DefaultLogLength,
       logAction: Option[String => IO[Unit]] = None): Directive0 = {
-    logResult(logHeaders, logBody, redactHeadersWhen, maxLogLength, logAction) & logRequest(logHeaders, logBody,
+    logResult(logHeaders, logBody, redactHeadersWhen, maxBodyBytes, logAction) & logRequest(logHeaders, logBody,
       redactHeadersWhen,
-      maxLogLength,
+      maxBodyBytes,
       logAction)
   }
 
-  private def trimLog(maxLogLength: Int): String => String = { log =>
-    if (log.length > maxLogLength) log.take(maxLogLength) + "..." else log
+  private def indicateTrimming(maxBodyBytes: Int, contentLength: Option[Long]): String => String = { log =>
+    contentLength match {
+      case Some(length) if length > maxBodyBytes =>
+        s"$log ... ($length bytes total)"
+      case None =>
+        s"$log ... (??? bytes total)"
+      case _ =>
+        log
+    }
   }
 }
 
 object DebuggingDirectives extends DebuggingDirectives {
-  private val logger = log4cats.slf4j.Slf4jFactory.create[IO].getLogger
+  private def logger[A](a: A) = Console[IO].println(a)
+  private val DefaultLogLength: Int = 4096
 }

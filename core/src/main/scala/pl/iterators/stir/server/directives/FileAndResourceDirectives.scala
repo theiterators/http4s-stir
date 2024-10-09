@@ -37,7 +37,7 @@ trait FileAndResourceDirectives {
       if (file.isFile && file.canRead) {
         extractRequest { request =>
           complete {
-            StaticFile.fromPath(Path.fromNioPath(file.toPath), Some(request)).getOrElse(
+            StaticFile.fromPath(Path(file.getAbsolutePath), Some(request)).getOrElse(
               Response[IO](InternalServerError))
           }
         }
