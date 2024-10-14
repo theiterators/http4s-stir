@@ -31,7 +31,7 @@ trait FileUploadDirectives {
     fileUpload(fieldName).flatMap {
       case (fileInfo, bytes) =>
         val dest = destFn(fileInfo)
-        val path = Path.fromNioPath(dest.toPath)
+        val path = Path(dest.getAbsolutePath)
         val uploadedF: IO[(FileInfo, File)] =
           bytes.through(Files[IO].writeAll(path)).compile.drain.map(_ => (fileInfo, dest)).onError(_ =>
             IO.delay(dest.delete()).as(()))
@@ -54,7 +54,7 @@ trait FileUploadDirectives {
           val fileInfo = FileInfo(part.name.getOrElse(""), part.filename.get,
             part.contentType.getOrElse(throw new IllegalStateException(s"Missing content type for part $fieldName")))
           val dest = destFn(fileInfo)
-          val path = Path.fromNioPath(dest.toPath)
+          val path = Path(dest.getAbsolutePath)
           part.body.through(Files[IO].writeAll(path)).compile.drain.map(_ => (fileInfo, dest)).onError(_ =>
             IO.delay(dest.delete()).as(()))
         }.parSequence
@@ -102,7 +102,7 @@ trait FileUploadDirectives {
     storeUploadedFiles(fieldName, tempDest).map { files =>
       files.map {
         case (fileInfo, src) =>
-          val path = Path.fromNioPath(src.toPath)
+          val path = Path(src.getAbsolutePath)
           val byteSource: Stream[IO, Byte] = Files[IO].readAll(path).onFinalize(IO.delay(src.delete()).as(()))
           (fileInfo, byteSource)
       }

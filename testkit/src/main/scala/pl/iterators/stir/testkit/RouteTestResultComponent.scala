@@ -80,10 +80,10 @@ trait RouteTestResultComponent {
 //      this
 //    }
 
-    private[this] lazy val entityRecreator: IORuntime => EntityBody[IO] = runtime =>
+    private[this] lazy val entityRecreator: IORuntime => EntityBody[IO] = implicit runtime =>
       rawResponse.body.compile.toVector.map { bytes =>
         Stream.emits(bytes): Stream[IO, Byte]
-      }.unsafeRunSync()(runtime)
+      }.unsafeRunSync()
 
     private def failNeitherCompletedNorRejected(): Nothing =
       failTest("Request was neither completed nor rejected" /*within " + timeout */ )

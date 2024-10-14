@@ -15,8 +15,8 @@ http4s-stir also furnishes a test kit akin to Pekko's (Akka's).
 In SBT:
 
 ```scala
-libraryDependencies += "pl.iterators" %% "http4s-stir" % "0.2"
-libraryDependencies += "pl.iterators" %% "http4s-stir-testkit" % "0.2" % Test // if you need this
+libraryDependencies += "pl.iterators" %% "http4s-stir" % "0.4.0"
+libraryDependencies += "pl.iterators" %% "http4s-stir-testkit" % "0.4.0" % Test // if you need this
 ```
 
 For `scala-cli` see [this example](#example).
@@ -25,15 +25,15 @@ For `scala-cli` see [this example](#example).
 
 Here's an example in Scala 3 that you can run using scala-cli:
 
-```scala
+```scala 3
 // Main.scala
-//> using dep org.typelevel::cats-effect:3.5.1
-//> using dep org.http4s::http4s-dsl:0.23.23
-//> using dep org.http4s::http4s-ember-server:0.23.23
-//> using dep org.http4s::http4s-circe:0.23.23
-//> using dep io.circe::circe-core:0.14.5
-//> using dep io.circe::circe-generic:0.14.5
-//> using dep pl.iterators::http4s-stir:0.2
+//> using dep org.typelevel::cats-effect::3.5.4
+//> using dep org.http4s::http4s-dsl::0.23.28
+//> using dep org.http4s::http4s-ember-server::0.23.28
+//> using dep org.http4s::http4s-circe::0.23.28
+//> using dep io.circe::circe-core::0.14.10
+//> using dep io.circe::circe-generic::0.14.10
+//> using dep pl.iterators::http4s-stir::0.4.0
 
 import org.http4s.Status
 import org.http4s.ember.server.EmberServerBuilder
@@ -94,17 +94,23 @@ val route: Route =
 
 object Main extends IOApp.Simple {
   val run = EmberServerBuilder
-    .default[IO]
-    .withHttpApp(route.toHttpRoutes.orNotFound)
-    .build
-    .use(_ => IO.never)
+          .default[IO]
+          .withHttpApp(route.toHttpRoutes.orNotFound)
+          .build
+          .use(_ => IO.never)
 }
+
 ```
+
+To run this service you can use `scala-cli run .`.
+
+Or maybe if you want, you can compile it to JS file: `scala-cli --power package --js --js-module-kind commonjs Main.scala`.
 
 ```scala 3
 // Main.test.scala
-//> using test.dep org.specs2::specs2-core:4.19.2
-//> using test.dep pl.iterators::http4s-stir-testkit:0.2
+//> using test.dep org.specs2::specs2-core:5.5.8
+//> using test.dep pl.iterators::http4s-stir-testkit:0.4.0
+//> using test.dep org.http4s::http4s-circe:0.23.28
 
 import org.http4s.Status
 import org.http4s.circe.CirceEntityEncoder.*
@@ -115,33 +121,36 @@ import org.specs2.mutable.Specification
 import pl.iterators.stir.testkit.Specs2RouteTest
 
 class MainRoutesSpec extends Specification with Specs2RouteTest {
-    override implicit val runtime: IORuntime = IORuntime.global
+  override implicit val runtime: IORuntime = IORuntime.global
 
-    sequential
-    "The routes" should {
-        "create order" in {
-            Post("/create-order", Order(List(Item("foo", 42)))) ~> route ~> check {
-                responseAs[String] must contain("order created")
-                orders.head must beEqualTo(Item("foo", 42))
-            }
-        }
-        "retrieve an item if present" in {
-            orders = List(Item("foo", 42))
-            Get("/item/42") ~> route ~> check {
-                responseAs[Item] must beEqualTo(Item("foo", 42))
-            }
-        }
-        "return 404 if item is not present" in {
-            orders = List.empty
-            Get("/item/42") ~> route ~> check {
-                status must beEqualTo(Status.NotFound)
-            }
-        }
+  sequential
+  "The routes" should {
+    "create order" in {
+      Post("/create-order", Order(List(Item("foo", 42)))) ~> route ~> check {
+        responseAs[String] must contain("order created")
+        orders.head must beEqualTo(Item("foo", 42))
+      }
     }
+    "retrieve an item if present" in {
+      orders = List(Item("foo", 42))
+      Get("/item/42") ~> route ~> check {
+        responseAs[Item] must beEqualTo(Item("foo", 42))
+      }
+    }
+    "return 404 if item is not present" in {
+      orders = List.empty
+      Get("/item/42") ~> route ~> check {
+        status must beEqualTo(Status.NotFound)
+      }
+    }
+  }
 }
+
 ```
 
-For a more comprehensive example showcasing additional directives see [examples](https://github.com/theiterators/http4s-stir/blob/master/examples/src/main/scala/Service.scala).
+To run the tests you can use `scala-cli test .`.
+
+For a more comprehensive example showcasing additional directives see [examples](https://github.com/theiterators/http4s-stir/blob/master/examples/src/main/scala/Service.scala). You can run it with `~examples/reStart`.
 
 ## Why this library?
 

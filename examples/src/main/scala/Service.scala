@@ -101,15 +101,27 @@ object Main extends IOApp.Simple {
                   }
                 }
               }
+            } ~ (path("pipe") & extractRequest) { request =>
+              complete {
+                Status.Ok -> request.body
+              }
+            } ~ (path("empty") & extractRequest) { _ =>
+              complete {
+                Status.Ok
+              }
+            } ~ (post & path("empty") & extractRequest) { _ =>
+              complete {
+                Status.Ok
+              }
             } ~ (path("file-upload") & storeUploadedFiles("file", fi => new File("/tmp/" + fi.fileName))) { files =>
               complete {
                 Status.Ok -> s"File $files uploaded"
               }
             } ~ authenticateBasic("d-and-d-realm", authenticator) { _ =>
               path("file") {
-                getFromFile("project/plugins.sbt")
+                getFromFile("../src/main/scala/Service.scala")
               } ~ pathPrefix("dir") {
-                getFromDirectory("src/main")
+                getFromDirectory("../")
               }
             }
           } ~ path("ws") {

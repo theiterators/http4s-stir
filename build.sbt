@@ -6,12 +6,13 @@ val supportedScalaVersions = Seq(scala_2_13, scala_3)
 ThisBuild / crossScalaVersions := supportedScalaVersions
 ThisBuild / scalaVersion := mainScalaVersion
 
+ThisBuild / versionScheme := Some("early-semver")
 ThisBuild / githubWorkflowJavaVersions := Seq(JavaSpec.temurin("11"), JavaSpec.temurin("17"))
 ThisBuild / githubWorkflowPublishTargetBranches := Seq(RefPredicate.StartsWith(Ref.Tag("v")),
   RefPredicate.Equals(Ref.Branch("master")))
-ThisBuild / tlBaseVersion := "0.3"
+ThisBuild / tlBaseVersion := "0.4"
 ThisBuild / tlCiHeaderCheck := false
-ThisBuild / tlSonatypeUseLegacyHost := true
+ThisBuild / sonatypeCredentialHost := xerial.sbt.Sonatype.sonatypeLegacy
 
 lazy val noPublishSettings =
   Seq(
@@ -53,65 +54,78 @@ lazy val baseSettings = Seq(
   crossScalaVersions := supportedScalaVersions,
   scalafmtOnCompile := true)
 
-val http4s = Seq(
-  "org.http4s" %% "http4s-dsl" % "0.23.28",
-  "org.http4s" %% "http4s-ember-server" % "0.23.28")
+val http4sDsl = Def.setting("org.http4s" %%% "http4s-dsl" % "0.23.28")
+val http4sEmber = Def.setting("org.http4s" %%% "http4s-ember-server" % "0.23.28")
 
-val http4sClient = Seq(
-  "org.http4s" %% "http4s-ember-client" % "0.23.28")
+val fs2Core = Def.setting("co.fs2" %%% "fs2-core" % "3.11.0")
+val fs2Io = Def.setting("co.fs2" %%% "fs2-io" % "3.11.0")
 
-val circe = Seq(
-  "io.circe" %% "circe-core" % "0.14.10",
-  "io.circe" %% "circe-generic" % "0.14.10",
-  "io.circe" %% "circe-parser" % "0.14.10",
-  "org.http4s" %% "http4s-circe" % "0.23.28")
+val http4sClient = Def.setting(
+  "org.http4s" %%% "http4s-ember-client" % "0.23.28")
 
-val logback = Seq(
-  "ch.qos.logback" % "logback-classic" % "1.5.8")
+val circeCore = Def.setting("io.circe" %%% "circe-core" % "0.14.8")
+val circeGeneric = Def.setting("io.circe" %%% "circe-generic" % "0.14.10")
+val circeParser = Def.setting("io.circe" %%% "circe-parser" % "0.14.10")
+val http4sCirce = Def.setting("org.http4s" %%% "http4s-circe" % "0.23.28")
 
-lazy val core = crossProject(JSPlatform, JVMPlatform, NativePlatform)
+val scalatest = Def.setting("org.scalatest" %%% "scalatest" % "3.2.19")
+val specs2 = Def.setting("org.specs2" %%% "specs2-core" % "4.20.6")
+
+val scalaXml = Def.setting("org.scala-lang.modules" %%% "scala-xml" % "2.2.0")
+
+lazy val core = crossProject(JVMPlatform, NativePlatform, JSPlatform)
   .withoutSuffixFor(JVMPlatform)
   .crossType(CrossType.Pure)
   .in(file("core"))
   .settings(baseSettings *)
   .settings(
     name := "http4s-stir",
-    libraryDependencies ++= http4s,
+    libraryDependencies ++= Seq(http4sDsl.value, http4sEmber.value) ++ Seq(fs2Core.value,
+      fs2Io.value) ++ Seq(scalaXml.value),
     Compile / doc / scalacOptions -= "-Xfatal-warnings")
 
-lazy val coreTests = project
+lazy val coreTests = crossProject(JVMPlatform)
+  .withoutSuffixFor(JVMPlatform)
+  .crossType(CrossType.Pure)
   .in(file("core-tests"))
   .settings(baseSettings *)
   .settings(noPublishSettings *)
   .settings(
     name := "http4s-stir-tests",
-    libraryDependencies ++= http4s ++ circe ++ Seq(
-      "org.scalatest" %% "scalatest" % "3.2.19" % Test,
-      "org.specs2" %% "specs2-core" % "4.20.8" % Test)).dependsOn(
-    testkit.jvm % "test",
-    core.jvm % "test->test")
+    libraryDependencies ++= Seq(http4sDsl.value, http4sEmber.value) ++
+    Seq(circeCore.value, circeGeneric.value, circeParser.value, http4sCirce.value) ++
+    Seq(
+      scalatest.value % Test,
+      specs2.value % Test))
+  .dependsOn(
+    testkit % "test",
+    core % "test->test")
 
-lazy val testkit = crossProject(JSPlatform, JVMPlatform, NativePlatform)
+lazy val testkit = crossProject(JVMPlatform)
   .withoutSuffixFor(JVMPlatform)
   .crossType(CrossType.Pure)
   .in(file("testkit"))
   .settings(baseSettings *)
   .settings(
     name := "http4s-stir-testkit",
-    libraryDependencies ++= http4s ++ http4sClient ++ Seq(
-      "org.scalatest" %% "scalatest" % "3.2.19" % "provided",
-      "org.specs2" %% "specs2-core" % "4.20.8" % "provided")).dependsOn(core)
+    libraryDependencies ++= Seq(http4sClient.value) ++ Seq(
+      scalatest.value % "provided",
+      specs2.value % "provided"))
+  .dependsOn(core)
 
-lazy val examples = project
+lazy val examples = crossProject(JVMPlatform)
+  .withoutSuffixFor(JVMPlatform)
+  .crossType(CrossType.Pure)
   .in(file("examples"))
   .settings(baseSettings *)
   .settings(noPublishSettings *)
   .settings(
     name := "http4s-stir-examples",
-    libraryDependencies ++= http4s ++ circe ++ logback ++ Seq(
-      "org.specs2" %% "specs2-core" % "4.20.8" % Test,
-      "org.scalatest" %% "scalatest" % "3.2.19" % Test))
-  .dependsOn(core.jvm, testkit.jvm % Test)
+    libraryDependencies ++= Seq(http4sDsl.value, http4sEmber.value) ++ Seq(circeCore.value, circeGeneric.value,
+      circeParser.value, http4sCirce.value) ++ Seq(
+      specs2.value % Test,
+      scalatest.value % Test))
+  .dependsOn(core, testkit % Test)
 
 lazy val root = tlCrossRootProject.aggregate(core, testkit, examples, coreTests)
   .settings(baseSettings *)
