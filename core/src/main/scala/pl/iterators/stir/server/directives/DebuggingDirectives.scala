@@ -2,10 +2,9 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.IO
 import cats.effect.std.Console
-import cats.implicits.toFlatMapOps
-import fs2.{ Chunk, Pull, Stream }
+import fs2.{ Pull, Stream }
 import org.http4s.server.middleware.Logger
-import org.http4s.{ EntityBody, Headers, Request, Response }
+import org.http4s.{ Headers, Request, Response }
 import org.typelevel.ci.CIString
 import pl.iterators.stir.server.{ Directive, Directive0, RouteResult }
 
@@ -25,26 +24,39 @@ trait DebuggingDirectives {
         DebuggingDirectives.logger(s)
       }
       val logWithTrimmingIndicator = indicateTrimming(maxBodyBytes, ctx.request.contentLength).andThen(log)
-      if (logBody && !ctx.request.isChunked) {
-        ctx.request.body.pull.unconsN(maxBodyBytes).flatMap {
-          case Some((head, tail)) =>
-            Pull.eval {
-              Logger.logMessage[IO, Request[IO]](ctx.request.withBodyStream(Stream.chunk(head)))(logHeaders,
-                logBody = true,
-                redactHeadersWhen)(logWithTrimmingIndicator).flatMap { _ =>
-                val newBody = Stream.chunk(head) ++ tail
-                val newRequest = ctx.request.withBodyStream(newBody)
-                val newCtx = ctx.copy(request = newRequest)
-                inner(())(newCtx)
+      val logWithBodyNotConsumedIndicator = indicateBodyNotConsumed(ctx.request.contentLength).andThen(log)
+
+      if (logBody && !ctx.request.isChunked && ctx.request.contentLength.exists(_ > 0)) {
+        IO.ref(false).flatMap { bodyConsumedRef =>
+          val newBody = ctx.request.body.pull.unconsN(maxBodyBytes, allowFewer = true).flatMap {
+            case Some((head, tail)) =>
+              Pull.output(head) >>
+              Pull.eval {
+                bodyConsumedRef.update(_ => true) *> Logger.logMessage[IO, Request[IO]](
+                  ctx.request.withBodyStream(Stream.chunk(head)))(logHeaders,
+                  logBody = true, redactHeadersWhen)(logWithTrimmingIndicator)
+              } >>
+              tail.pull.echo
+            case None =>
+              Pull.eval {
+                bodyConsumedRef.update(_ => true) *> Logger.logMessage[IO, Request[IO]](ctx.request)(logHeaders,
+                  logBody = false, redactHeadersWhen)(log)
               }
-            }.flatMap(r => Pull.output1(r))
-          case None =>
-            Pull.eval {
-              Logger.logMessage[IO, Request[IO]](ctx.request)(logHeaders, logBody = false, redactHeadersWhen)(
-                log).flatMap(_ =>
-                inner(())(ctx))
-            }.flatMap(r => Pull.output1(r))
-        }.stream.compile.onlyOrError
+          }.stream
+          val newRequest = ctx.request.withBodyStream(newBody)
+          inner(())(ctx.copy(request = newRequest)).flatTap {
+            _ =>
+              bodyConsumedRef.get.flatMap {
+                bodyConsumed =>
+                  if (!bodyConsumed) {
+                    Logger.logMessage[IO, Request[IO]](newRequest)(logHeaders, logBody = false, redactHeadersWhen)(
+                      logWithBodyNotConsumedIndicator)
+                  } else {
+                    IO.unit
+                  }
+              }
+          }
+        }
       } else {
         Logger.logMessage[IO, Request[IO]](ctx.request)(logHeaders, logBody = false, redactHeadersWhen)(log).flatMap(
           _ =>
@@ -70,11 +82,19 @@ trait DebuggingDirectives {
         case RouteResult.Complete(response) =>
           val logWithTrimmingIndicator = indicateTrimming(maxBodyBytes, response.contentLength).andThen(log)
           if (logBody && !response.isChunked) {
-            val bodyToLog = response.body.take(maxBodyBytes.toLong).chunks.flatMap(Stream.chunk)
-            Logger.logMessage[IO, Response[IO]](response.withBodyStream(bodyToLog))(
-              logHeaders,
-              logBody = true,
-              redactHeadersWhen)(logWithTrimmingIndicator).as(RouteResult.Complete(response))
+            val newBody = response.body.pull.unconsN(maxBodyBytes, allowFewer = true).flatMap {
+              case Some((head, tail)) =>
+                Pull.output(head) >>
+                Pull.eval {
+                  Logger.logMessage[IO, Response[IO]](response.withBodyStream(Stream.chunk(head)))(logHeaders,
+                    logBody = true, redactHeadersWhen)(logWithTrimmingIndicator)
+                } >>
+                tail.pull.echo
+              case None => Pull.eval {
+                  Logger.logMessage[IO, Response[IO]](response)(logHeaders, logBody = false, redactHeadersWhen)(log)
+                }
+            }.stream
+            IO.pure(RouteResult.Complete(response.copy(body = newBody)))
           } else {
             Logger.logMessage[IO, Response[IO]](response)(logHeaders, logBody = false, redactHeadersWhen)(log).as(
               RouteResult.Complete(response))
@@ -109,6 +129,15 @@ trait DebuggingDirectives {
         s"$log ... (??? bytes total)"
       case _ =>
         log
+    }
+  }
+
+  private def indicateBodyNotConsumed(contentLength: Option[Long]): String => String = { log =>
+    contentLength match {
+      case Some(length) =>
+        s"$log body=<not consumed> ($length bytes total)"
+      case None =>
+        s"$log body=<not consumed> (??? bytes total)"
     }
   }
 }
