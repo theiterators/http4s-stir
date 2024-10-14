@@ -40,7 +40,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
       resetDebugMsg()
       Get("/hello") ~> route ~> check {
         response.status shouldEqual Status.Ok
-        normalizedDebugMsg() shouldEqual "HTTP/1.1 GET /hello Headers() body=\"\"\n"
+        normalizedDebugMsg() shouldEqual "HTTP/1.1 GET /hello Headers()\n"
       }
     }
   }
@@ -54,7 +54,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
       resetDebugMsg()
       Get("/hello") ~> route ~> check {
         response.status shouldEqual Status.Ok
-        normalizedDebugMsg() shouldEqual "HTTP/1.1 200 OK Headers() body=\"\"\n"
+        normalizedDebugMsg() shouldEqual "HTTP/1.1 200 OK Headers()\n"
       }
     }
   }
@@ -69,9 +69,9 @@ class DebuggingDirectivesSpec extends RoutingSpec {
       Get("/hello") ~> route ~> check {
         response.status shouldEqual Status.Ok
         normalizedDebugMsg() shouldEqual
-        """|HTTP/1.1 GET /hello Headers() body=""
-             |HTTP/1.1 200 OK Headers() body=""
-             |""".stripMarginWithNewline("\n")
+        """|HTTP/1.1 GET /hello Headers()
+           |HTTP/1.1 200 OK Headers()
+           |""".stripMarginWithNewline("\n")
       }
     }
 //    "be able to log only rejections" in {
