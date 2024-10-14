@@ -63,11 +63,11 @@ val http4sClient = Def.setting(
   "org.http4s" %%% "http4s-ember-client" % "0.23.28")
 
 val circeCore = Def.setting("io.circe" %%% "circe-core" % "0.14.8")
-val circeGeneric = Def.setting("io.circe" %%% "circe-generic" % "0.14.8")
-val circeParser = Def.setting("io.circe" %%% "circe-parser" % "0.14.8")
+val circeGeneric = Def.setting("io.circe" %%% "circe-generic" % "0.14.10")
+val circeParser = Def.setting("io.circe" %%% "circe-parser" % "0.14.10")
 val http4sCirce = Def.setting("org.http4s" %%% "http4s-circe" % "0.23.28")
 
-val scalatest = Def.setting("org.scalatest" %%% "scalatest" % "3.2.18")
+val scalatest = Def.setting("org.scalatest" %%% "scalatest" % "3.2.19")
 val specs2 = Def.setting("org.specs2" %%% "specs2-core" % "4.20.6")
 
 val scalaXml = Def.setting("org.scala-lang.modules" %%% "scala-xml" % "2.2.0")
