@@ -30,11 +30,11 @@ jobs:
         os: [ubuntu-latest]
         scala: [2.13, 3]
         java: [temurin@11, temurin@17]
-        project: [rootJS, rootJVM, rootNative]
+        project: [http4sStirJS, http4sStirNative, http4sStirJVM]
         exclude:
-          - project: rootJS
+          - project: http4sStirJS
             java: temurin@17
-          - project: rootNative
+          - project: http4sStirNative
             java: temurin@17
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -77,11 +77,11 @@ jobs:
         run: sbt githubWorkflowCheck
 
       - name: scalaJSLink
-        if: matrix.project == 'rootJS'
+        if: matrix.project == 'http4sStirJS'
         run: sbt 'project ${{ matrix.project }}' '++ ${{ matrix.scala }}' Test/scalaJSLinkerResult
 
       - name: nativeLink
-        if: matrix.project == 'rootNative'
+        if: matrix.project == 'http4sStirNative'
         run: sbt 'project ${{ matrix.project }}' '++ ${{ matrix.scala }}' Test/nativeLink
 
       - name: Test
@@ -154,62 +154,62 @@ jobs:
         if: matrix.java == 'temurin@17' && steps.setup-java-temurin-17.outputs.cache-hit == 'false'
         run: sbt +update
 
-      - name: Download target directories (2.13, rootJS)
+      - name: Download target directories (2.13, http4sStirJS)
         uses: actions/download-artifact@v4
         with:
-          name: target-${{ matrix.os }}-${{ matrix.java }}-2.13-rootJS
+          name: target-${{ matrix.os }}-${{ matrix.java }}-2.13-http4sStirJS
 
-      - name: Inflate target directories (2.13, rootJS)
+      - name: Inflate target directories (2.13, http4sStirJS)
         run: |
           tar xf targets.tar
           rm targets.tar
 
-      - name: Download target directories (2.13, rootJVM)
+      - name: Download target directories (2.13, http4sStirNative)
         uses: actions/download-artifact@v4
         with:
-          name: target-${{ matrix.os }}-${{ matrix.java }}-2.13-rootJVM
+          name: target-${{ matrix.os }}-${{ matrix.java }}-2.13-http4sStirNative
 
-      - name: Inflate target directories (2.13, rootJVM)
+      - name: Inflate target directories (2.13, http4sStirNative)
         run: |
           tar xf targets.tar
           rm targets.tar
 
-      - name: Download target directories (2.13, rootNative)
+      - name: Download target directories (2.13, http4sStirJVM)
         uses: actions/download-artifact@v4
         with:
-          name: target-${{ matrix.os }}-${{ matrix.java }}-2.13-rootNative
+          name: target-${{ matrix.os }}-${{ matrix.java }}-2.13-http4sStirJVM
 
-      - name: Inflate target directories (2.13, rootNative)
+      - name: Inflate target directories (2.13, http4sStirJVM)
         run: |
           tar xf targets.tar
           rm targets.tar
 
-      - name: Download target directories (3, rootJS)
+      - name: Download target directories (3, http4sStirJS)
         uses: actions/download-artifact@v4
         with:
-          name: target-${{ matrix.os }}-${{ matrix.java }}-3-rootJS
+          name: target-${{ matrix.os }}-${{ matrix.java }}-3-http4sStirJS
 
-      - name: Inflate target directories (3, rootJS)
+      - name: Inflate target directories (3, http4sStirJS)
         run: |
           tar xf targets.tar
           rm targets.tar
 
-      - name: Download target directories (3, rootJVM)
+      - name: Download target directories (3, http4sStirNative)
         uses: actions/download-artifact@v4
         with:
-          name: target-${{ matrix.os }}-${{ matrix.java }}-3-rootJVM
+          name: target-${{ matrix.os }}-${{ matrix.java }}-3-http4sStirNative
 
-      - name: Inflate target directories (3, rootJVM)
+      - name: Inflate target directories (3, http4sStirNative)
         run: |
           tar xf targets.tar
           rm targets.tar
 
-      - name: Download target directories (3, rootNative)
+      - name: Download target directories (3, http4sStirJVM)
         uses: actions/download-artifact@v4
         with:
-          name: target-${{ matrix.os }}-${{ matrix.java }}-3-rootNative
+          name: target-${{ matrix.os }}-${{ matrix.java }}-3-http4sStirJVM
 
-      - name: Inflate target directories (3, rootNative)
+      - name: Inflate target directories (3, http4sStirJVM)
         run: |
           tar xf targets.tar
           rm targets.tar
@@ -284,5 +284,5 @@ jobs:
       - name: Submit Dependencies
         uses: scalacenter/sbt-dependency-submission@v2
         with:
-          modules-ignore: root_2.13 root_3 rootjs_2.13 rootjs_3 rootjvm_2.13 rootjvm_3 rootnative_2.13 rootnative_3
+          modules-ignore: http4sstirjs_2.13 http4sstirjs_3 http4sstirnative_2.13 http4sstirnative_3 http4sstirjvm_2.13 http4sstirjvm_3 http4sstir_2.13 http4sstir_3
           configs-ignore: test scala-tool scala-doc-tool test-internal
