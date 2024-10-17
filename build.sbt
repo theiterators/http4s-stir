@@ -127,5 +127,5 @@ lazy val examples = crossProject(JVMPlatform)
       scalatest.value % Test))
   .dependsOn(core, testkit % Test)
 
-lazy val root = tlCrossRootProject.aggregate(core, testkit, examples, coreTests)
+lazy val http4sStir = tlCrossRootProject.aggregate(core, testkit, examples, coreTests)
   .settings(baseSettings *)
