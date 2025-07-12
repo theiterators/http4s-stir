@@ -12,7 +12,11 @@ ThisBuild / githubWorkflowPublishTargetBranches := Seq(RefPredicate.StartsWith(R
   RefPredicate.Equals(Ref.Branch("master")))
 ThisBuild / tlBaseVersion := "0.4"
 ThisBuild / tlCiHeaderCheck := false
-ThisBuild / sonatypeCredentialHost := xerial.sbt.Sonatype.sonatypeLegacy
+ThisBuild / publishTo := {
+  val centralSnapshots = "https://central.sonatype.com/repository/maven-snapshots/"
+  if (isSnapshot.value) Some("central-snapshots" at centralSnapshots)
+  else localStaging.value
+}
 
 lazy val noPublishSettings =
   Seq(
@@ -21,7 +25,6 @@ lazy val noPublishSettings =
 
 lazy val baseSettings = Seq(
   organization := "pl.iterators",
-  sonatypeProfileName := organization.value,
   organizationName := "Iterators",
   organizationHomepage := Some(url("https://www.iteratorshq.com")),
   pomIncludeRepository := const(true),
