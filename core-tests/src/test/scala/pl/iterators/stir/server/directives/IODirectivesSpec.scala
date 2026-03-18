@@ -43,14 +43,16 @@ class IODirectivesSpec extends RoutingSpec with Inside {
     "catch an exception in the success case" in {
       Get() ~> showEx(onComplete(IO.pure("ok")) { throwTestException("EX when ") }) ~> check {
         status shouldEqual Status.InternalServerError
-        responseAs[String] shouldEqual s"Oops. pl.iterators.stir.server.directives.IODirectivesSpec$$TestException: EX when Success(ok)"
+        responseAs[String] shouldEqual
+        s"Oops. pl.iterators.stir.server.directives.IODirectivesSpec$$TestException: EX when Success(ok)"
       }
     }
     "catch an exception in the failure case" in {
-      Get() ~> showEx(
+      Get()                                                                                               ~> showEx(
         onComplete(IO.raiseError[String](new RuntimeException("no"))) { throwTestException("EX when ") }) ~> check {
         status shouldEqual Status.InternalServerError
-        responseAs[String] shouldEqual s"Oops. pl.iterators.stir.server.directives.IODirectivesSpec$$TestException: EX when Failure(java.lang.RuntimeException: no)"
+        responseAs[String] shouldEqual
+        s"Oops. pl.iterators.stir.server.directives.IODirectivesSpec$$TestException: EX when Failure(java.lang.RuntimeException: no)"
       }
     }
   }
@@ -164,10 +166,11 @@ class IODirectivesSpec extends RoutingSpec with Inside {
       }
     }
     "catch an exception during recovery" in {
-      Get() ~> showEx(
+      Get()                                                                                             ~> showEx(
         completeOrRecoverWith(IO.raiseError[String](TestException)) { throwTestException("EX when ") }) ~> check {
         status shouldEqual Status.InternalServerError
-        responseAs[String] shouldEqual s"Oops. pl.iterators.stir.server.directives.IODirectivesSpec$$TestException: EX when pl.iterators.stir.server.directives.IODirectivesSpec$$TestException$$: XXX"
+        responseAs[String] shouldEqual
+        s"Oops. pl.iterators.stir.server.directives.IODirectivesSpec$$TestException: EX when pl.iterators.stir.server.directives.IODirectivesSpec$$TestException$$: XXX"
       }
     }
   }

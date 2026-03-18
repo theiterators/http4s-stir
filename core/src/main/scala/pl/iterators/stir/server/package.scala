@@ -17,7 +17,7 @@ package object server {
       Kleisli[IO, Request[IO], Response[IO]](req =>
         sealedRoute(RequestContext(req)).map {
           case RouteResult.Complete(response) => response
-          case RouteResult.Rejected(_) =>
+          case RouteResult.Rejected(_)        =>
             throw new IllegalStateException("RouteResult.Rejected should not be returned from a sealed route")
         })
     }

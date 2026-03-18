@@ -123,7 +123,7 @@ trait ParameterDirectives extends ToNameReceptacleEnhancements with ParameterDir
       extractRequestContext.flatMap { ctx =>
         onComplete(fsou(ctx.request.uri.query.params.get(paramName))).flatMap {
           case Success(value) if value == requiredValue => pass
-          case Success(value) =>
+          case Success(value)                           =>
             reject(InvalidRequiredValueForQueryParamRejection(paramName, requiredValue.toString, value.toString))
           case _ => reject(MissingQueryParamRejection(paramName))
         }

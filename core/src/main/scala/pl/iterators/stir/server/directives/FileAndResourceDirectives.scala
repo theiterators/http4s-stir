@@ -70,7 +70,7 @@ trait FileAndResourceDirectives {
   def getFromDirectory(directoryName: String): Route =
     extractUnmatchedPath { unmatchedPath =>
       safeDirectoryChildPath(withTrailingSlash(directoryName), unmatchedPath) match {
-        case "" => reject
+        case ""       => reject
         case fileName =>
           getFromFile(fileName)
       }

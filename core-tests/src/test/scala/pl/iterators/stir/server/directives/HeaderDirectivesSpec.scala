@@ -37,11 +37,10 @@ class HeaderDirectivesSpec extends RoutingSpec with Inside {
   }
 
   "The headerValueByType directive" should {
-    val route =
-      (headerValueByType[Origin] & get) { origin =>
-        val hostList = origin.asInstanceOf[HostList]
-        complete(s"The first origin was ${hostList.hosts.head}")
-      }
+    val route = (headerValueByType[Origin] & get) { origin =>
+      val hostList = origin.asInstanceOf[HostList]
+      complete(s"The first origin was ${hostList.hosts.head}")
+    }
     "extract a header if the type is matching" in {
       val host = Origin.Host(Uri.Scheme.http, Uri.RegName("localhost"), Some(8080))
       val originHeader: Origin = HostList(NonEmptyList.one(host))
@@ -168,11 +167,10 @@ class HeaderDirectivesSpec extends RoutingSpec with Inside {
   }
 
   "The optionalHeaderValueByType directive" should {
-    val route =
-      (optionalHeaderValueByType[Origin] & get) {
-        case Some(origin) => complete(s"The first origin was ${origin.asInstanceOf[Origin.HostList].hosts.head}")
-        case None         => complete("No Origin header found.")
-      }
+    val route = (optionalHeaderValueByType[Origin] & get) {
+      case Some(origin) => complete(s"The first origin was ${origin.asInstanceOf[Origin.HostList].hosts.head}")
+      case None         => complete("No Origin header found.")
+    }
     "extract Some(header) if the type is matching" in {
       val host = Origin.Host(Uri.Scheme.http, Uri.RegName("localhost"), Some(8080))
       val originHeader: Origin = HostList(NonEmptyList.one(host))

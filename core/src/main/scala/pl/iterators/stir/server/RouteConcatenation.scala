@@ -7,7 +7,7 @@ trait RouteConcatenation {
   implicit class RouteWithConcatenation(val route: Route) {
     def ~(other: Route): Route = { req =>
       route(req).flatMap {
-        case x: RouteResult.Complete => IO.pure(x)
+        case x: RouteResult.Complete              => IO.pure(x)
         case RouteResult.Rejected(innerRejection) =>
           other(req).map {
             case x: RouteResult.Complete              => x

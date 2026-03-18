@@ -28,11 +28,11 @@ Here's an example in Scala 3 that you can run using scala-cli:
 ```scala 3
 // Main.scala
 //> using dep org.typelevel::cats-effect::3.5.4
-//> using dep org.http4s::http4s-dsl::0.23.28
-//> using dep org.http4s::http4s-ember-server::0.23.28
-//> using dep org.http4s::http4s-circe::0.23.28
-//> using dep io.circe::circe-core::0.14.10
-//> using dep io.circe::circe-generic::0.14.10
+//> using dep org.http4s::http4s-dsl::0.23.33
+//> using dep org.http4s::http4s-ember-server::0.23.33
+//> using dep org.http4s::http4s-circe::0.23.33
+//> using dep io.circe::circe-core::0.14.15
+//> using dep io.circe::circe-generic::0.14.15
 //> using dep pl.iterators::http4s-stir::0.4.0
 
 import org.http4s.Status
@@ -110,7 +110,7 @@ Or maybe if you want, you can compile it to JS file: `scala-cli --power package 
 // Main.test.scala
 //> using test.dep org.specs2::specs2-core:5.5.8
 //> using test.dep pl.iterators::http4s-stir-testkit:0.4.0
-//> using test.dep org.http4s::http4s-circe:0.23.28
+//> using test.dep org.http4s::http4s-circe:0.23.33
 
 import org.http4s.Status
 import org.http4s.circe.CirceEntityEncoder.*

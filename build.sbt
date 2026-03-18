@@ -1,5 +1,5 @@
-val scala_2_13 = "2.13.15"
-val scala_3 = "3.3.4"
+val scala_2_13 = "2.13.18"
+val scala_3 = "3.3.7"
 val mainScalaVersion = scala_3
 val supportedScalaVersions = Seq(scala_2_13, scala_3)
 
@@ -57,19 +57,19 @@ lazy val baseSettings = Seq(
   crossScalaVersions := supportedScalaVersions,
   scalafmtOnCompile := true)
 
-val http4sDsl = Def.setting("org.http4s" %%% "http4s-dsl" % "0.23.28")
-val http4sEmber = Def.setting("org.http4s" %%% "http4s-ember-server" % "0.23.28")
+val http4sDsl = Def.setting("org.http4s" %%% "http4s-dsl" % "0.23.33")
+val http4sEmber = Def.setting("org.http4s" %%% "http4s-ember-server" % "0.23.33")
 
-val fs2Core = Def.setting("co.fs2" %%% "fs2-core" % "3.11.0")
-val fs2Io = Def.setting("co.fs2" %%% "fs2-io" % "3.11.0")
+val fs2Core = Def.setting("co.fs2" %%% "fs2-core" % "3.12.2")
+val fs2Io = Def.setting("co.fs2" %%% "fs2-io" % "3.12.2")
 
 val http4sClient = Def.setting(
-  "org.http4s" %%% "http4s-ember-client" % "0.23.28")
+  "org.http4s" %%% "http4s-ember-client" % "0.23.33")
 
-val circeCore = Def.setting("io.circe" %%% "circe-core" % "0.14.8")
-val circeGeneric = Def.setting("io.circe" %%% "circe-generic" % "0.14.10")
-val circeParser = Def.setting("io.circe" %%% "circe-parser" % "0.14.10")
-val http4sCirce = Def.setting("org.http4s" %%% "http4s-circe" % "0.23.28")
+val circeCore = Def.setting("io.circe" %%% "circe-core" % "0.14.15")
+val circeGeneric = Def.setting("io.circe" %%% "circe-generic" % "0.14.15")
+val circeParser = Def.setting("io.circe" %%% "circe-parser" % "0.14.15")
+val http4sCirce = Def.setting("org.http4s" %%% "http4s-circe" % "0.23.33")
 
 val scalatest = Def.setting("org.scalatest" %%% "scalatest" % "3.2.19")
 val specs2 = Def.setting("org.specs2" %%% "specs2-core" % "4.20.6")

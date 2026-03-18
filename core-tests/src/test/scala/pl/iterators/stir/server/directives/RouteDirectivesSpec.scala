@@ -85,7 +85,7 @@ class RouteDirectivesSpec extends AnyWordSpec with GenericRoutingSpec {
             complete {
 
               registerUser(name).map[ToResponseMarshallable] {
-                case Registered(_) => ""
+                case Registered(_)     => ""
                 case AlreadyRegistered =>
                   import org.http4s.circe.CirceEntityEncoder._
 

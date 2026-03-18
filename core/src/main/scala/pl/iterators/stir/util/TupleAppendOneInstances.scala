@@ -102,8 +102,9 @@ private[util] abstract class TupleAppendOneInstances {
           prefix._10, prefix._11, prefix._12, prefix._13, last)
     }
   implicit def append14[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, L]
-      : Aux[Tuple14[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14], L, Tuple15[T1, T2, T3, T4, T5, T6, T7,
-        T8, T9, T10, T11, T12, T13, T14, L]] =
+      : Aux[Tuple14[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14], L,
+        Tuple15[T1, T2, T3, T4, T5, T6, T7,
+          T8, T9, T10, T11, T12, T13, T14, L]] =
     new AppendOne[Tuple14[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14], L] {
       type Out = Tuple15[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, L]
       def apply(prefix: Tuple14[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14], last: L)
@@ -112,8 +113,9 @@ private[util] abstract class TupleAppendOneInstances {
           prefix._10, prefix._11, prefix._12, prefix._13, prefix._14, last)
     }
   implicit def append15[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, L]
-      : Aux[Tuple15[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15], L, Tuple16[T1, T2, T3, T4, T5,
-        T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, L]] =
+      : Aux[Tuple15[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15], L,
+        Tuple16[T1, T2, T3, T4, T5,
+          T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, L]] =
     new AppendOne[Tuple15[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15], L] {
       type Out = Tuple16[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, L]
       def apply(prefix: Tuple15[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15], last: L)
@@ -122,8 +124,9 @@ private[util] abstract class TupleAppendOneInstances {
         prefix._13, prefix._14, prefix._15, last)
     }
   implicit def append16[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, L]
-      : Aux[Tuple16[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16], L, Tuple17[T1, T2, T3, T4,
-        T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, L]] =
+      : Aux[Tuple16[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16], L,
+        Tuple17[T1, T2, T3, T4,
+          T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, L]] =
     new AppendOne[Tuple16[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16], L] {
       type Out = Tuple17[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, L]
       def apply(prefix: Tuple16[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16], last: L)
@@ -132,8 +135,9 @@ private[util] abstract class TupleAppendOneInstances {
         prefix._12, prefix._13, prefix._14, prefix._15, prefix._16, last)
     }
   implicit def append17[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, L]
-      : Aux[Tuple17[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17], L, Tuple18[T1, T2, T3,
-        T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, L]] =
+      : Aux[Tuple17[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17], L,
+        Tuple18[T1, T2, T3,
+          T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, L]] =
     new AppendOne[Tuple17[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17], L] {
       type Out = Tuple18[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, L]
       def apply(prefix: Tuple17[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17], last: L)
@@ -142,8 +146,9 @@ private[util] abstract class TupleAppendOneInstances {
         prefix._12, prefix._13, prefix._14, prefix._15, prefix._16, prefix._17, last)
     }
   implicit def append18[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, L]
-      : Aux[Tuple18[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18], L, Tuple19[T1, T2,
-        T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, L]] =
+      : Aux[Tuple18[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18], L,
+        Tuple19[T1, T2,
+          T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, L]] =
     new AppendOne[Tuple18[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18], L] {
       type Out = Tuple19[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, L]
       def apply(prefix: Tuple18[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18],
@@ -153,7 +158,8 @@ private[util] abstract class TupleAppendOneInstances {
           last)
     }
   implicit def append19[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, L]
-      : Aux[Tuple19[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19], L, Tuple20[
+      : Aux[Tuple19[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19], L,
+        Tuple20[
           T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, L]] =
     new AppendOne[Tuple19[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19], L] {
       type Out = Tuple20[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, L]

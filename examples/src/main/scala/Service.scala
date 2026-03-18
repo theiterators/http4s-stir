@@ -55,7 +55,7 @@ object Main extends IOApp.Simple {
                   complete {
                     Option(beers.get(beer.id)) match { // yes, race condition here :-D
                       case Some(_) => Status.Conflict -> "Beer already exists"
-                      case None =>
+                      case None    =>
                         beers.put(beer.id, beer)
                         Status.Created -> beer
                     }

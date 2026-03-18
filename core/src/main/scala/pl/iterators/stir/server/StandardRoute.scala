@@ -12,7 +12,7 @@ abstract class StandardRoute extends Route {
 object StandardRoute {
   def apply(route: Route): StandardRoute = route match {
     case x: StandardRoute => x
-    case x => new StandardRoute {
+    case x                => new StandardRoute {
         def apply(ctx: RequestContext) = x(ctx)
       }
   }

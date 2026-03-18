@@ -162,8 +162,9 @@ private[util] abstract class TupleFoldInstances {
     }
   implicit def t19[In, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, X, T19, Op](
       implicit fold: Aux[In, Tuple18[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18],
-        Op, X], f: Case[X, T19, Op]): Aux[In, Tuple19[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15,
-    T16, T17, T18, T19], Op, f.Out] =
+        Op, X], f: Case[X, T19, Op]): Aux[In,
+    Tuple19[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15,
+      T16, T17, T18, T19], Op, f.Out] =
     new FoldLeft[In, Tuple19[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19],
       Op] {
       type Out = f.Out
@@ -175,9 +176,11 @@ private[util] abstract class TupleFoldInstances {
     }
   implicit def t20[
       In, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, X, T20, Op](
-      implicit fold: Aux[In, Tuple19[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18,
-        T19], Op, X], f: Case[X, T20, Op]): Aux[In, Tuple20[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14,
-    T15, T16, T17, T18, T19, T20], Op, f.Out] =
+      implicit fold: Aux[In,
+        Tuple19[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18,
+          T19], Op, X], f: Case[X, T20, Op]): Aux[In,
+    Tuple20[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14,
+      T15, T16, T17, T18, T19, T20], Op, f.Out] =
     new FoldLeft[In, Tuple20[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20],
       Op] {
       type Out = f.Out
@@ -189,11 +192,14 @@ private[util] abstract class TupleFoldInstances {
     }
   implicit def t21[
       In, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, X, T21, Op](
-      implicit fold: Aux[In, Tuple20[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18,
-        T19, T20], Op, X], f: Case[X, T21, Op]): Aux[In, Tuple21[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13,
-    T14, T15, T16, T17, T18, T19, T20, T21], Op, f.Out] =
-    new FoldLeft[In, Tuple21[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20,
-      T21], Op] {
+      implicit fold: Aux[In,
+        Tuple20[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18,
+          T19, T20], Op, X], f: Case[X, T21, Op]): Aux[In,
+    Tuple21[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13,
+      T14, T15, T16, T17, T18, T19, T20, T21], Op, f.Out] =
+    new FoldLeft[In,
+      Tuple21[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20,
+        T21], Op] {
       type Out = f.Out
       def apply(zero: In,
           t: Tuple21[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21]) =
@@ -203,11 +209,14 @@ private[util] abstract class TupleFoldInstances {
     }
   implicit def t22[
       In, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, X, T22, Op](
-      implicit fold: Aux[In, Tuple21[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18,
-        T19, T20, T21], Op, X], f: Case[X, T22, Op]): Aux[In, Tuple22[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12,
-    T13, T14, T15, T16, T17, T18, T19, T20, T21, T22], Op, f.Out] =
-    new FoldLeft[In, Tuple22[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20,
-      T21, T22], Op] {
+      implicit fold: Aux[In,
+        Tuple21[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18,
+          T19, T20, T21], Op, X], f: Case[X, T22, Op]): Aux[In,
+    Tuple22[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12,
+      T13, T14, T15, T16, T17, T18, T19, T20, T21, T22], Op, f.Out] =
+    new FoldLeft[In,
+      Tuple22[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20,
+        T21, T22], Op] {
       type Out = f.Out
       def apply(zero: In,
           t: Tuple22[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21,
