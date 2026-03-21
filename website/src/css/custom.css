@@ -1,0 +1,162 @@
+/**
+ * Any CSS included here will be global. The classic template
+ * bundles Infima by default. Infima is a CSS framework designed to
+ * work well for content-centric websites.
+ */
+
+/* Import Montserrat and Open Sans fonts */
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@200;300;400;700&family=Open+Sans:wght@400;700&display=swap');
+
+/* You can override the default Infima variables here. */
+:root {
+  /* Brand Colors */
+  --ifm-color-primary: #ff7700; /* Fire Orange */
+  --ifm-color-primary-dark: #e66a00;
+  --ifm-color-primary-darker: #d96400;
+  --ifm-color-primary-darkest: #b35300;
+  --ifm-color-primary-light: #ff851a;
+  --ifm-color-primary-lighter: #ff8c26;
+  --ifm-color-primary-lightest: #ff9f4d;
+
+  /* Secondary Colors */
+  --ifm-color-secondary: #0d1654; /* Royal Blue */
+  --ifm-color-secondary-dark: #0c144c;
+  --ifm-color-secondary-darker: #0b1247;
+  --ifm-color-secondary-darkest: #090f3b;
+  --ifm-color-secondary-light: #0e185c;
+  --ifm-color-secondary-lighter: #0f1961;
+  --ifm-color-secondary-lightest: #111c6d;
+
+  /* Tertiary Color */
+  --ifm-color-gray: #191d1e; /* Space Gray */
+
+  /* Font settings */
+  --ifm-font-family-base: 'Montserrat', sans-serif;
+  --ifm-heading-font-family: 'Montserrat', sans-serif;
+  --ifm-font-weight-base: 300;
+  --ifm-heading-font-weight: 700;
+  --ifm-code-font-size: 95%;
+}
+
+.margin-left--md {
+  margin-left: 1rem;
+}
+
+.docusaurus-highlight-code-line {
+  background-color: rgba(0, 0, 0, 0.1);
+  display: block;
+  margin: 0 calc(-1 * var(--ifm-pre-padding));
+  padding: 0 var(--ifm-pre-padding);
+}
+
+html[data-theme='dark'] .docusaurus-highlight-code-line {
+  background-color: rgba(0, 0, 0, 0.3);
+}
+
+/* Additional styling for headings and content */
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Montserrat', sans-serif;
+  font-weight: 700;
+  color: var(--ifm-color-secondary);
+}
+
+h1 {
+  font-size: 2.3rem;
+}
+
+h2 {
+  font-size: 1.6rem;
+}
+
+h3 {
+  font-size: 1.2rem;
+}
+
+.navbar {
+  background-color: white;
+}
+
+.navbar__title, .navbar__link {
+  font-family: 'Montserrat', sans-serif;
+  font-weight: 400;
+  color: var(--ifm-color-secondary);
+}
+
+.navbar__brand:hover {
+  color: var(--ifm-color-primary);
+}
+
+.footer {
+  background-color: var(--ifm-color-secondary);
+  color: white;
+}
+
+.footer__link-item {
+  color: white;
+  opacity: 0.8;
+}
+
+.footer__link-item:hover {
+  color: var(--ifm-color-primary);
+  opacity: 1;
+}
+
+/* Dark mode adjustments */
+html[data-theme='dark'] {
+  --ifm-background-color: #1e2021;
+  --ifm-background-surface-color: #252a2b;
+}
+
+html[data-theme='dark'] h1,
+html[data-theme='dark'] h2,
+html[data-theme='dark'] h3,
+html[data-theme='dark'] h4,
+html[data-theme='dark'] h5,
+html[data-theme='dark'] h6 {
+  color: white;
+}
+
+html[data-theme='dark'] .navbar {
+  background-color: var(--ifm-color-secondary-darkest);
+}
+
+html[data-theme='dark'] .navbar__title,
+html[data-theme='dark'] .navbar__link {
+  color: white;
+}
+
+/* Improve sidebar styling */
+.menu__link {
+  font-family: 'Montserrat', sans-serif;
+  font-weight: 400;
+  color: var(--ifm-color-secondary);
+}
+
+.menu__link--active {
+  font-weight: 700;
+  color: var(--ifm-color-primary);
+}
+
+.menu__list-item-collapsible {
+  font-weight: 500;
+}
+
+.menu__list-item-collapsible:hover {
+  background-color: rgba(255, 119, 0, 0.05);
+}
+
+.menu__link:hover {
+  color: var(--ifm-color-primary);
+}
+
+html[data-theme='dark'] .menu__link {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+html[data-theme='dark'] .menu__link--active {
+  color: var(--ifm-color-primary);
+}
+
+html[data-theme='dark'] .menu__list-item-collapsible:hover {
+  background-color: rgba(255, 119, 0, 0.1);
+}

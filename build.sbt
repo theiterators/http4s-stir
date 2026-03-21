@@ -130,5 +130,20 @@ lazy val examples = crossProject(JVMPlatform)
       scalatest.value % Test))
   .dependsOn(core, testkit % Test)
 
-lazy val http4sStir = tlCrossRootProject.aggregate(core, testkit, examples, coreTests)
+lazy val docs = project
+  .in(file("stir-docs"))
+  .dependsOn(core.jvm % "compile->compile")
+  .enablePlugins(MdocPlugin, DocusaurusPlugin)
+  .settings(baseSettings *)
+  .settings(noPublishSettings *)
+  .settings(
+    name := "docs",
+    description := "http4s-stir documentation",
+    moduleName := "stir-docs",
+    libraryDependencies ++= Seq(circeCore.value, circeGeneric.value, circeParser.value, http4sCirce.value),
+    mdocVariables := Map(
+      "VERSION" -> version.value
+    ))
+
+lazy val http4sStir = tlCrossRootProject.aggregate(core, testkit, examples, coreTests, docs)
   .settings(baseSettings *)
