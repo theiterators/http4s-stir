@@ -19,7 +19,10 @@ jobs:
           distribution: temurin
       - uses: sbt/setup-sbt@v1
       - uses: olafurpg/setup-gpg@v3
-      - run: sbt '++2.13.18; docs/docusaurusPublishGhpages'
+      - run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          sbt '++2.13.18; docs/docusaurusPublishGhpages'
         env:
           GIT_DEPLOY_KEY: ${{ secrets.GIT_DEPLOY_KEY }}
       - name: Check git diff
