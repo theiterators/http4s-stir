@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.png" alt="http4s-stir" width="180" />
+</p>
+
 # http4s-stir
 
 [![Maven Central](https://img.shields.io/maven-central/v/pl.iterators/http4s-stir_3)](https://central.sonatype.com/artifact/pl.iterators/http4s-stir_3)

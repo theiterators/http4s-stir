@@ -20,7 +20,7 @@ const config = {
   trailingSlash: false,
   onBrokenLinks: 'throw',
   onBrokenMarkdownLinks: 'warn',
-  favicon: 'img/favicon.ico',
+  favicon: 'https://raw.githubusercontent.com/theiterators/http4s-stir/master/logo.png',
   organizationName: organizationName,
   projectName: 'http4s-stir',
 
@@ -48,11 +48,12 @@ const config = {
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
+      image: 'https://raw.githubusercontent.com/theiterators/http4s-stir/master/logo.png',
       navbar: {
         title: navbarTitle,
         logo: {
-          alt: 'Logo',
-          src: 'img/favicon.ico',
+          alt: 'http4s-stir',
+          src: 'https://raw.githubusercontent.com/theiterators/http4s-stir/master/logo.png',
         },
         items: [
           {
