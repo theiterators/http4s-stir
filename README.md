@@ -137,6 +137,20 @@ Run with `scala-cli test .`.
 
 For a more comprehensive example showcasing additional directives, see [examples/Service.scala](https://github.com/theiterators/http4s-stir/blob/master/examples/src/main/scala/Service.scala). Run it locally with `sbt ~examples/reStart`.
 
+## Documentation
+
+Full documentation is available at [theiterators.github.io/http4s-stir](https://theiterators.github.io/http4s-stir/).
+
+- [Installation](https://theiterators.github.io/http4s-stir/installation)
+- [Quick Start](https://theiterators.github.io/http4s-stir/quick-start)
+- [Route Composition](https://theiterators.github.io/http4s-stir/route-composition)
+- [Directives](https://theiterators.github.io/http4s-stir/directives/directives-route)
+- [Rejection Handling](https://theiterators.github.io/http4s-stir/rejection-handling)
+- [Exception Handling](https://theiterators.github.io/http4s-stir/exception-handling)
+- [Testing](https://theiterators.github.io/http4s-stir/testing)
+- [http4s-dsl Compatibility](https://theiterators.github.io/http4s-stir/http4s-compat)
+- [Migration from Pekko/Akka HTTP](https://theiterators.github.io/http4s-stir/migration)
+
 ## http4s-dsl compatibility
 
 There's a compatibility layer, [`Http4sDirectives`](https://github.com/theiterators/http4s-stir/blob/master/core/src/main/scala/pl/iterators/stir/server/directives/Http4sDirectives.scala), that lets you embed existing http4s-dsl routes within stir routes.
