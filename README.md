@@ -15,8 +15,8 @@ Cross-compiled for JVM, Scala.js, and Scala Native. Supports Scala 2.13 and Scal
 
 ```scala
 // build.sbt
-libraryDependencies += "pl.iterators" %% "http4s-stir" % "0.4.1"
-libraryDependencies += "pl.iterators" %% "http4s-stir-testkit" % "0.4.1" % Test
+libraryDependencies += "pl.iterators" %% "http4s-stir" % "0.5.0"
+libraryDependencies += "pl.iterators" %% "http4s-stir-testkit" % "0.5.0" % Test
 ```
 
 ## Quick example
@@ -25,7 +25,7 @@ A complete example you can run with `scala-cli run .`:
 
 ```scala 3
 // Main.scala
-//> using dep pl.iterators::http4s-stir::0.4.1
+//> using dep pl.iterators::http4s-stir::0.5.0
 //> using dep org.http4s::http4s-ember-server::0.23.33
 //> using dep org.http4s::http4s-circe::0.23.33
 //> using dep io.circe::circe-generic::0.14.15
@@ -95,7 +95,7 @@ http4s-stir includes a test kit with familiar `~>` routing test syntax:
 
 ```scala 3
 // Main.test.scala
-//> using test.dep pl.iterators::http4s-stir-testkit:0.4.1
+//> using test.dep pl.iterators::http4s-stir-testkit:0.5.0
 //> using test.dep org.http4s::http4s-circe:0.23.33
 //> using test.dep org.specs2::specs2-core:5.5.8
 

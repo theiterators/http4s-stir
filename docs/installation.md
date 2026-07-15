@@ -12,8 +12,8 @@ Add the core library and, optionally, the testkit:
 
 ```scala
 // build.sbt
-libraryDependencies += "pl.iterators" %% "http4s-stir" % "0.4.1"
-libraryDependencies += "pl.iterators" %% "http4s-stir-testkit" % "0.4.1" % Test
+libraryDependencies += "pl.iterators" %% "http4s-stir" % "0.5.0"
+libraryDependencies += "pl.iterators" %% "http4s-stir-testkit" % "0.5.0" % Test
 ```
 
 You will also need http4s server and JSON dependencies. A typical set:
@@ -29,20 +29,20 @@ libraryDependencies ++= Seq(
 ## scala-cli
 
 ```scala
-//> using dep pl.iterators::http4s-stir::0.4.1
+//> using dep pl.iterators::http4s-stir::0.5.0
 ```
 
 For tests:
 
 ```scala
-//> using test.dep pl.iterators::http4s-stir-testkit::0.4.1
+//> using test.dep pl.iterators::http4s-stir-testkit::0.5.0
 ```
 
 ## Mill
 
 ```scala
 def ivyDeps = Agg(
-  ivy"pl.iterators::http4s-stir:0.4.1"
+  ivy"pl.iterators::http4s-stir:0.5.0"
 )
 ```
 
@@ -51,7 +51,7 @@ def ivyDeps = Agg(
 http4s-stir is cross-published for Scala.js and Scala Native. In SBT cross-projects, use `%%%` instead of `%%`:
 
 ```scala
-libraryDependencies += "pl.iterators" %%% "http4s-stir" % "0.4.1"
+libraryDependencies += "pl.iterators" %%% "http4s-stir" % "0.5.0"
 ```
 
 This selects the correct artifact for your target platform automatically.
