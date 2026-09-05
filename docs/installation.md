@@ -20,8 +20,8 @@ You will also need http4s server and JSON dependencies. A typical set:
 
 ```scala
 libraryDependencies ++= Seq(
-  "org.http4s" %% "http4s-ember-server" % "0.23.33",
-  "org.http4s" %% "http4s-circe"        % "0.23.33",
+  "org.http4s" %% "http4s-ember-server" % "0.23.36",
+  "org.http4s" %% "http4s-circe"        % "0.23.36",
   "io.circe"   %% "circe-generic"       % "0.14.15"
 )
 ```

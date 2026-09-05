@@ -1,13 +1,13 @@
-addSbtPlugin("io.spray" % "sbt-revolver" % "0.10.0")
+addSbtPlugin("com.indoorvivants" % "sbt-revolver" % "0.11.2")
 
-addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.6.1")
+addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.6.2")
 
 addSbtPlugin("org.scala-js" % "sbt-scalajs" % "1.22.0")
-addSbtPlugin("org.portable-scala" % "sbt-scalajs-crossproject" % "1.3.2")
-addSbtPlugin("org.portable-scala" % "sbt-scala-native-crossproject" % "1.3.2")
+addSbtPlugin("org.portable-scala" % "sbt-scalajs-crossproject" % "1.4.0")
+addSbtPlugin("org.portable-scala" % "sbt-scala-native-crossproject" % "1.4.0")
 addSbtPlugin("org.scala-native" % "sbt-scala-native" % "0.5.12")
 addSbtPlugin("org.typelevel" % "sbt-typelevel-ci-release" % "0.8.7")
-addSbtPlugin("org.scalameta" % "sbt-mdoc" % "2.9.0")
+addSbtPlugin("org.scalameta" % "sbt-mdoc" % "2.9.2")
 addSbtPlugin("org.jmotor.sbt" % "sbt-dependency-updates" % "1.2.9")
 
 libraryDependencySchemes += "com.lihaoyi" %% "geny" % VersionScheme.Always
