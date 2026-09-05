@@ -1,5 +1,7 @@
+import com.typesafe.tools.mima.core._
+
 val scala_2_13 = "2.13.18"
-val scala_3 = "3.3.8"
+val scala_3 = "3.9.0"
 val mainScalaVersion = scala_3
 val supportedScalaVersions = Seq(scala_2_13, scala_3)
 
@@ -7,7 +9,7 @@ ThisBuild / crossScalaVersions := supportedScalaVersions
 ThisBuild / scalaVersion := mainScalaVersion
 
 ThisBuild / versionScheme := Some("early-semver")
-ThisBuild / githubWorkflowJavaVersions := Seq(JavaSpec.temurin("11"), JavaSpec.temurin("17"))
+ThisBuild / githubWorkflowJavaVersions := Seq(JavaSpec.temurin("17"), JavaSpec.temurin("21"))
 ThisBuild / githubWorkflowPublishTargetBranches := Seq(RefPredicate.StartsWith(Ref.Tag("v")),
   RefPredicate.Equals(Ref.Branch("master")))
 ThisBuild / tlBaseVersion := "0.5"
@@ -85,7 +87,13 @@ lazy val core = crossProject(JVMPlatform, NativePlatform, JSPlatform)
     name := "http4s-stir",
     libraryDependencies ++= Seq(http4sDsl.value, http4sEmber.value) ++ Seq(fs2Core.value,
       fs2Io.value) ++ Seq(scalaXml.value),
-    Compile / doc / scalacOptions -= "-Xfatal-warnings")
+    Compile / doc / scalacOptions -= "-Xfatal-warnings",
+    // Compiler codegen artifacts that changed between Scala 3.3 and 3.9 and are not part of
+    // the public API: static initializers (<clinit>) of objects, which only the runtime
+    // invokes, and lifted local methods with mangled `$$_$` names, which are synthetic.
+    mimaBinaryIssueFilters ++= Seq(
+      ProblemFilters.exclude[DirectMissingMethodProblem]("pl.iterators.stir.*.<clinit>"),
+      ProblemFilters.exclude[DirectMissingMethodProblem]("pl.iterators.stir.*$$_$*")))
 
 lazy val coreTests = crossProject(JVMPlatform)
   .withoutSuffixFor(JVMPlatform)

@@ -26,8 +26,8 @@ A complete example you can run with `scala-cli run .`:
 ```scala 3
 // Main.scala
 //> using dep pl.iterators::http4s-stir::0.5.0
-//> using dep org.http4s::http4s-ember-server::0.23.33
-//> using dep org.http4s::http4s-circe::0.23.33
+//> using dep org.http4s::http4s-ember-server::0.23.36
+//> using dep org.http4s::http4s-circe::0.23.36
 //> using dep io.circe::circe-generic::0.14.15
 //> using dep org.typelevel::cats-effect::3.7.0
 
@@ -96,7 +96,7 @@ http4s-stir includes a test kit with familiar `~>` routing test syntax:
 ```scala 3
 // Main.test.scala
 //> using test.dep pl.iterators::http4s-stir-testkit:0.5.0
-//> using test.dep org.http4s::http4s-circe:0.23.33
+//> using test.dep org.http4s::http4s-circe:0.23.36
 //> using test.dep org.specs2::specs2-core:5.5.8
 
 import org.http4s.Status
