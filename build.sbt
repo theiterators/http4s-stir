@@ -7,7 +7,7 @@ ThisBuild / crossScalaVersions := supportedScalaVersions
 ThisBuild / scalaVersion := mainScalaVersion
 
 ThisBuild / versionScheme := Some("early-semver")
-ThisBuild / githubWorkflowJavaVersions := Seq(JavaSpec.temurin("11"), JavaSpec.temurin("17"))
+ThisBuild / githubWorkflowJavaVersions := Seq(JavaSpec.temurin("17"), JavaSpec.temurin("21"))
 ThisBuild / githubWorkflowPublishTargetBranches := Seq(RefPredicate.StartsWith(Ref.Tag("v")),
   RefPredicate.Equals(Ref.Branch("master")))
 ThisBuild / tlBaseVersion := "0.5"
