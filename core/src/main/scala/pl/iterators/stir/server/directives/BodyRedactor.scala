@@ -27,12 +27,17 @@ final case class LoggedBody(message: Message[IO], bytes: Chunk[Byte], truncated:
 
   private def mediaType: Option[MediaType] = message.contentType.map(_.mediaType)
 
-  /** `application/json` or any `*&#47;*+json`. */
-  def isJson: Boolean = mediaType.exists(mt => mt == MediaType.application.json || mt.subType.endsWith("+json"))
+  /**
+   * `application/json` or any `*&#47;*+json`. Like `isForm` and `isPlainText` it compares the type and subtype only:
+   * http4s keeps every parameter but `charset` on the media type and its `equals` compares them, so `==` would
+   * reject `application/json; version=2`.
+   */
+  def isJson: Boolean =
+    mediaType.exists(mt => (mt.mainType == "application" && mt.subType == "json") || mt.subType.endsWith("+json"))
 
-  def isForm: Boolean = mediaType.contains(MediaType.application.`x-www-form-urlencoded`)
+  def isForm: Boolean = mediaType.exists(mt => mt.mainType == "application" && mt.subType == "x-www-form-urlencoded")
 
-  def isPlainText: Boolean = mediaType.contains(MediaType.text.plain)
+  def isPlainText: Boolean = mediaType.exists(mt => mt.mainType == "text" && mt.subType == "plain")
 
   /** The http4s rule: a binary media type that is not JSON. */
   def isBinary: Boolean = mediaType.exists(_.binary) && !isJson
@@ -43,6 +48,8 @@ final case class LoggedBody(message: Message[IO], bytes: Chunk[Byte], truncated:
  * constructor and `orElse` chains redactors through `Skip` (design spec, section 5.4).
  */
 sealed abstract class BodyRedactor {
+
+  /** Never throws: an exception from user code, thrown or raised, is a failed `IO` (design spec, section 9). */
   def redact(body: LoggedBody): IO[BodyRedactor.Outcome]
 
   /** `that` is consulted when this redactor yields `Skip`. */
@@ -71,7 +78,7 @@ object BodyRedactor {
   val Mask: String = "REDACTED"
 
   private final class Impl(run: LoggedBody => IO[Outcome]) extends BodyRedactor {
-    def redact(body: LoggedBody): IO[Outcome] = run(body)
+    def redact(body: LoggedBody): IO[Outcome] = IO.defer(run(body))
   }
 
   private[directives] def unguarded(run: LoggedBody => IO[Outcome]): BodyRedactor = new Impl(run)

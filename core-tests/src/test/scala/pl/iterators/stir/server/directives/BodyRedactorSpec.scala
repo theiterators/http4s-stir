@@ -4,9 +4,10 @@ import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import fs2.Chunk
 import org.http4s.headers.`Content-Type`
-import org.http4s.{ Charset, MediaType, Method, Request, Response, Status, Uri }
+import org.http4s.{ Charset, Header, MediaType, Method, Request, Response, Status, Uri }
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
+import org.typelevel.ci.CIString
 import pl.iterators.stir.server.directives.BodyRedactor._
 
 class BodyRedactorSpec extends AnyWordSpec with Matchers {
@@ -20,6 +21,11 @@ class BodyRedactorSpec extends AnyWordSpec with Matchers {
   def form(text: String, truncated: Boolean = false) =
     body(text, MediaType.application.`x-www-form-urlencoded`, truncated)
   def run(r: BodyRedactor, b: LoggedBody): Outcome = r.redact(b).unsafeRunSync()
+  // A request whose Content-Type is the given wire text, which http4s parses on demand as it does for a real request.
+  def wire(contentType: String, text: String = "x"): LoggedBody = LoggedBody(
+    Request[IO](Method.POST, Uri.unsafeFromString("/x")).putHeaders(Header.Raw(CIString("Content-Type"), contentType)),
+    Chunk.array(text.getBytes), truncated = false)
+  def kinds(b: LoggedBody) = (b.isJson, b.isForm, b.isPlainText, b.isBinary)
 
   "LoggedBody" should {
     "decode text with the message charset, UTF-8 when absent" in {
@@ -32,6 +38,7 @@ class BodyRedactorSpec extends AnyWordSpec with Matchers {
       val j = json("{}")
       (j.isJson, j.isForm, j.isPlainText, j.isBinary) shouldEqual ((true, false, false, false))
       body("{}", MediaType.unsafeParse("application/vnd.api+json")).isJson shouldBe true
+      body("{}", MediaType.unsafeParse("application/vnd.api+json")).isBinary shouldBe false
       val f = form("a=1")
       (f.isJson, f.isForm, f.isBinary) shouldEqual ((false, true, false))
       body("x", MediaType.text.plain).isPlainText shouldBe true
@@ -39,6 +46,13 @@ class BodyRedactorSpec extends AnyWordSpec with Matchers {
       val noType =
         LoggedBody(Request[IO](Method.POST, Uri.unsafeFromString("/x")), Chunk.array("x".getBytes), truncated = false)
       (noType.isJson, noType.isForm, noType.isPlainText, noType.isBinary) shouldEqual ((false, false, false, false))
+      // http4s keeps every parameter but charset on the media type, and MediaType.equals compares them
+      kinds(wire("application/json; version=2")) shouldEqual ((true, false, false, false))
+      kinds(wire("application/json; odata.metadata=minimal; charset=utf-8")) shouldEqual ((true, false, false, false))
+      kinds(wire("application/vnd.api+json; ext=bulk")) shouldEqual ((true, false, false, false))
+      kinds(wire("application/x-www-form-urlencoded; foo=bar")) shouldEqual ((false, true, false, false))
+      kinds(wire("text/plain; format=flowed")) shouldEqual ((false, false, true, false))
+      kinds(wire("Application/JSON")) shouldEqual ((true, false, false, false))
     }
     "expose the request and not a response" in {
       json("{}", truncated = false).request.map(_.uri.path.renderString) shouldEqual Some("/x")
@@ -68,6 +82,12 @@ class BodyRedactorSpec extends AnyWordSpec with Matchers {
       Text("""{"password":"REDACTED"}""", None, incomplete = true)
       run(jsonKeys(SensitiveNames.default), form("password=x")) shouldEqual Skip
       run(jsonKeys(SensitiveNames.default), body("""{"password":"x"}""", MediaType.text.plain)) shouldEqual Skip
+    }
+    "apply the content-type redactors whatever parameters the content type carries" in {
+      val chain = jsonKeys(SensitiveNames.default).orElse(formFields(SensitiveNames.default)).orElse(passThrough)
+      run(chain, wire("application/json; version=2", """{"password":"x"}""")) shouldEqual
+      Text("""{"password":"REDACTED"}""")
+      run(chain, wire("application/x-www-form-urlencoded; foo=bar", "password=x")) shouldEqual Text("password=REDACTED")
     }
     "mask JSON keys decoded with the body charset" in {
       val latin =
@@ -131,10 +151,14 @@ class BodyRedactorSpec extends AnyWordSpec with Matchers {
       run(adapter, json("abc", truncated = true)) shouldEqual Hidden()
     }
     "fail the IO when user code throws, instead of logging raw content" in {
-      val boom = BodyRedactor(_ => throw new IllegalStateException("boom"))
-      boom.redact(json("{}")).attempt.unsafeRunSync().left.map(_.getMessage) shouldEqual Left("boom")
-      val chain = when(_ => throw new IllegalStateException("pred"))(hidden).orElse(passThrough)
-      IO.defer(chain.redact(json("{}"))).attempt.unsafeRunSync().left.map(_.getMessage) shouldEqual Left("pred")
+      // redact itself must return the failed IO: no IO.defer around it, a synchronous throw would escape this helper
+      def failure(r: BodyRedactor): Either[String, Outcome] =
+        r.redact(json("{}")).attempt.unsafeRunSync().left.map(_.getMessage)
+      failure(BodyRedactor(_ => throw new IllegalStateException("boom"))) shouldEqual Left("boom")
+      failure(when(_ => throw new IllegalStateException("pred"))(hidden).orElse(passThrough)) shouldEqual Left("pred")
+      failure(when(_ => throw new IllegalStateException("pred"))(passThrough)) shouldEqual Left("pred")
+      failure(eval(_ => throw new IllegalStateException("boom"))) shouldEqual Left("boom")
+      failure(fromLogBodyText(_ => throw new IllegalStateException("boom"))) shouldEqual Left("boom")
     }
     "share one mask with the scanner and the URI redactor" in {
       Mask shouldEqual "REDACTED"
