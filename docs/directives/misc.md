@@ -178,11 +178,14 @@ and `withBodyRedactor` replace one (the predicate, or the name-based body maskin
 not `Skip`). `BodyRedactor` offers `hidden`, `passThrough`, `jsonKeys`, `jsonKeepOnly`, `formFields`, `json`, `when`,
 `apply`, `eval` and `fromLogBodyText` (an adapter for an http4s `logBody` function); redactors chain with `orElse`.
 
-**Truncated and repaired bodies.** A user function (`json`, `apply`, `eval`, `redactBodyValues`) is not called on a
-body cut at `maxBodyBytes`, nor on a JSON body the scanner had to repair (an unterminated string, a trailing comma):
-such a body is logged as `<hidden>` with a note. A cut can split a card number or drop the member a decision depends on.
-Pass `prefixSafe = true` to assert that the function decides by keys alone (an allow-list, a key deny-list over a
-parsed tree) and may run on a prefix.
+**Truncated and repaired bodies.** A user function (`json`, `apply`, `eval`, `redactBodyValues`) is never called on a
+body cut at `maxBodyBytes` unless the redactor was built with `prefixSafe = true`; the body is logged as
+`body=<hidden> (N bytes total)`. A cut can split a card number or drop the member a decision depends on. Pass
+`prefixSafe = true` to assert that the function decides by keys alone (an allow-list, a key deny-list over a parsed
+tree) and may run on a prefix. `json` and `redactBodyValues` additionally scan the body first and, unless
+`prefixSafe = true`, are not called on JSON that does not parse as one whole value (an unterminated string, a trailing
+comma); such a body is logged as `body=<hidden> (unparseable from position N)` followed by the size. `apply`, `eval`
+and `fromLogBodyText` receive a complete body as it is, malformed or not, and must cope with it themselves.
 
 **What is not covered.** Rejections with free text (`ValidationRejection`, `MalformedRequestContentRejection`) are
 logged as they are; XML and multipart bodies are hidden, not parsed; client IP headers (`X-Forwarded-For`, `Host`) are
