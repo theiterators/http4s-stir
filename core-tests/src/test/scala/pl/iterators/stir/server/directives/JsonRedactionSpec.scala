@@ -174,4 +174,38 @@ class JsonRedactionSpec extends AnyWordSpec with Matchers {
       quote("REDACTED") shouldEqual "\"REDACTED\""
     }
   }
+
+  "the scanner in KeepOnly mode" should {
+    def keepOnly(input: String, keys: Set[String], truncated: Boolean = false): Result =
+      scan(input, truncated, KeepOnly(keys, secret))
+
+    "keep scalars under allow-listed keys and mask the others, traversing containers" in {
+      keepOnly("""{"user":{"id":7,"email":"alice@example.test"},"status":"ok"}""", Set("id", "status")) shouldEqual
+      Result("""{"user":{"id":7,"email":"REDACTED"},"status":"ok"}""", None, incomplete = false)
+    }
+    "let conventional names win over the allow-list" in {
+      keepOnly("""{"password":{"scope":"x"},"scope":"y"}""", Set("scope", "password")).text shouldEqual
+      """{"password":"REDACTED","scope":"y"}"""
+    }
+    "govern array elements by the key the array sits under, through nested arrays" in {
+      keepOnly("""{"ids":[1,[2,3]],"names":["a"],"m":[{"id":4,"x":5}]}""", Set("ids", "id")).text shouldEqual
+      """{"ids":[1,[2,3]],"names":["REDACTED"],"m":[{"id":4,"x":"REDACTED"}]}"""
+    }
+    "mask scalars without a governing key" in {
+      keepOnly("42", Set("a")).text shouldEqual "\"REDACTED\""
+      keepOnly("""["a",1]""", Set("a")).text shouldEqual """["REDACTED","REDACTED"]"""
+    }
+    "stay prefix-safe under truncation" in {
+      val body = """{"user":{"id":7,"email":"alice@example.test"},"status":"ok"}"""
+      keepOnly(body.take(body.indexOf("alice") + 3), Set("id", "status"), truncated = true).text shouldEqual
+      """{"user":{"id":7,"email":"REDACTED"}}"""
+      keepOnly(body.take(body.indexOf("7") + 1), Set("id", "status"), truncated = true).text shouldEqual
+      """{"user":{}}"""
+    }
+    "render the example of spec section 5.8" in {
+      keepOnly("""{"grant_type":"password","username":"alice","password":"x"}""",
+        Set("grant_type", "scope")).text shouldEqual
+      """{"grant_type":"password","username":"REDACTED","password":"REDACTED"}"""
+    }
+  }
 }
