@@ -92,7 +92,10 @@ private[directives] object LogRendering {
     s"body=<not consumed> (${contentLength.fold("???")(_.toString)} bytes total)"
 
   def rejectionLine(rejections: Seq[Rejection], config: Config): String =
-    "Request was rejected with rejections: " + rejections.map(renderRejection(_, config)).mkString(", ")
+    "Request was rejected with rejections: " +
+    rejections.map(r =>
+      try renderRejection(r, config)
+      catch { case NonFatal(e) => failed(e) }).mkString(", ")
 
   private def renderRejection(rejection: Rejection, config: Config): String = {
     def sensitive(name: String, isHeader: Boolean): Boolean = config.redaction.rejectionValues match {

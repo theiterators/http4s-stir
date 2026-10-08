@@ -15,7 +15,8 @@ import pl.iterators.stir.server.{
   MalformedFormFieldRejection,
   MalformedHeaderRejection,
   MalformedQueryParamRejection,
-  MissingQueryParamRejection
+  MissingQueryParamRejection,
+  Rejection
 }
 
 class LogRenderingSpec extends AnyWordSpec with Matchers {
@@ -158,6 +159,10 @@ class LogRenderingSpec extends AnyWordSpec with Matchers {
       "Request was rejected with rejections: MalformedQueryParamRejection(pin,<REDACTED>), MalformedHeaderRejection(X-Custom,<REDACTED>)"
       rejectionLine(Seq(plainHeader), default.copy(redactHeadersWhen = _ => throw boom)) shouldEqual
       "Request was rejected with rejections: MalformedHeaderRejection(X-Custom,<REDACTED>)"
+    }
+    "render a placeholder for a rejection whose rendering throws and keep the others" in {
+      rejectionLine(Seq(new Rejection { override def toString: String = throw boom }, missing), none) shouldEqual
+      "Request was rejected with rejections: <redaction failed: java.lang.IllegalStateException>, MissingQueryParamRejection(x)"
     }
   }
 
