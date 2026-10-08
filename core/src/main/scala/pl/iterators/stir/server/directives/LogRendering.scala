@@ -94,7 +94,7 @@ private[directives] object LogRendering {
   def rejectionLine(rejections: Seq[Rejection], config: Config): String =
     "Request was rejected with rejections: " +
     rejections.map(r =>
-      try renderRejection(r, config)
+      try escapeControl(renderRejection(r, config))
       catch { case NonFatal(e) => failed(e) }).mkString(", ")
 
   private def renderRejection(rejection: Rejection, config: Config): String = {

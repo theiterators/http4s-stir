@@ -449,6 +449,18 @@ class DebuggingDirectivesSpec extends RoutingSpec {
       }
     }
 
+    "escape control characters in a rejection line" in {
+      resetDebugMsg()
+      Get("/q?n=%0D%0Aforged%20line") ~> logResult(logAction = logAction)(parameter("n".as[Int]) { _ =>
+        complete("ok")
+      }) ~> check {
+        handled shouldBe false
+        // one entry, one line: CR LF from the query value appear as the two-character escapes
+        normalizedDebugMsg() shouldEqual
+        "Request was rejected with rejections: MalformedQueryParamRejection(n,'\\r\\nforged line' is not a valid 32-bit signed integer value,Some(java.lang.NumberFormatException: For input string: \"\\r\\nforged line\"))\n"
+      }
+    }
+
     "hide form rejection values under example 4's policy and show them by default" in {
       val card = "\\b[0-9]{13,19}\\b".r
       val policy = LogRedaction.default.redactBodyValues(card.replaceAllIn(_, "REDACTED")).hideRejectionValues

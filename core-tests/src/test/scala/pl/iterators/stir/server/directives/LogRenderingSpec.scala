@@ -164,6 +164,13 @@ class LogRenderingSpec extends AnyWordSpec with Matchers {
       rejectionLine(Seq(new Rejection { override def toString: String = throw boom }, missing), none) shouldEqual
       "Request was rejected with rejections: <redaction failed: java.lang.IllegalStateException>, MissingQueryParamRejection(x)"
     }
+    "escape control characters in every rendered rejection, under every policy" in {
+      val forged = MalformedQueryParamRejection("n", "'1\nforged' is not valid", None)
+      for (config <- Seq(default, none)) withClue(config.redaction.rejectionValues) {
+        rejectionLine(Seq(forged, missing), config) shouldEqual
+        "Request was rejected with rejections: MalformedQueryParamRejection(n,'1\\nforged' is not valid,None), MissingQueryParamRejection(x)"
+      }
+    }
   }
 
   "notConsumed" should {
