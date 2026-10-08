@@ -54,6 +54,24 @@ class DebuggingDirectivesCanarySpec extends RoutingSpec {
     "throwingPredicate" -> LogRedaction.default.withBodyRedactor(
       BodyRedactor.when(_ => throw new IllegalStateException("p"))(BodyRedactor.hidden)))
 
+  // Planted values without the marker are found by a prefix of them, because a cut can leave only the first
+  // characters of a value in a line.
+  // ssn 123456789 is masked by name under every policy.
+  val SsnPrefix = "12345"
+  // pin=1234 in the form body is masked by name only where "pin" was added as a name.
+  val PinPrefix = "pin=1"
+  // 4111111111111111 is masked by a value rule only (spec section 5.8, example 4), never by name, and the rule matches
+  // 13 digits or more: up to 12 digits of a cut number stay visible unless the whole body is hidden.
+  val CardPrefix = "41111111"
+
+  /** What must not appear in a line logged under a policy, on top of `Marker` and `SsnPrefix`. */
+  val forbidden: Map[String, Seq[String]] = Map(
+    "addNames" -> Seq(PinPrefix),
+    "everything" -> Seq(PinPrefix),
+    "values" -> Seq(CardPrefix))
+  // a renamed or removed policy must not silently drop its assertions
+  require(forbidden.keySet.subsetOf(policies.map(_._1).toSet), "forbidden names a policy that does not exist")
+
   /** The text between `body="` and the closing quote, with the note and truncation suffix removed. */
   def bodyText(line: String): Option[String] = {
     val start = line.indexOf("body=\"")
@@ -71,10 +89,9 @@ class DebuggingDirectivesCanarySpec extends RoutingSpec {
   def assertSafe(policyName: String, maxBodyBytes: Int): Unit =
     withClue(s"policy=$policyName maxBodyBytes=$maxBodyBytes\n${lines.mkString("\n")}") {
       lines should not be empty
+      val mustNotAppear = Seq(Marker, SsnPrefix) ++ forbidden.getOrElse(policyName, Seq.empty)
       for (line <- lines) {
-        (line should not).include(Marker)
-        // card numbers are masked by a value rule only (spec section 5.8, example 4), never by name
-        if (policyName == "values") (line should not).include("4111111111111111")
+        for (value <- mustNotAppear) (line should not).include(value)
         if (line.contains("application/json")) bodyText(line).filter(_.nonEmpty).foreach { text =>
           parse(text).isRight shouldBe true
         }
