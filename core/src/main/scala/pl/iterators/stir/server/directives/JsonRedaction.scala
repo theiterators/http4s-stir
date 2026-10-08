@@ -18,7 +18,7 @@ private[directives] object JsonRedaction {
   final case class Transform(f: String => String) extends Mode
 
   /** The JSON literal that replaces a masked value; `BodyRedactor.Mask` (Task 9) is the same word unquoted. */
-  val MaskLiteral: String = "\"REDACTED\""
+  val MaskLiteral: String = "\"" + BodyRedactor.Mask + "\""
 
   def scan(input: String, truncated: Boolean, mode: Mode): Result = new Scanner(input, truncated, mode).run()
 

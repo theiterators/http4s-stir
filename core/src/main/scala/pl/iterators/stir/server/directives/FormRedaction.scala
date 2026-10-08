@@ -12,7 +12,7 @@ private[directives] object FormRedaction {
   /** Masks the value of every part whose decoded name satisfies `isSensitive`; everything else is verbatim. */
   def maskFields(text: String, truncated: Boolean, isSensitive: String => Boolean): String =
     rewrite(text, truncated) { (name, value) =>
-      if (isSensitive(Uri.decode(name, StandardCharsets.UTF_8, plusIsSpace = true))) "REDACTED" else value
+      if (isSensitive(Uri.decode(name, StandardCharsets.UTF_8, plusIsSpace = true))) BodyRedactor.Mask else value
     }
 
   /** Applies `f` to every decoded value; a changed result is re-encoded the way `UrlForm` encodes values. */

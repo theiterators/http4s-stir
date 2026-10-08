@@ -67,7 +67,7 @@ object UriRedactor {
     }
   }
 
-  private def Mask: String = "REDACTED"
+  private def Mask: String = BodyRedactor.Mask
 
   private def withSegments(uri: Uri, segments: Vector[Uri.Path.Segment]): Uri =
     uri.copy(path = Uri.Path(segments, uri.path.absolute, uri.path.endsWithSlash))
