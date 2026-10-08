@@ -208,4 +208,42 @@ class JsonRedactionSpec extends AnyWordSpec with Matchers {
       """{"grant_type":"password","username":"REDACTED","password":"REDACTED"}"""
     }
   }
+
+  "the scanner in Transform mode" should {
+    val card: String => String = s => if (s.forall(_.isDigit) && s.length >= 13) "REDACTED" else s
+    def transform(input: String, f: String => String = card, truncated: Boolean = false): Result =
+      scan(input, truncated, Transform(f))
+
+    "apply f to strings, numbers and literals, never to keys" in {
+      transform("""{"card":4111111111111111,"note":"4111111111111111","4111111111111111":1,"ok":true}""") shouldEqual
+      Result("""{"card":"REDACTED","note":"REDACTED","4111111111111111":1,"ok":true}""", None, incomplete = false)
+    }
+    "hand f the unescaped content and re-escape the result" in {
+      var seen = List.empty[String]
+      transform("{\"a\":\"x\\\"y\\u0041\\n\"}", s => { seen ::= s; s + "\"" }).text shouldEqual
+      "{\"a\":\"x\\\"yA\\n\\\"\"}"
+      seen shouldEqual List("x\"yA\n")
+    }
+    "emit a number or literal result as a token only when it is one" in {
+      transform("""[1,true,null]""", _ => "2").text shouldEqual "[2,2,2]"
+      transform("""[1,true]""", _ => "false").text shouldEqual "[false,false]"
+      transform("""[1]""", _ => "1.").text shouldEqual """["1."]"""
+      transform("""[1]""", _ => "").text shouldEqual """[""]"""
+    }
+    "leave values unchanged when f is the identity" in {
+      val body = """{"a":[1,-2.5e3,"x",{"b":null}],"c":"a\"b\\c\n"}"""
+      transform(body, identity).text shouldEqual body
+    }
+    "cut malformed input with the note before any transform" in {
+      transform("""{"value":"sk_live_X",}""", s => if (s.startsWith("sk_live_")) "REDACTED" else s) shouldEqual
+      Result("""{"value":"REDACTED"}""", Some("unparseable from position 21"), incomplete = true)
+    }
+    "apply f to a string cut at the end when truncated" in {
+      transform("""{"card":"411111111111""", truncated = true) shouldEqual
+      Result("""{"card":"411111111111"}""", None, incomplete = true)
+    }
+    "transform a top-level scalar" in {
+      transform("\"4111111111111111\"").text shouldEqual "\"REDACTED\""
+    }
+  }
 }
