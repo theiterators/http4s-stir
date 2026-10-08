@@ -24,6 +24,12 @@ class UriRedactorSpec extends AnyWordSpec with Matchers {
     "leave a value already equal to the mask as it is" in {
       UriRedactor.query(names)(uri("/a?password=REDACTED")).renderString shouldEqual "/a?password=REDACTED"
     }
+    "keep a query without a masked value as received" in {
+      val received = uri("http://h/a?x=a+b;y=%41&z=%2F")
+      val logged = UriRedactor.query(names)(received)
+      logged shouldEqual received
+      logged.toString shouldEqual "http://h/a?x=a+b;y=%41&z=%2F"
+    }
   }
 
   "userInfo" should {

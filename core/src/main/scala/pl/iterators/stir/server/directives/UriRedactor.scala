@@ -8,14 +8,18 @@ import org.http4s.{ Query, Uri }
  */
 object UriRedactor {
 
-  /** Every pair `(k, Some(v))` with `isSensitive(k)` becomes `(k, Some("REDACTED"))`; keys, order and flags stay. */
+  /**
+   * Every pair `(k, Some(v))` with `isSensitive(k)` becomes `(k, Some("REDACTED"))`; keys, order and flags stay. A
+   * query without a masked value is kept as received; one with a masked value is re-rendered by http4s, so `;`
+   * becomes `&` and percent-encoding is normalised.
+   */
   def query(isSensitive: String => Boolean): Uri => Uri = { uri =>
-    if (uri.query.isEmpty) uri
-    else
-      uri.copy(query = Query.fromVector(uri.query.pairs.map {
-        case (k, Some(_)) if isSensitive(k) => (k, Some(Mask))
-        case pair                           => pair
-      }))
+    val pairs = uri.query.pairs
+    val masked = pairs.map {
+      case (k, Some(_)) if isSensitive(k) => (k, Some(Mask))
+      case pair                           => pair
+    }
+    if (masked == pairs) uri else uri.copy(query = Query.fromVector(masked))
   }
 
   /** `user:pass@host` becomes `REDACTED:REDACTED@host`; `user@host` becomes `REDACTED@host`. */
