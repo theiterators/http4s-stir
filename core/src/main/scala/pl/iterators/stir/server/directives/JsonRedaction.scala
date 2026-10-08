@@ -147,6 +147,13 @@ private[directives] object JsonRedaction {
     private def isNumberChar(c: Char) =
       (c >= '0' && c <= '9') || c == '-' || c == '+' || c == '.' || c == 'e' || c == 'E'
 
+    /** The value of an ASCII hex digit, -1 for any other character: JSON allows no other digit in a `\u` escape. */
+    private def hexValue(c: Char): Int =
+      if (c >= '0' && c <= '9') c - '0'
+      else if (c >= 'a' && c <= 'f') c - 'a' + 10
+      else if (c >= 'A' && c <= 'F') c - 'A' + 10
+      else -1
+
     /** The key governing the value about to start: the member key in an object, the inherited key in an array. */
     private def currentKey: Option[String] =
       if (frames.isEmpty) None else if (frames.last.isObject) frames.last.key else frames.last.governingKey
@@ -300,15 +307,27 @@ private[directives] object JsonRedaction {
             case _   => malformed(i)
           }
         } else if (escBuf.length == 6) {
-          val hex = escBuf.toString.substring(2)
-          if (hex.forall(h => Character.digit(h, 16) >= 0)) {
-            deliver(escBuf.toString, Integer.parseInt(hex, 16).toChar.toString)
+          val code = escapedCodeUnit()
+          if (code >= 0) {
+            deliver(escBuf.toString, code.toChar.toString)
             escaping = false
           } else malformed(i)
-        } else if (Character.digit(c, 16) < 0) malformed(i)
+        } else if (hexValue(c) < 0) malformed(i)
       } else if (c == '\\') { escaping = true; escBuf.clear(); escBuf.append(c) }
       else if (c == '"') endString()
       else deliver(c.toString, c.toString)
+
+    /** The code unit of the `\uXXXX` escape in `escBuf`, or -1 when a digit is not an ASCII hex digit. */
+    private def escapedCodeUnit(): Int = {
+      var code = 0
+      var k = 2
+      while (k < 6 && code >= 0) {
+        val v = hexValue(escBuf.charAt(k))
+        code = if (v < 0) -1 else code * 16 + v
+        k += 1
+      }
+      code
+    }
 
     private def deliver(raw: String, unescaped: String): Unit = charMode match {
       case EmitChars    => emit(raw)

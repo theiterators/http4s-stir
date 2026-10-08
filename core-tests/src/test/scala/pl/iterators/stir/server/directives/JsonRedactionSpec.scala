@@ -31,6 +31,12 @@ class JsonRedactionSpec extends AnyWordSpec with Matchers {
     "keep string content verbatim, escapes and raw control characters included" in {
       deny("{\"note\":\"a\\\"q\\u00e9\\n\tb\"}").text shouldEqual "{\"note\":\"a\\\"q\\u00e9\\n\tb\"}"
     }
+    "accept unicode escapes spelled with ASCII hex digits of either case" in {
+      deny("{\"a\":\"\\u0041\\u00e9\\uABCD\"}") shouldEqual
+      Result("{\"a\":\"\\u0041\\u00e9\\uABCD\"}", None, incomplete = false)
+      deny("{\"t\\u006fke\\u006E\":\"x\"}") shouldEqual
+      Result("{\"t\\u006fke\\u006E\":\"REDACTED\"}", None, incomplete = false)
+    }
     "pass a top-level scalar through" in {
       deny("42") shouldEqual Result("42", None, incomplete = false)
       deny("\"string\"") shouldEqual Result("\"string\"", None, incomplete = false)
@@ -113,6 +119,14 @@ class JsonRedactionSpec extends AnyWordSpec with Matchers {
       deny("""{"a":01}""") shouldEqual Result("{}", Some("unparseable from position 5"), incomplete = true)
       deny("""[1,]""") shouldEqual Result("[1]", Some("unparseable from position 3"), incomplete = true)
       deny("""{"a":[1}""") shouldEqual Result("""{"a":[1]}""", Some("unparseable from position 7"), incomplete = true)
+    }
+    "cut a unicode escape at its first non-ASCII hex digit, with a note" in {
+      deny("{\"a\":\"\\u\uFF10\uFF10\uFF14\uFF11\"}") shouldEqual
+      Result("{\"a\":\"\"}", Some("unparseable from position 8"), incomplete = true)
+      deny("{\"a\":\"\\u004\uFF11\"}") shouldEqual
+      Result("{\"a\":\"\"}", Some("unparseable from position 11"), incomplete = true)
+      deny("{\"a\":\"\\u00\uFF21F\"}") shouldEqual
+      Result("{\"a\":\"\"}", Some("unparseable from position 10"), incomplete = true)
     }
     "treat an unterminated structure as malformed at the end when not truncated" in {
       deny("""{"card":"411111111111""") shouldEqual
