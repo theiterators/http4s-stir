@@ -578,5 +578,19 @@ class DebuggingDirectivesSpec extends RoutingSpec {
         responseAs[String] shouldEqual jsonResponse
       }
     }
+
+    "hand a user redactor the captured bytes as the message body, never the stream being teed" in {
+      val reading = LogRedaction.none.withBodyRedactor(
+        BodyRedactor.eval(b => b.message.as[String].map(BodyRedactor.Text(_)), prefixSafe = true))
+      resetDebugMsg()
+      jsonRequest(json)                          ~> logRequestResult(logAction = logAction, maxBodyBytes = 5, redaction = reading)(
+        entity(as[String]) { s => complete(s) }) ~> check {
+        responseAs[String] shouldEqual json
+        normalizedDebugMsg() shouldEqual
+        """|HTTP/1.1 POST /login Headers(Content-Length: 37, Content-Type: application/json) body="{"use" ... (37 bytes total)
+           |HTTP/1.1 200 OK Headers(Content-Length: 37, Content-Type: text/plain; charset=UTF-8) body="{"use" ... (37 bytes total)
+           |""".stripMarginWithNewline("\n")
+      }
+    }
   }
 }

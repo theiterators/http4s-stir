@@ -1,7 +1,7 @@
 package pl.iterators.stir.server.directives
 
 import cats.effect.IO
-import fs2.Chunk
+import fs2.{ Chunk, Stream }
 import org.http4s.{ Header, Message, Request, Response, Uri }
 import org.typelevel.ci._
 import pl.iterators.stir.server.{
@@ -64,10 +64,18 @@ private[directives] object LogRendering {
       case None         => bytes.size == maxBodyBytes
     }
 
-  /** Runs the policy's body redactor on the captured bytes, guarding user code, and renders the body part. */
+  /**
+   * Runs the policy's body redactor on the captured bytes, guarding user code, and renders the body part. The
+   * redactor gets the message with the captured bytes as its body, never the stream being teed; an outcome that
+   * cannot be rendered (`Text(null)`) renders as a failure.
+   */
   def renderBody(message: Message[IO], bytes: Chunk[Byte], maxBodyBytes: Int, config: Config): IO[String] = {
-    val body = LoggedBody(message, bytes, isTruncated(message.contentLength, bytes, maxBodyBytes))
-    IO.defer(config.redaction.body.redact(body)).attempt.map(bodyPart(_, message.contentLength, maxBodyBytes))
+    val captured = message.withBodyStream(Stream.chunk(bytes))
+    val body = LoggedBody(captured, bytes, isTruncated(message.contentLength, bytes, maxBodyBytes))
+    IO.defer(config.redaction.body.redact(body)).attempt.map { outcome =>
+      try bodyPart(outcome, message.contentLength, maxBodyBytes)
+      catch { case NonFatal(e) => bodyPart(Left(e), message.contentLength, maxBodyBytes) }
+    }
   }
 
   def bodyPart(outcome: Either[Throwable, BodyRedactor.Outcome], contentLength: Option[Long],
@@ -78,7 +86,7 @@ private[directives] object LogRendering {
       case None                                  => " ... (??? bytes total)"
       case _                                     => ""
     }
-    def noteText(note: Option[String]) = note.fold("")(n => s" ($n)")
+    def noteText(note: Option[String]) = note.fold("")(n => s" (${escapeControl(n)})")
     outcome match {
       case Right(BodyRedactor.Text(value, note, _)) => "body=\"" + escapeControl(value) + "\"" + noteText(note) +
         truncation

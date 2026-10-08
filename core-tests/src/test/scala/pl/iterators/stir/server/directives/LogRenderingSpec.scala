@@ -40,10 +40,14 @@ class LogRenderingSpec extends AnyWordSpec with Matchers {
       bodyPart(Left(boom), None, 10) shouldEqual
       "body=<redaction failed: java.lang.IllegalStateException> (??? bytes total)"
     }
-    "escape control characters in Text only" in {
+    "escape control characters in Text values" in {
       bodyPart(Right(Text("a\nb\r\tc\u0001\u007fd")), Some(1L), 10) shouldEqual "body=\"a\\nb\\r\\tc\\u0001\\u007fd\""
       escapeControl("plain") shouldEqual "plain"
       escapeControl("back\\slash") shouldEqual "back\\slash"
+    }
+    "escape control characters in notes" in {
+      bodyPart(Right(Hidden(Some("a\nb"))), Some(3L), 10) shouldEqual "body=<hidden> (a\\nb) (3 bytes total)"
+      bodyPart(Right(Text("{}", Some("a\nb"))), Some(2L), 10) shouldEqual "body=\"{}\" (a\\nb)"
     }
   }
 
@@ -117,6 +121,11 @@ class LogRenderingSpec extends AnyWordSpec with Matchers {
         redaction = LogRedaction.default.withBodyRedactor(BodyRedactor.when(_ => throw boom)(BodyRedactor.hidden)))
       renderBody(json("{}"), bytes("{}"), 4096, throwingPredicate).unsafeRunSync() shouldEqual
       "body=<redaction failed: java.lang.IllegalStateException> (2 bytes total)"
+    }
+    "render a placeholder when an outcome cannot be rendered" in {
+      val nullText = default.copy(redaction = LogRedaction.default.withBodyRedactor(BodyRedactor(_ => null)))
+      renderBody(json("{}"), bytes("{}"), 4096, nullText).unsafeRunSync() shouldEqual
+      "body=<redaction failed: java.lang.NullPointerException> (2 bytes total)"
     }
   }
 
