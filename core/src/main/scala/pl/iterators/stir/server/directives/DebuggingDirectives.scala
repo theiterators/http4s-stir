@@ -2,147 +2,118 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.IO
 import cats.effect.std.Console
-import fs2.{ Pull, Stream }
-import org.http4s.server.middleware.Logger
-import org.http4s.{ Headers, Request, Response }
+import fs2.Pull
+import org.http4s.Headers
 import org.typelevel.ci.CIString
 import pl.iterators.stir.server.{ Directive, Directive0, RouteResult }
 
 trait DebuggingDirectives {
 
   /**
-   * Produces a log entry for every incoming request.
+   * Produces a log entry for every incoming request. Secrets are redacted according to `redaction`
+   * (`LogRedaction.default` masks conventionally named values in headers, the URI, JSON and form bodies and
+   * rejections; `LogRedaction.none` reproduces the 0.5.0 output, except that control characters in bodies and
+   * rejection lines are escaped, a JSON content type with parameters is logged as text instead of hex, and a failing
+   * `logAction` is swallowed).
    *
    * @group debugging
    */
   def logRequest(logHeaders: Boolean = true, logBody: Boolean = true,
       redactHeadersWhen: CIString => Boolean = Headers.SensitiveHeaders.contains,
       maxBodyBytes: Int = DebuggingDirectives.DefaultLogLength,
-      logAction: Option[String => IO[Unit]] = None): Directive0 = {
+      logAction: Option[String => IO[Unit]] = None,
+      redaction: LogRedaction = LogRedaction.default): Directive0 = {
     Directive { inner => ctx =>
-      val log = logAction.getOrElse { (s: String) =>
-        DebuggingDirectives.logger(s)
-      }
-      val logWithTrimmingIndicator = indicateTrimming(maxBodyBytes, ctx.request.contentLength).andThen(log)
-      val logWithBodyNotConsumedIndicator = indicateBodyNotConsumed(ctx.request.contentLength).andThen(log)
+      val log = DebuggingDirectives.safeLog(logAction)
+      val config = LogRendering.Config(logHeaders, redactHeadersWhen, redaction)
+      val request = ctx.request
+      def line = LogRendering.requestLine(request, config)
 
-      if (logBody && !ctx.request.isChunked && ctx.request.contentLength.exists(_ > 0)) {
+      if (logBody && !request.isChunked && request.contentLength.exists(_ > 0)) {
         IO.ref(false).flatMap { bodyConsumedRef =>
-          val newBody = ctx.request.body.pull.unconsN(maxBodyBytes, allowFewer = true).flatMap {
+          val newBody = request.body.pull.unconsN(maxBodyBytes, allowFewer = true).flatMap {
             case Some((head, tail)) =>
               Pull.output(head) >>
               Pull.eval {
-                bodyConsumedRef.update(_ => true) *> Logger.logMessage[IO, Request[IO]](
-                  ctx.request.withBodyStream(Stream.chunk(head)))(logHeaders,
-                  logBody = true, redactHeadersWhen)(logWithTrimmingIndicator)
+                bodyConsumedRef.set(true) *>
+                LogRendering.renderBody(request, head, maxBodyBytes, config).flatMap(part => log(s"$line $part"))
               } >>
               tail.pull.echo
             case None =>
-              Pull.eval {
-                bodyConsumedRef.update(_ => true) *> Logger.logMessage[IO, Request[IO]](ctx.request)(logHeaders,
-                  logBody = false, redactHeadersWhen)(log)
-              }
+              Pull.eval(bodyConsumedRef.set(true) *> log(line))
           }.stream
-          val newRequest = ctx.request.withBodyStream(newBody)
-          inner(())(ctx.copy(request = newRequest)).flatTap {
-            _ =>
-              bodyConsumedRef.get.flatMap {
-                bodyConsumed =>
-                  if (!bodyConsumed) {
-                    Logger.logMessage[IO, Request[IO]](newRequest)(logHeaders, logBody = false, redactHeadersWhen)(
-                      logWithBodyNotConsumedIndicator)
-                  } else {
-                    IO.unit
-                  }
-              }
+          val newRequest = request.withBodyStream(newBody)
+          inner(())(ctx.copy(request = newRequest)).flatTap { _ =>
+            bodyConsumedRef.get.flatMap { bodyConsumed =>
+              if (bodyConsumed) IO.unit
+              else log(s"$line ${LogRendering.notConsumed(request.contentLength)}")
+            }
           }
         }
       } else {
-        Logger.logMessage[IO, Request[IO]](ctx.request)(logHeaders, logBody = false, redactHeadersWhen)(log).flatMap(
-          _ =>
-            inner(())(ctx))
+        log(line).flatMap(_ => inner(())(ctx))
       }
     }
   }
 
   /**
-   * Produces a log entry for every [[RouteResult]].
+   * Produces a log entry for every [[RouteResult]]; see [[logRequest]] for `redaction`.
    *
    * @group debugging
    */
   def logResult(logHeaders: Boolean = true, logBody: Boolean = true,
       redactHeadersWhen: CIString => Boolean = Headers.SensitiveHeaders.contains,
       maxBodyBytes: Int = DebuggingDirectives.DefaultLogLength,
-      logAction: Option[String => IO[Unit]] = None): Directive0 = {
+      logAction: Option[String => IO[Unit]] = None,
+      redaction: LogRedaction = LogRedaction.default): Directive0 = {
     Directive { inner => ctx =>
-      val log = logAction.getOrElse { (s: String) =>
-        DebuggingDirectives.logger(s)
-      }
+      val log = DebuggingDirectives.safeLog(logAction)
+      val config = LogRendering.Config(logHeaders, redactHeadersWhen, redaction)
       inner(())(ctx).flatMap {
         case RouteResult.Complete(response) =>
-          val logWithTrimmingIndicator = indicateTrimming(maxBodyBytes, response.contentLength).andThen(log)
+          val line = LogRendering.responseLine(response, config)
           if (logBody && !response.isChunked) {
             val newBody = response.body.pull.unconsN(maxBodyBytes, allowFewer = true).flatMap {
               case Some((head, tail)) =>
                 Pull.output(head) >>
                 Pull.eval {
-                  Logger.logMessage[IO, Response[IO]](response.withBodyStream(Stream.chunk(head)))(logHeaders,
-                    logBody = true, redactHeadersWhen)(logWithTrimmingIndicator)
+                  LogRendering.renderBody(response, head, maxBodyBytes, config).flatMap(part => log(s"$line $part"))
                 } >>
                 tail.pull.echo
-              case None => Pull.eval {
-                  Logger.logMessage[IO, Response[IO]](response)(logHeaders, logBody = false, redactHeadersWhen)(log)
-                }
+              case None => Pull.eval(log(line))
             }.stream
             IO.pure(RouteResult.Complete(response.copy(body = newBody)))
           } else {
-            Logger.logMessage[IO, Response[IO]](response)(logHeaders, logBody = false, redactHeadersWhen)(log).as(
-              RouteResult.Complete(response))
+            log(line).as(RouteResult.Complete(response))
           }
         case RouteResult.Rejected(rejections) =>
-          log(s"Request was rejected with rejections: ${rejections.mkString(", ")}").as(
-            RouteResult.Rejected(rejections))
+          log(LogRendering.rejectionLine(rejections, config)).as(RouteResult.Rejected(rejections))
       }
     }
   }
 
   /**
-   * Produces a log entry for every incoming request and [[RouteResult]].
+   * Produces a log entry for every incoming request and [[RouteResult]]; see [[logRequest]] for `redaction`.
    *
    * @group debugging
    */
   def logRequestResult(logHeaders: Boolean = true, logBody: Boolean = true,
       redactHeadersWhen: CIString => Boolean = Headers.SensitiveHeaders.contains,
       maxBodyBytes: Int = DebuggingDirectives.DefaultLogLength,
-      logAction: Option[String => IO[Unit]] = None): Directive0 = {
-    logResult(logHeaders, logBody, redactHeadersWhen, maxBodyBytes, logAction) & logRequest(logHeaders, logBody,
-      redactHeadersWhen,
-      maxBodyBytes,
-      logAction)
-  }
-
-  private def indicateTrimming(maxBodyBytes: Int, contentLength: Option[Long]): String => String = { log =>
-    contentLength match {
-      case Some(length) if length > maxBodyBytes =>
-        s"$log ... ($length bytes total)"
-      case None =>
-        s"$log ... (??? bytes total)"
-      case _ =>
-        log
-    }
-  }
-
-  private def indicateBodyNotConsumed(contentLength: Option[Long]): String => String = { log =>
-    contentLength match {
-      case Some(length) =>
-        s"$log body=<not consumed> ($length bytes total)"
-      case None =>
-        s"$log body=<not consumed> (??? bytes total)"
-    }
+      logAction: Option[String => IO[Unit]] = None,
+      redaction: LogRedaction = LogRedaction.default): Directive0 = {
+    logResult(logHeaders, logBody, redactHeadersWhen, maxBodyBytes, logAction, redaction) &
+    logRequest(logHeaders, logBody, redactHeadersWhen, maxBodyBytes, logAction, redaction)
   }
 }
 
 object DebuggingDirectives extends DebuggingDirectives {
   private def logger[A](a: A) = Console[IO].println(a)
   private val DefaultLogLength: Int = 4096
+
+  /** The log action with its errors swallowed: logging never fails a request or a response. */
+  private def safeLog(logAction: Option[String => IO[Unit]]): String => IO[Unit] = {
+    val action = logAction.getOrElse((s: String) => logger(s))
+    s => IO.defer(action(s)).attempt.void
+  }
 }
