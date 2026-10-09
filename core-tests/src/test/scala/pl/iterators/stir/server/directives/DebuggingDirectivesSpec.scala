@@ -438,6 +438,20 @@ class DebuggingDirectivesSpec extends RoutingSpec {
       }
     }
 
+    "mask query-shaped fragments, as the implicit grant puts the token in the Location fragment" in {
+      val implicitGrant = complete(Response[IO](Status.Found).putHeaders(Header.Raw(ci"Location",
+        "https://app.example/cb?x=1#access_token=CANARY&expires_in=3600&state=%7Bs%7D")))
+      resetDebugMsg()
+      Get("/authorize").putHeaders(Header.Raw(ci"Referer", "https://spa.example/#/login?id_token=CANARY")) ~>
+      logRequestResult(logAction = logAction)(implicitGrant)                                               ~> check {
+        response.status shouldEqual Status.Found
+        normalizedDebugMsg() shouldEqual
+        """|HTTP/1.1 GET /authorize Headers(Referer: https://spa.example/#/login?id_token=REDACTED)
+           |HTTP/1.1 302 Found Headers(Location: https://app.example/cb?x=1#access_token=REDACTED&expires_in=3600&state=%7Bs%7D)
+           |""".stripMarginWithNewline("\n")
+      }
+    }
+
     "render rejections by name" in {
       resetDebugMsg()
       Get("/q?password=x")                                                            ~> logRequestResult(logAction = logAction)(

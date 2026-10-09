@@ -119,7 +119,12 @@ With no configuration, values under conventionally named keys never reach the lo
 - header values whose name matches (`X-Api-Key`, `Proxy-Authorization`, `X-Csrf-Token`, …) render as `<REDACTED>`,
   in addition to `Authorization`, `Cookie` and `Set-Cookie`;
 - query parameter values and the userinfo of the request URI, and of `Referer`/`Location` headers, render as `REDACTED`
-  (`/login?token=REDACTED`); an unparseable `Referer` or `Location` renders as `<REDACTED>`;
+  (`/login?token=REDACTED`); so do the values of a query-shaped fragment (`/cb#access_token=REDACTED&state=s`, the
+  shape the OAuth 2.0 implicit grant writes into `Location`): pairs are separated by `&` as `URLSearchParams` reads
+  them, and names are matched as written, after each `?` of a hash route (`#/login?id_token=REDACTED`) and across
+  legacy `;` separators, so a value is masked under any of those readings (a fragment with more than 16 `?` is
+  masked whole, since each costs a pass); other fragments (`#/users/42`) stay as received;
+  an unparseable `Referer` or `Location` renders as `<REDACTED>`;
 - JSON bodies are logged compact with the value under any matching key, at any depth, replaced by `"REDACTED"`; a body
   cut at `maxBodyBytes` is closed so that the logged text is still valid JSON;
 - form bodies have the value of every matching field replaced by `REDACTED`;
@@ -222,3 +227,10 @@ a JSON content type with parameters (`application/json; version=2`) is logged as
 
 0.6.0 is source-compatible with 0.5.x call sites but not binary-compatible: the MiMa baseline restarts, so code
 compiled against 0.5.x has to be recompiled.
+
+#### Changes in 0.6.1
+
+1. The values of a query-shaped fragment under conventional names are masked, in the request line and in
+   `Referer`/`Location` (`#access_token=REDACTED&state=s`). `UriRedactor.fragment` is the building block.
+2. A URI fragment is logged as received, with control characters escaped, in the request line and in a transformed
+   `Referer` or `Location`; 0.6.0 let http4s re-encode `%` in it (`%41` → `%2541`).
