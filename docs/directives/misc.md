@@ -205,32 +205,3 @@ logged without a body part; response bodies cannot be scoped by route (`LoggedBo
 line renders as `<redaction failed: ExceptionClass>`, where `ExceptionClass` is the fully qualified class name (for
 example `java.lang.IllegalStateException`), and nothing raw is logged. A predicate that throws while deciding a
 rejection makes the field count as sensitive: it renders as `<REDACTED>`, not as `<redaction failed: …>`.
-
-#### Changes in 0.6.0
-
-For an unconfigured `logRequestResult()`:
-
-1. JSON and form values under conventional names are masked; query values and `Referer`/`Location` query values under
-   conventional names are masked; the four field-naming rejections are masked when the field name is sensitive.
-2. More header names are masked than `Authorization`, `Cookie` and `Set-Cookie`.
-3. JSON bodies are logged compact, and truncated JSON closed, instead of as a raw prefix.
-4. Multipart, binary, XML and HTML bodies show their size instead of content (binary was hex).
-5. Control characters in bodies and rejection lines are escaped (`\n`, `\u0001`), so one entry is one line.
-6. A failing `logAction` no longer fails the request or the response.
-7. A URI whose query had a value masked is re-rendered: `;` separators become `&` and percent-encoding is normalised.
-   A query with nothing masked is logged as received.
-8. A JSON body that does not parse is logged up to the first invalid character, closed, and followed by
-   `(unparseable from position N)`.
-
-`logRequestResult(redaction = LogRedaction.none)` reproduces the 0.5.0 output except for items 5 and 6, and except that
-a JSON content type with parameters (`application/json; version=2`) is logged as text, where 0.5.0 logged it as hex.
-
-0.6.0 is source-compatible with 0.5.x call sites but not binary-compatible: the MiMa baseline restarts, so code
-compiled against 0.5.x has to be recompiled.
-
-#### Changes in 0.6.1
-
-1. The values of a query-shaped fragment under conventional names are masked, in the request line and in
-   `Referer`/`Location` (`#access_token=REDACTED&state=s`). `UriRedactor.fragment` is the building block.
-2. A URI fragment is logged as received, with control characters escaped, in the request line and in a transformed
-   `Referer` or `Location`; 0.6.0 let http4s re-encode `%` in it (`%41` → `%2541`).
