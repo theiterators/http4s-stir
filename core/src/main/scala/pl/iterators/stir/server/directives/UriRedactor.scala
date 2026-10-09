@@ -39,22 +39,30 @@ object UriRedactor {
    * fragment has no single grammar, the names are matched under every reading and the maskings are combined: as
    * written, after each `?` (a hash route, `#/login?id_token=…`, whose path may itself contain `=`), and with
    * `;`, the legacy separator, splitting a name (`flag;id_token=…`) or a value (`state=s;id_token=…`). Masking only
-   * ever replaces a value, so a reading that does not apply can hide more, never expose. The fragment is rewritten
-   * as text, never re-encoded, and `LogRendering` logs it as received.
+   * ever replaces a value, so a reading that does not apply can hide more, never expose. Each `?` costs one pass
+   * over the rest of the fragment, so a fragment with more than [[MaxFragmentQuestionMarks]] of them, which no
+   * client produces and which a `Referer` could carry on purpose, is replaced by the mask whole. The fragment is
+   * rewritten as text, never re-encoded, and `LogRendering` logs it as received.
    */
   def fragment(isSensitive: String => Boolean): Uri => Uri = { uri =>
     uri.fragment match {
       case Some(f) if f.contains('=') =>
-        var masked = maskPairs(f, isSensitive)
-        var q = masked.indexOf('?')
-        while (q >= 0) {
-          masked = masked.substring(0, q + 1) + maskPairs(masked.substring(q + 1), isSensitive)
-          q = masked.indexOf('?', q + 1)
+        if (f.count(_ == '?') > MaxFragmentQuestionMarks) uri.copy(fragment = Some(Mask))
+        else {
+          var masked = maskPairs(f, isSensitive)
+          var q = masked.indexOf('?')
+          while (q >= 0) {
+            masked = masked.substring(0, q + 1) + maskPairs(masked.substring(q + 1), isSensitive)
+            q = masked.indexOf('?', q + 1)
+          }
+          if (masked == f) uri else uri.copy(fragment = Some(masked))
         }
-        if (masked == f) uri else uri.copy(fragment = Some(masked))
       case _ => uri
     }
   }
+
+  /** The most `?` a fragment may hold before `fragment` masks it whole: the work grows with their number. */
+  val MaxFragmentQuestionMarks: Int = 16
 
   private def maskPairs(text: String, isSensitive: String => Boolean): String = {
     def sensitive(name: String) = isSensitive(Uri.decode(name, StandardCharsets.UTF_8, plusIsSpace = true))

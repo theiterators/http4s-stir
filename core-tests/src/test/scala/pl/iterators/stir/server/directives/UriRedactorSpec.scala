@@ -73,6 +73,15 @@ class UriRedactorSpec extends AnyWordSpec with Matchers {
       Some("/user/YQ==?access_token=REDACTED&state=s")
       UriRedactor.fragment(_ == "token")(uri("/a#/x?y?token=X")).fragment shouldEqual Some("/x?y?token=REDACTED")
     }
+    "mask a fragment with more than MaxFragmentQuestionMarks ? characters whole, in bounded time" in {
+      val atLimit = "?" * UriRedactor.MaxFragmentQuestionMarks + "token=X&x=1"
+      UriRedactor.fragment(names)(uri("/a").withFragment(atLimit)).fragment shouldEqual
+      Some("?" * UriRedactor.MaxFragmentQuestionMarks + "token=REDACTED&x=1")
+      val overLimit = "?" * (UriRedactor.MaxFragmentQuestionMarks + 1) + "x=1"
+      UriRedactor.fragment(names)(uri("/a").withFragment(overLimit)).fragment shouldEqual Some("REDACTED")
+      // the reviewer's benchmark input: 8000 question marks before a harmless pair
+      UriRedactor.fragment(names)(uri("/a").withFragment("?" * 8000 + "x=1")).fragment shouldEqual Some("REDACTED")
+    }
     "match a legacy ;-separated name before the first = as well, masking the whole value" in {
       UriRedactor.fragment(_ == "id_token")(uri("/cb#flag;id_token=CANARY&x=1")).fragment shouldEqual
       Some("flag;id_token=REDACTED&x=1")

@@ -122,8 +122,8 @@ With no configuration, values under conventionally named keys never reach the lo
   (`/login?token=REDACTED`); so do the values of a query-shaped fragment (`/cb#access_token=REDACTED&state=s`, the
   shape the OAuth 2.0 implicit grant writes into `Location`): pairs are separated by `&` as `URLSearchParams` reads
   them, and names are matched as written, after each `?` of a hash route (`#/login?id_token=REDACTED`) and across
-  legacy `;` separators, so a value is masked under any of those readings; other fragments (`#/users/42`) stay as
-  received;
+  legacy `;` separators, so a value is masked under any of those readings (a fragment with more than 16 `?` is
+  masked whole, since each costs a pass); other fragments (`#/users/42`) stay as received;
   an unparseable `Referer` or `Location` renders as `<REDACTED>`;
 - JSON bodies are logged compact with the value under any matching key, at any depth, replaced by `"REDACTED"`; a body
   cut at `maxBodyBytes` is closed so that the logged text is still valid JSON;
