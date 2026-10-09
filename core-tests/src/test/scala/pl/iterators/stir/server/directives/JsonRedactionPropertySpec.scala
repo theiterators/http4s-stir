@@ -8,6 +8,9 @@ import pl.iterators.stir.server.directives.JsonRedaction._
 class JsonRedactionPropertySpec extends AnyWordSpec with Matchers {
   // Secrets are made of the marker character only, so a leak is one `indexOf`.
   val Marker = 'Z'
+  // A numeric secret, planted under sensitive keys only: the deny-list and allow-list runs must never show it; the
+  // keep and transform runs show numbers by design.
+  val NumericSecret = "77777"
   val sensitive: String => Boolean = Set("password", "secret", "token", "apiKey")
   val allowed = Set("user", "id", "ok", "tags", "n", "note", "nested", "list")
 
@@ -16,10 +19,15 @@ class JsonRedactionPropertySpec extends AnyWordSpec with Matchers {
     """{"secret":{"b":[1,"ZZZ",{"c":"ZZ"}],"d":null},"user":"bob","token":["ZZZZ",{"e":"ZZ"}],"id":7}""",
     """[{"password":"ZZ"},[{"apiKey":"ZZZZZZ","ok":false}],"plain",42,{"nested":{"password":-1.5e3}}]""",
     "{\n  \"user\" : \"carol\" ,\n  \"password\" : \"ZZZZZZZZ\" ,\n  \"list\" : [ 1 , 2 , 3 ]\n}\n",
-    """{"token":"Z\"Z\\ZZZ","user":"free","password":12345,"secret":true,"apiKey":[[["ZZZ"]]]}""")
+    """{"token":"Z\"Z\\ZZZ","user":"free","password":12345,"secret":true,"apiKey":[[["ZZZ"]]]}""",
+    """{"user":"dave","password":77777,"nested":{"token":[77777,{"x":77777}]},"n":1}""")
 
-  def check(name: String, output: String): Unit = withClue(s"$name -> $output") {
+  // For the allow-list run only: `memo` is in neither `sensitive` nor `allowed`, so only the allow-list masks it.
+  val keepOnlyBodies = Seq("""{"user":"erin","memo":"ZZZ","nested":{"memo":["ZZ",{"memo":"ZZZZ"}]},"ok":true}""")
+
+  def check(name: String, output: String, numeric: Boolean = false): Unit = withClue(s"$name -> $output") {
     output.indexOf(Marker) shouldBe -1
+    if (numeric) output.indexOf(NumericSecret) shouldBe -1
     if (output.nonEmpty) parse(output).isRight shouldBe true
     ()
   }
@@ -28,16 +36,16 @@ class JsonRedactionPropertySpec extends AnyWordSpec with Matchers {
     "never leak a marker and always produce JSON, at every cut" in {
       for (body <- bodies; n <- 0 to body.length) {
         val r = scan(body.take(n), truncated = true, DenyList(sensitive))
-        check(s"deny cut $n of $body", r.text)
+        check(s"deny cut $n of $body", r.text, numeric = true)
       }
     }
   }
 
   "the allow-list mode" should {
     "never leak a marker and always produce JSON, at every cut" in {
-      for (body <- bodies; n <- 0 to body.length) {
+      for (body <- bodies ++ keepOnlyBodies; n <- 0 to body.length) {
         val r = scan(body.take(n), truncated = true, KeepOnly(allowed, sensitive))
-        check(s"keepOnly cut $n of $body", r.text)
+        check(s"keepOnly cut $n of $body", r.text, numeric = true)
       }
     }
   }

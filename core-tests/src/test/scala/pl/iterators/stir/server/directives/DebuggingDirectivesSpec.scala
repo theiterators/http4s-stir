@@ -417,6 +417,8 @@ class DebuggingDirectivesSpec extends RoutingSpec {
         parameter("password".requiredValue("SERVER_CANARY")) { _ => complete("ok") }) ~> check {
         handled shouldBe false
         (normalizedDebugMsg() should not).include("SERVER_CANARY")
+        normalizedDebugMsg() should
+        include("InvalidRequiredValueForQueryParamRejection(password,<REDACTED>,<REDACTED>)")
       }
       resetDebugMsg()
       Get("/q?pin=12ab-SECRET") ~> logRequestResult(logAction = logAction)(parameter("pin".as[Int]) { _ =>

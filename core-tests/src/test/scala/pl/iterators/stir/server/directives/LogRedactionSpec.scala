@@ -213,6 +213,18 @@ class LogRedactionSpec extends AnyWordSpec with Matchers {
         json("""{"card":"411111111111""")) shouldEqual
       Text("""{"card":"411111111111"}""", Some("unparseable from position 21"), incomplete = true)
     }
+    "hide a truncated plain or form body without calling f, whatever the incoming Text says" in {
+      var calls = 0
+      val counting: String => String = s => { calls += 1; card(s) }
+      run(LogRedaction.none.redactBodyValues(counting), plain("card 4111111111", truncated = true)) shouldEqual
+      Hidden(None)
+      run(LogRedaction.none.redactBodyValues(counting), form("card=4111111111", truncated = true)) shouldEqual
+      Hidden(None)
+      // the custom Text reports incomplete = false: only body.truncated tells the stage to hide
+      val custom = LogRedaction.default.withBodyRedactor(BodyRedactor(_.text, prefixSafe = true))
+      run(custom.redactBodyValues(counting), plain("card 4111111111", truncated = true)) shouldEqual Hidden(None)
+      calls shouldEqual 0
+    }
     "propagate incompleteness through a preceding prefix-safe rule" in {
       var calls = 0
       val counting: String => String = s => { calls += 1; card(s) }
