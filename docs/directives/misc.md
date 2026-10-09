@@ -132,11 +132,11 @@ With no configuration, values under conventionally named keys never reach the lo
   `Referer` or `Location` is always masked, and one for a header selected by `redactHeadersWhen` is masked too.
 
 A name matches when, after lowercasing and splitting on `-`, `_`, other punctuation and camelCase boundaries, one of
-its words is one of `auth authorization apikey certificate cookie credential csrf cvc cvv key otp pass passphrase
+its words is one of `auth authorization apikey certificate cookie credential csrf cvc cvv jwt key otp pass passphrase
 passwd password privatekey pwd salt secret session sessionid sig signature ssn token xsrf` (or its plural), or ends with
 `token`, `secret`, `password` or `passwd`. Header names are matched lowercased, as HTTP/2 delivers them, so
 `X-Access-Key` matches and `X-AccessKey` does not. `email`, `code` and client IP headers are deliberately not in the
-list; the usual additions are `LogRedaction.default.addNames("code", "jwt", "pin", "iban")`.
+list; the usual additions are `LogRedaction.default.addNames("code", "pin", "iban")`.
 
 The policy is one argument, `redaction`, whose common operations keep every default in place:
 

@@ -12,11 +12,14 @@ import pl.iterators.stir.impl.util._
  */
 object SensitiveNames {
 
-  /** Words that make a name sensitive, derived from the Rails, Django, Sentry, http4s and OpenTelemetry lists. */
+  /**
+   * Words that make a name sensitive: the Rails, Django, Sentry, http4s and OpenTelemetry lists, plus `jwt`, which
+   * none of them carries because a JWT usually travels under a `token` name.
+   */
   val words: Set[String] = Set(
-    "auth", "authorization", "apikey", "certificate", "cookie", "credential", "csrf", "cvc", "cvv", "key", "otp",
-    "pass", "passphrase", "passwd", "password", "privatekey", "pwd", "salt", "secret", "session", "sessionid", "sig",
-    "signature", "ssn", "token", "xsrf")
+    "auth", "authorization", "apikey", "certificate", "cookie", "credential", "csrf", "cvc", "cvv", "jwt", "key",
+    "otp", "pass", "passphrase", "passwd", "password", "privatekey", "pwd", "salt", "secret", "session", "sessionid",
+    "sig", "signature", "ssn", "token", "xsrf")
 
   /** A word ending with one of these is sensitive (`accesstoken`, `clientsecret`, `userpassword`). */
   val suffixes: Set[String] = Set("token", "secret", "password", "passwd")

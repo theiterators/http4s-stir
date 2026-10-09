@@ -13,7 +13,7 @@ class SensitiveNamesSpec extends AnyWordSpec with Matchers {
     "passphrase", "secret", "token", "key", "apikey", "api_key", "auth", "certificate", "cookie", "credential",
     "csrf", "csrftoken", "cvc", "cvv", "otp", "privatekey", "salt", "session", "sessionid", "sig", "signature",
     "ssn", "xsrf", "Authorization", "Cookie", "X-Amz-Signature", "X-Amz-Credential", "X-Amz-Security-Token",
-    "X-Goog-Signature", "private_key", "X-Csrf-Token", "x-xsrf-token")
+    "X-Goog-Signature", "private_key", "X-Csrf-Token", "x-xsrf-token", "jwt", "JWT", "jwts", "X-JWT", "user_jwt")
 
   val notSensitive = Seq(
     "monkeys", "keyboard", "WWW-Authenticate", "Content-Type", "zip_code", "tokenizer", "email", "api",
@@ -27,10 +27,10 @@ class SensitiveNamesSpec extends AnyWordSpec with Matchers {
     "leave ordinary names alone" in {
       for (n <- notSensitive) withClue(n)(SensitiveNames.default(n) shouldBe false)
     }
-    "contain every word of the published lists" in {
+    "contain every word of the published lists, and jwt" in {
       SensitiveNames.words shouldEqual Set("auth", "authorization", "apikey", "certificate", "cookie", "credential",
-        "csrf", "cvc", "cvv", "key", "otp", "pass", "passphrase", "passwd", "password", "privatekey", "pwd", "salt",
-        "secret", "session", "sessionid", "sig", "signature", "ssn", "token", "xsrf")
+        "csrf", "cvc", "cvv", "jwt", "key", "otp", "pass", "passphrase", "passwd", "password", "privatekey", "pwd",
+        "salt", "secret", "session", "sessionid", "sig", "signature", "ssn", "token", "xsrf")
       SensitiveNames.suffixes shouldEqual Set("token", "secret", "password", "passwd")
     }
     "be invariant under capitalization" in {
