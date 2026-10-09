@@ -34,19 +34,21 @@ private[directives] object FormRedaction {
     (c >= '0' && c <= '9') ||
     c == '-' || c == '.' || c == '_' || c == '~'
 
-  private def isSeparator(c: Char): Boolean = c == '&' || c == ';'
+  /** The separators http4s accepts in a form body. `UriRedactor.fragment` splits on `&` alone, as `URLSearchParams` does. */
+  val FormSeparators: String = "&;"
 
   /**
    * Re-emits `text` part by part; `value(name, rawValue)` chooses the text that replaces a part's raw value.
    * A part without `=` is re-emitted verbatim, except the last part of a truncated body, which is dropped with
    * its separator.
    */
-  private def rewrite(text: String, truncated: Boolean)(value: (String, String) => String): String = {
+  def rewrite(text: String, truncated: Boolean, separators: String = FormSeparators)(
+      value: (String, String) => String): String = {
     val out = new StringBuilder(text.length)
     var start = 0
     while (start <= text.length) {
       var end = start
-      while (end < text.length && !isSeparator(text.charAt(end))) end += 1
+      while (end < text.length && separators.indexOf(text.charAt(end).toInt) < 0) end += 1
       val part = text.substring(start, end)
       val isLast = end == text.length
       val eq = part.indexOf('=')

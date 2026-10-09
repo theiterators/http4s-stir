@@ -30,10 +30,11 @@ private[directives] object LogRendering {
   /**
    * `uri` rendered by http4s, except that the fragment is appended as received: http4s keeps a parsed fragment raw
    * but percent-encodes it again on render (`%41` would log as `%2541`), and `UriRedactor.fragment` rewrites it as
-   * text.
+   * text. A `Uri` built in code is never parsed, so its fragment may hold control characters; they are escaped
+   * like a body, so that one entry stays one line.
    */
   private def renderUri(uri: Uri): String = uri.fragment match {
-    case Some(fragment) => uri.copy(fragment = None).renderString + "#" + fragment
+    case Some(fragment) => uri.copy(fragment = None).renderString + "#" + escapeControl(fragment)
     case None           => uri.renderString
   }
 

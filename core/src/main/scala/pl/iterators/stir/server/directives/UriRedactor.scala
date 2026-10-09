@@ -33,16 +33,29 @@ object UriRedactor {
 
   /**
    * A query-shaped fragment (one containing `=`, as the OAuth 2.0 implicit grant writes `access_token=…` into the
-   * `Location` fragment) is split like a form body, and the value of every pair whose decoded name satisfies
-   * `isSensitive` becomes `REDACTED`; other fragments and a URI without one are untouched. The fragment is rewritten
-   * as text, never re-encoded, and `LogRendering` logs it as received.
+   * `Location` fragment) has the value of every pair whose decoded name satisfies `isSensitive` replaced by
+   * `REDACTED`; other fragments and a URI without one are untouched. Pairs are separated by `&` alone, as
+   * `URLSearchParams` reads a fragment, so a sensitive value is masked whole even when it contains `;`; inside
+   * another value, a `;`-separated sensitive pair (the legacy separator) is masked as well. In a hash route
+   * (`#/login?id_token=…`) the text up to the first `?` is a route prefix and names start after it. The fragment is
+   * rewritten as text, never re-encoded, and `LogRendering` logs it as received.
    */
   def fragment(isSensitive: String => Boolean): Uri => Uri = { uri =>
     uri.fragment match {
       case Some(f) if f.contains('=') =>
-        val masked = FormRedaction.maskFields(f, truncated = false, StandardCharsets.UTF_8, isSensitive)
+        val q = f.indexOf('?')
+        val prefixLength = if (q >= 0 && q < f.indexOf('=')) q + 1 else 0
+        val masked = f.substring(0, prefixLength) + maskPairs(f.substring(prefixLength), isSensitive)
         if (masked == f) uri else uri.copy(fragment = Some(masked))
       case _ => uri
+    }
+  }
+
+  private def maskPairs(text: String, isSensitive: String => Boolean): String = {
+    def sensitive(name: String) = isSensitive(Uri.decode(name, StandardCharsets.UTF_8, plusIsSpace = true))
+    FormRedaction.rewrite(text, truncated = false, separators = "&") { (name, value) =>
+      if (sensitive(name)) Mask
+      else FormRedaction.rewrite(value, truncated = false, separators = ";") { (n, v) => if (sensitive(n)) Mask else v }
     }
   }
 

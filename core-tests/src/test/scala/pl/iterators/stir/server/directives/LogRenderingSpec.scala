@@ -74,6 +74,12 @@ class LogRenderingSpec extends AnyWordSpec with Matchers {
       requestLine(Request[IO](Method.GET, Uri.unsafeFromString("/hello")), default) shouldEqual
       "HTTP/1.1 GET /hello Headers()"
     }
+    "escape control characters in a fragment, which is otherwise appended as received" in {
+      // a Uri built in code is never parsed, so its fragment can hold a raw newline; the line must stay one line
+      val forged = Request[IO](Method.GET, Uri.unsafeFromString("/a?x=1").withFragment("s\nFORGED&t=%0A"))
+      requestLine(forged, none) shouldEqual "HTTP/1.1 GET /a?x=1#s\\nFORGED&t=%0A Headers()"
+      requestLine(forged, default) shouldEqual "HTTP/1.1 GET /a?x=1#s\\nFORGED&t=%0A Headers()"
+    }
     "union redactHeadersWhen with the policy's header predicate" in {
       requestLine(request, default.copy(redactHeadersWhen = _ == ci"Accept")) shouldEqual
       "HTTP/1.1 GET http://REDACTED:REDACTED@h/a?token=REDACTED&x=1 Headers(X-Api-Key: <REDACTED>, Referer: https://r/?access_token=REDACTED&y=2, Accept: <REDACTED>)"

@@ -53,6 +53,22 @@ class UriRedactorSpec extends AnyWordSpec with Matchers {
       UriRedactor.fragment(names)(uri("/cb#access%5Ftoken=X&user+name=u&state=%7Bs%7D")).fragment shouldEqual
       Some("access%5Ftoken=REDACTED&user+name=u&state=%7Bs%7D")
     }
+    "treat ; as part of a value, as URLSearchParams does, and still honour it as a legacy separator" in {
+      // a sensitive value is masked whole; inside another value, a ;-separated sensitive pair is masked too
+      UriRedactor.fragment(names)(uri("/cb#access_token=prefix;CANARY&state=s")).fragment shouldEqual
+      Some("access_token=REDACTED&state=s")
+      UriRedactor.fragment(names)(uri("/cb#state=s;id_token=I&x=1")).fragment shouldEqual
+      Some("state=s;id_token=REDACTED&x=1")
+    }
+    "match parameter names after a hash route's ?, so that an exact predicate sees them" in {
+      val exact: String => Boolean = _ == "id_token"
+      UriRedactor.fragment(exact)(uri("https://spa.example/#/login?id_token=X&state=s")).fragment shouldEqual
+      Some("/login?id_token=REDACTED&state=s")
+      UriRedactor.fragment(exact)(uri("/cb#id_token=X&state=a?b")).fragment shouldEqual
+      Some("id_token=REDACTED&state=a?b")
+      val routeOnly = uri("/cb#/login?")
+      UriRedactor.fragment(exact)(routeOnly) shouldEqual routeOnly
+    }
     "leave a fragment that is not query-shaped and a URI without a fragment untouched" in {
       val route = uri("https://app.example/#/users/42")
       UriRedactor.fragment(names)(route) shouldEqual route

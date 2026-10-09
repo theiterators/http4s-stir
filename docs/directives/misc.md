@@ -120,7 +120,9 @@ With no configuration, values under conventionally named keys never reach the lo
   in addition to `Authorization`, `Cookie` and `Set-Cookie`;
 - query parameter values and the userinfo of the request URI, and of `Referer`/`Location` headers, render as `REDACTED`
   (`/login?token=REDACTED`); so do the values of a query-shaped fragment (`/cb#access_token=REDACTED&state=s`, the
-  shape the OAuth 2.0 implicit grant writes into `Location`), while other fragments (`#/users/42`) stay as received;
+  shape the OAuth 2.0 implicit grant writes into `Location`), with pairs separated by `&` as `URLSearchParams` reads
+  them and the query of a hash route (`#/login?id_token=REDACTED`) included, while other fragments (`#/users/42`)
+  stay as received;
   an unparseable `Referer` or `Location` renders as `<REDACTED>`;
 - JSON bodies are logged compact with the value under any matching key, at any depth, replaced by `"REDACTED"`; a body
   cut at `maxBodyBytes` is closed so that the logged text is still valid JSON;
@@ -229,5 +231,5 @@ compiled against 0.5.x has to be recompiled.
 
 1. The values of a query-shaped fragment under conventional names are masked, in the request line and in
    `Referer`/`Location` (`#access_token=REDACTED&state=s`). `UriRedactor.fragment` is the building block.
-2. A URI fragment is logged as received, in the request line and in a transformed `Referer` or `Location`; 0.6.0 let
-   http4s re-encode `%` in it (`%41` → `%2541`).
+2. A URI fragment is logged as received, with control characters escaped, in the request line and in a transformed
+   `Referer` or `Location`; 0.6.0 let http4s re-encode `%` in it (`%41` → `%2541`).
