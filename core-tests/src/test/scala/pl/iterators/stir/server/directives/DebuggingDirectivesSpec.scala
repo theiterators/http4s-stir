@@ -1,6 +1,6 @@
 package pl.iterators.stir.server.directives
 
-import cats.effect.IO
+import cats.effect.{ IO, Ref }
 import cats.effect.unsafe.IORuntime
 import fs2.{ Chunk, Stream }
 import java.nio.charset.StandardCharsets
@@ -358,6 +358,28 @@ class DebuggingDirectivesSpec extends RoutingSpec {
         responseAs[String] shouldEqual "ok"
         normalizedDebugMsg() should startWith(
           "HTTP/1.1 POST /x Headers(Content-Length: 27, Content-Type: application/json; charset=ISO-8859-1) body=\"{\"password\":\"REDACTED\",\"note\":\"é\"}\"\n")
+      }
+    }
+
+    "pull the source body once, only as far as maxBodyBytes before logging, and stream the rest to the route" in {
+      val chunks = List("""{"password":"hun""", """ter2","user":"a""", """lice"}""")
+      val text = chunks.mkString
+      val pulls = Ref.unsafe[IO, Int](0)
+      val source = Stream.emits(chunks).covary[IO].evalTap(_ => pulls.update(_ + 1))
+        .flatMap(s => Stream.chunk(Chunk.array(s.getBytes("UTF-8"))))
+      val counted: Option[String => IO[Unit]] =
+        Some(msg => pulls.get.flatMap(n => IO { debugMsg += s"[$n] $msg\n" }))
+      val request = Post("/login", source).putHeaders(`Content-Length`.unsafeFromLong(text.length.toLong))
+        .withContentType(jsonType)
+      val intact = entity(as[String]) { s => complete(if (s == text) "intact" else "broken") }
+      resetDebugMsg()
+      request ~> logRequestResult(logAction = counted, maxBodyBytes = 10)(intact) ~> check {
+        responseAs[String] shouldEqual "intact"
+        pulls.get.unsafeRunSync() shouldEqual 3
+        normalizedDebugMsg() should startWith(
+          s"[1] HTTP/1.1 POST /login Headers(Content-Length: ${text.length}, Content-Type: application/json) body=")
+        normalizedDebugMsg() should include("[3] HTTP/1.1 200 OK")
+        (normalizedDebugMsg() should not).include("hunter2")
       }
     }
 
