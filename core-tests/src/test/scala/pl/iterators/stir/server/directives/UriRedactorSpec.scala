@@ -41,6 +41,33 @@ class UriRedactorSpec extends AnyWordSpec with Matchers {
     }
   }
 
+  "fragment" should {
+    "mask values of sensitive pairs in a query-shaped fragment and keep the rest as received" in {
+      UriRedactor.fragment(names)(uri("https://app.example/cb#access_token=X&expires_in=3600&state=s;id_token=I"))
+        .renderString shouldEqual
+      "https://app.example/cb#access_token=REDACTED&expires_in=3600&state=s;id_token=REDACTED"
+      UriRedactor.fragment(names)(uri("/cb#token=T")).renderString shouldEqual "/cb#token=REDACTED"
+    }
+    "decode the pair name for matching only, keeping the raw fragment text" in {
+      // the fragment is rewritten as text: http4s would re-encode % on render, LogRendering appends it as received
+      UriRedactor.fragment(names)(uri("/cb#access%5Ftoken=X&user+name=u&state=%7Bs%7D")).fragment shouldEqual
+      Some("access%5Ftoken=REDACTED&user+name=u&state=%7Bs%7D")
+    }
+    "leave a fragment that is not query-shaped and a URI without a fragment untouched" in {
+      val route = uri("https://app.example/#/users/42")
+      UriRedactor.fragment(names)(route) shouldEqual route
+      val empty = uri("/a#")
+      UriRedactor.fragment(names)(empty) shouldEqual empty
+      UriRedactor.fragment(names)(uri("/a?token=t")).renderString shouldEqual "/a?token=t"
+    }
+    "keep a fragment without a masked value as received" in {
+      val received = uri("https://app.example/cb#x=a+b&y=%41&flag")
+      val logged = UriRedactor.fragment(names)(received)
+      logged shouldEqual received
+      logged.fragment shouldEqual Some("x=a+b&y=%41&flag")
+    }
+  }
+
   "segmentAfter" should {
     "mask the segment following a sensitive one" in {
       UriRedactor.segmentAfter(names)(uri("/password-reset/XYZ123/confirm/")).renderString shouldEqual

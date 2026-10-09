@@ -1,11 +1,12 @@
 package pl.iterators.stir.server.directives
 
+import java.nio.charset.StandardCharsets
 import org.http4s.{ Query, Uri }
 
 /**
  * Building blocks for redacting a `Uri` before it is logged: the request-line URI and, while the URI-header stage
- * is on, the `Referer` and `Location` values. `LogRedaction` composes `query(names) andThen userInfo` itself;
- * `redactPath` wraps `pathTemplate`.
+ * is on, the `Referer` and `Location` values. `LogRedaction` composes `query(names) andThen userInfo andThen
+ * fragment(names)` itself; `redactPath` wraps `pathTemplate`.
  */
 object UriRedactor {
 
@@ -28,6 +29,21 @@ object UriRedactor {
     uri.copy(authority = uri.authority.map { authority =>
       authority.copy(userInfo = authority.userInfo.map(info => Uri.UserInfo(Mask, info.password.map(_ => Mask))))
     })
+  }
+
+  /**
+   * A query-shaped fragment (one containing `=`, as the OAuth 2.0 implicit grant writes `access_token=…` into the
+   * `Location` fragment) is split like a form body, and the value of every pair whose decoded name satisfies
+   * `isSensitive` becomes `REDACTED`; other fragments and a URI without one are untouched. The fragment is rewritten
+   * as text, never re-encoded, and `LogRendering` logs it as received.
+   */
+  def fragment(isSensitive: String => Boolean): Uri => Uri = { uri =>
+    uri.fragment match {
+      case Some(f) if f.contains('=') =>
+        val masked = FormRedaction.maskFields(f, truncated = false, StandardCharsets.UTF_8, isSensitive)
+        if (masked == f) uri else uri.copy(fragment = Some(masked))
+      case _ => uri
+    }
   }
 
   /** Segment `i` (i >= 1) becomes `REDACTED` when `isSensitive` holds for the decoded segment `i - 1`. */

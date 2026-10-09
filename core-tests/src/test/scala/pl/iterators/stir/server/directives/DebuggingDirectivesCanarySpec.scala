@@ -31,7 +31,8 @@ class DebuggingDirectivesCanarySpec extends RoutingSpec {
 
   val echo = entity(as[String]) { _ =>
     complete(Response[IO](Status.Ok).withEntity(responseJson).withContentType(jsonType)
-      .putHeaders(Header.Raw(ci"Location", "https://app.example/cb?access_token=CANARY-loc&x=1")))
+      .putHeaders(Header.Raw(ci"Location",
+        "https://app.example/cb?access_token=CANARY-loc&x=1#id_token=CANARY-frag&state=s")))
   }
   def jsonRequest = Post("/login?token=CANARY-q&user=alice").withEntity(requestJson).withContentType(jsonType)
     .putHeaders(Header.Raw(ci"X-Api-Key", "CANARY-header"), Header.Raw(ci"Authorization", "Bearer CANARY-auth"),

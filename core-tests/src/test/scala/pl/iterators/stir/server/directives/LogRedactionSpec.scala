@@ -36,6 +36,8 @@ class LogRedactionSpec extends AnyWordSpec with Matchers {
       d.headers(ci"Content-Type") shouldBe false
       d.uri(uri("http://u:p@h/a?token=t&x=1")).renderString shouldEqual
       "http://REDACTED:REDACTED@h/a?token=REDACTED&x=1"
+      d.uri(uri("https://h/cb#access_token=t&state=s")).renderString shouldEqual
+      "https://h/cb#access_token=REDACTED&state=s"
       d.transformUriHeaders shouldBe true
       d.rejectionValues shouldEqual RejectionValues.ByName
       run(d, json("""{"password":"x","a":1}""")) shouldEqual Text("""{"password":"REDACTED","a":1}""")
@@ -52,6 +54,7 @@ class LogRedactionSpec extends AnyWordSpec with Matchers {
       n.names("password") shouldBe false
       n.headers(ci"X-Api-Key") shouldBe false
       n.uri(uri("http://u:p@h/a?token=t")).renderString shouldEqual "http://u:p@h/a?token=t"
+      n.uri(uri("https://h/cb#access_token=t")).renderString shouldEqual "https://h/cb#access_token=t"
       n.transformUriHeaders shouldBe false
       n.rejectionValues shouldEqual RejectionValues.Shown
       run(n, json("""{"password":"x","a":1}""")) shouldEqual Text("""{"password":"x","a":1}""")

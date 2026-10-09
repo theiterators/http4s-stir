@@ -24,10 +24,11 @@ final class LogRedaction private (
   /** `SensitiveNames.headerFrom(names)` while the names stage is on. */
   val headers: CIString => Boolean = namesStage.fold[CIString => Boolean](_ => false)(SensitiveNames.headerFrom)
 
-  /** Query and userinfo masking while the names stage is on, then the added URI rules in order. */
+  /** Query, userinfo and fragment masking while the names stage is on, then the added URI rules in order. */
   val uri: Uri => Uri = {
     val namesPart: Uri => Uri =
-      namesStage.fold[Uri => Uri](identity)(p => UriRedactor.query(p).andThen(UriRedactor.userInfo))
+      namesStage.fold[Uri => Uri](identity)(p =>
+        UriRedactor.query(p).andThen(UriRedactor.userInfo).andThen(UriRedactor.fragment(p)))
     uriRules.foldLeft(namesPart)(_.andThen(_))
   }
 
