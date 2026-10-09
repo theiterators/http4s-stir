@@ -67,6 +67,11 @@ class SensitiveNamesSpec extends AnyWordSpec with Matchers {
       an[IllegalArgumentException] should be thrownBy SensitiveNames.matching(Set("--"))
       an[IllegalArgumentException] should be thrownBy SensitiveNames.matching(Set(""))
     }
+    "lowercase suffixes and reject a suffix without a letter or digit at construction" in {
+      SensitiveNames.matching(Set("pin"), Set("Token"))("accessToken") shouldBe true
+      an[IllegalArgumentException] should be thrownBy SensitiveNames.matching(Set("pin"), Set(""))
+      an[IllegalArgumentException] should be thrownBy SensitiveNames.matching(Set("pin"), Set("_"))
+    }
   }
 
   "SensitiveNames.header" should {

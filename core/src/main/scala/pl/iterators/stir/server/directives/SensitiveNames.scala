@@ -19,8 +19,8 @@ object SensitiveNames {
   val suffixes: Set[String] = Set("token", "secret", "password", "passwd")
 
   /**
-   * Builds a predicate from entries (normalised like names) and suffix rules. An entry without a letter or digit is
-   * rejected here, at construction, never at log time.
+   * Builds a predicate from entries (normalised like names) and suffix rules (lowercased like names). An entry or a
+   * suffix without a letter or digit is rejected here, at construction, never at log time.
    */
   def matching(entries: Set[String], suffixes: Set[String] = SensitiveNames.suffixes): String => Boolean = {
     val phrases: Set[List[String]] = entries.map { entry =>
@@ -32,7 +32,11 @@ object SensitiveNames {
     val singles: Set[String] = phrases.collect { case w :: Nil => w }
     val multis: List[List[String]] = phrases.filter(_.lengthCompare(1) > 0).toList
     val concatenations: Set[String] = multis.map(_.mkString).toSet
-    val sfx: List[String] = suffixes.toList
+    val sfx: List[String] = suffixes.toList.map { suffix =>
+      if (!suffix.exists(isAsciiAlnum))
+        throw new IllegalArgumentException(s"sensitive name suffix '$suffix' contains no letter or digit")
+      suffix.toRootLowerCase
+    }
 
     def wordMatches(w: String): Boolean =
       singles.contains(w) || concatenations.contains(w) ||
