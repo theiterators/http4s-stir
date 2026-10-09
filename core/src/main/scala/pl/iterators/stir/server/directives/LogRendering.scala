@@ -14,8 +14,10 @@ import pl.iterators.stir.server.{
 import scala.util.control.NonFatal
 
 /**
- * Renders the log lines of the debugging directives in the http4s format (design spec, sections 6 and 9), so that
- * placeholders can be put anywhere and user code is guarded.
+ * Renders the log lines of the debugging directives in the http4s format, so that placeholders can be put anywhere
+ * and user code is guarded: a failure renders as `<redaction failed: ExceptionClass>` in place of the part it
+ * affects (a rejection field whose predicate throws counts as sensitive instead), and control characters in bodies,
+ * notes and rejections are escaped.
  */
 private[directives] object LogRendering {
 

@@ -5,7 +5,8 @@ import org.http4s.Uri
 
 /**
  * The `application/x-www-form-urlencoded` splitter behind `BodyRedactor.formFields` and the form branch of the
- * value rules (design spec, section 8). Parts are separated by `&` or `;`, the two separators http4s accepts.
+ * value rules. Parts are separated by `&` or `;`, the two separators http4s accepts, and split on their first `=`;
+ * only values are replaced, except that a part without `=` at the end of a truncated body is dropped.
  */
 private[directives] object FormRedaction {
 

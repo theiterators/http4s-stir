@@ -5,7 +5,10 @@ import pl.iterators.stir.impl.util._
 
 /**
  * The name predicate shared by every redaction channel: header names, query parameter names, JSON keys, form
- * field names and the field names carried by rejections. See the design spec, section 5.3.
+ * field names and the field names carried by rejections. A name is lowercased and split into words on characters
+ * other than ASCII letters and digits and at camelCase boundaries; it is sensitive when a word matches an entry or
+ * its plural, a multi-word entry occurs as consecutive words or as one concatenated word, or a word ends with a
+ * suffix.
  */
 object SensitiveNames {
 

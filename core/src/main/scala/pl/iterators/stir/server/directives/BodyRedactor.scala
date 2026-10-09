@@ -5,7 +5,8 @@ import fs2.{ Chunk, Stream }
 import org.http4s.{ Charset, MediaType, Message, Request }
 
 /**
- * The bytes a logging directive captured for one message, at most `maxBodyBytes` of them (design spec, section 5.4).
+ * The bytes a logging directive captured for one message, at most `maxBodyBytes` of them. The directives pass the
+ * message with these bytes as its body, so reading `message` never touches the stream being logged.
  *
  * @param truncated
  *   whether the message body is longer than `bytes`: `Content-Length > maxBodyBytes` when the length is known,
@@ -45,11 +46,15 @@ final case class LoggedBody(message: Message[IO], bytes: Chunk[Byte], truncated:
 
 /**
  * Decides what a logging directive prints for a body. Built-ins are in the companion; `eval` is the general
- * constructor and `orElse` chains redactors through `Skip` (design spec, section 5.4).
+ * constructor and `orElse` chains redactors through `Skip`. See "Redacting sensitive data" in
+ * `docs/directives/misc.md`.
  */
 sealed abstract class BodyRedactor {
 
-  /** Never throws: an exception from user code, thrown or raised, is a failed `IO` (design spec, section 9). */
+  /**
+   * Never throws: an exception from user code, thrown or raised, is a failed `IO`, which the directives log as
+   * `<redaction failed: ExceptionClass>` with the fully qualified class name.
+   */
   def redact(body: LoggedBody): IO[BodyRedactor.Outcome]
 
   /** `that` is consulted when this redactor yields `Skip`. */

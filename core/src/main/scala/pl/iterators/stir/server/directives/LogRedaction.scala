@@ -5,9 +5,9 @@ import org.typelevel.ci.CIString
 
 /**
  * The redaction policy a logging directive applies to headers, the request URI, `Referer`/`Location`, the logged
- * body and rejections (design spec, section 5.2). `default` has every stage on; `none` reproduces 0.5.0 and an
- * operation switches on the stage it needs. The `add…`/`redact…`/`hide…` operations keep every default in place;
- * `with…` replaces one.
+ * body and rejections. `default` has every stage on; `none` reproduces 0.5.0 and an operation switches on the stage
+ * it needs. The `add…`/`redact…`/`hide…` operations keep every default in place; `with…` replaces one. See
+ * "Redacting sensitive data" in `docs/directives/misc.md`.
  */
 final class LogRedaction private (
     private val namesStage: Option[String => Boolean],
@@ -75,7 +75,10 @@ final class LogRedaction private (
   /** Replaces the name predicate (earlier `addNames` are discarded). */
   def withNames(p: String => Boolean): LogRedaction = copy(namesStage = Some(p), uriHeaderStage = true)
 
-  /** `r` is consulted before everything else; bodies it does not `Skip` bypass the name-based masking. */
+  /**
+   * `r` is consulted before everything added earlier; bodies it does not `Skip` bypass the name-based masking, and
+   * value rules still run on its `Text`.
+   */
   def withBodyRedactor(r: BodyRedactor): LogRedaction = copy(overrides = r +: overrides)
 
   private def copy(
@@ -98,7 +101,10 @@ object LogRedaction {
     case object Hidden extends RejectionValues
   }
 
-  /** Every stage on: names from `SensitiveNames.default`, plain text shown, every other body hidden. */
+  /**
+   * Every stage on: names from `SensitiveNames.default`; JSON and form bodies are masked by name, plain text is
+   * shown, every other body is hidden.
+   */
   val default: LogRedaction = new LogRedaction(
     namesStage = Some(SensitiveNames.default),
     uriHeaderStage = true,

@@ -12,7 +12,9 @@ trait DebuggingDirectives {
   /**
    * Produces a log entry for every incoming request. Secrets are redacted according to `redaction`
    * (`LogRedaction.default` masks conventionally named values in headers, the URI, JSON and form bodies and
-   * rejections; `LogRedaction.none` reproduces the 0.5.0 output).
+   * rejections; `LogRedaction.none` reproduces the 0.5.0 output, except that control characters in bodies and
+   * rejection lines are escaped, a JSON content type with parameters is logged as text instead of hex, and a failing
+   * `logAction` is swallowed).
    *
    * @group debugging
    */

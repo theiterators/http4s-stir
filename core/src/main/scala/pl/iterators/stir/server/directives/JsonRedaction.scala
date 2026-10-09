@@ -4,8 +4,11 @@ import scala.collection.mutable
 
 /**
  * The incremental JSON scanner behind `BodyRedactor.jsonKeys`, `jsonKeepOnly`, `json` and the value rules of
- * `LogRedaction` (design spec, section 7). One pass, left to right, explicit stack, no recursion, no regular
- * expressions, no JSON library. The output is compact and is valid JSON at every truncation point.
+ * `LogRedaction`. One pass, left to right, explicit stack, no recursion, no regular expressions, no JSON library.
+ * Reading stops at the end of the input or at the first invalid character (noted with its position); a dangling
+ * member or token is dropped and open strings and containers are closed. The output is compact, and it is valid
+ * JSON at every truncation point once the renderer escapes raw control characters, which the scanner keeps as
+ * string content.
  */
 private[directives] object JsonRedaction {
 
@@ -17,7 +20,7 @@ private[directives] object JsonRedaction {
   final case class KeepOnly(keys: Set[String], isSensitive: String => Boolean) extends Mode
   final case class Transform(f: String => String) extends Mode
 
-  /** The JSON literal that replaces a masked value; `BodyRedactor.Mask` (Task 9) is the same word unquoted. */
+  /** The JSON literal that replaces a masked value; `BodyRedactor.Mask` is the same word unquoted. */
   val MaskLiteral: String = "\"" + BodyRedactor.Mask + "\""
 
   def scan(input: String, truncated: Boolean, mode: Mode): Result = new Scanner(input, truncated, mode).run()
@@ -81,6 +84,9 @@ private[directives] object JsonRedaction {
     sb.append('"')
     sb.toString
   }
+
+  // Int codes rather than an ADT, deliberately: states and modes are tested for every input character in the hot
+  // loop of `run`.
 
   // States between tokens.
   private val ExpectValue = 0

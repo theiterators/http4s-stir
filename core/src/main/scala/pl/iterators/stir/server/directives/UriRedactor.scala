@@ -3,8 +3,9 @@ package pl.iterators.stir.server.directives
 import org.http4s.{ Query, Uri }
 
 /**
- * Building blocks for redacting a `Uri` before it is logged (design spec, section 5.5). `LogRedaction` composes
- * `query(names) andThen userInfo` itself; `redactPath` wraps `pathTemplate`.
+ * Building blocks for redacting a `Uri` before it is logged: the request-line URI and, while the URI-header stage
+ * is on, the `Referer` and `Location` values. `LogRedaction` composes `query(names) andThen userInfo` itself;
+ * `redactPath` wraps `pathTemplate`.
  */
 object UriRedactor {
 
@@ -43,10 +44,10 @@ object UriRedactor {
   }
 
   /**
-   * `template` is an absolute path such as `/users&#47;*&#47;tokens/{token}`: a literal must equal the decoded path
-   * segment, `*` matches any one segment and keeps it, `{name}` matches any one segment and masks it. Applies when
-   * the path has at least as many segments as the template and every template segment matches; extra path segments
-   * are kept; otherwise the URI is returned unchanged.
+   * `template` is an absolute path such as `/users/{id}/tokens/{token}`: a literal must equal the decoded path
+   * segment, `{name}` matches any one segment and masks it, and a segment that is a single asterisk matches any one
+   * segment and keeps it. Applies when the path has at least as many segments as the template and every template
+   * segment matches; extra path segments are kept; otherwise the URI is returned unchanged.
    */
   def pathTemplate(template: String): Uri => Uri = {
     val parts: Vector[String] = template.split('/').toVector.filter(_.nonEmpty)
