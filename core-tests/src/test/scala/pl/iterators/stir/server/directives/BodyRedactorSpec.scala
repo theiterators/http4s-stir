@@ -106,6 +106,12 @@ class BodyRedactorSpec extends AnyWordSpec with Matchers {
       Text("user=a", None, incomplete = true)
       run(formFields(SensitiveNames.default), json("{}")) shouldEqual Skip
     }
+    "decode percent-encoded form field names with the body charset" in {
+      val name = "%00%70%00%61%00%73%00%73%00%77%00%6F%00%72%00%64" // "password" as UTF-16BE bytes
+      val utf16 = body(s"$name=CANARY&user=a", MediaType.application.`x-www-form-urlencoded`,
+        charset = Some(Charset.`UTF-16BE`))
+      run(formFields(SensitiveNames.default), utf16) shouldEqual Text(s"$name=REDACTED&user=a")
+    }
     "run json(f) on the closed prefix, hiding repaired or truncated input unless prefix-safe" in {
       var calls = 0
       val upper = BodyRedactor.json({ s => calls += 1; s.toUpperCase }, prefixSafe = false)

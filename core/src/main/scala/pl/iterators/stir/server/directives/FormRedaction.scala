@@ -1,6 +1,6 @@
 package pl.iterators.stir.server.directives
 
-import java.nio.charset.{ Charset => JCharset, StandardCharsets }
+import java.nio.charset.{ Charset => JCharset }
 import org.http4s.Uri
 
 /**
@@ -10,10 +10,14 @@ import org.http4s.Uri
  */
 private[directives] object FormRedaction {
 
-  /** Masks the value of every part whose decoded name satisfies `isSensitive`; everything else is verbatim. */
-  def maskFields(text: String, truncated: Boolean, isSensitive: String => Boolean): String =
+  /**
+   * Masks the value of every part whose decoded name satisfies `isSensitive`; everything else is verbatim. Names
+   * are percent-decoded with `charset`, the body charset, as `UrlForm` decodes them: a name encoded as UTF-16BE
+   * bytes is `password` to the application, and must be `password` here too.
+   */
+  def maskFields(text: String, truncated: Boolean, charset: JCharset, isSensitive: String => Boolean): String =
     rewrite(text, truncated) { (name, value) =>
-      if (isSensitive(Uri.decode(name, StandardCharsets.UTF_8, plusIsSpace = true))) BodyRedactor.Mask else value
+      if (isSensitive(Uri.decode(name, charset, plusIsSpace = true))) BodyRedactor.Mask else value
     }
 
   /** Applies `f` to every decoded value; a changed result is re-encoded the way `UrlForm` encodes values. */

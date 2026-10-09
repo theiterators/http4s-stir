@@ -122,7 +122,8 @@ object BodyRedactor {
 
   /** Form bodies: the value of every field whose name satisfies `isSensitive` becomes `REDACTED`. */
   def formFields(isSensitive: String => Boolean): BodyRedactor = when(_.isForm)(unguarded { body =>
-    IO(Text(FormRedaction.maskFields(body.text, body.truncated, isSensitive), None, body.truncated))
+    IO(Text(FormRedaction.maskFields(body.text, body.truncated, body.charset.nioCharset, isSensitive), None,
+      body.truncated))
   })
 
   /**

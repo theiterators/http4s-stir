@@ -3,6 +3,7 @@ package pl.iterators.stir.server.directives
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import fs2.{ Chunk, Stream }
+import java.nio.charset.StandardCharsets
 import org.http4s.headers.{ `Content-Length`, `Content-Type`, `Transfer-Encoding` }
 import org.http4s.{ Charset, Header, MediaType, Response, Status, TransferCoding, UrlForm }
 import org.typelevel.ci._
@@ -313,6 +314,19 @@ class DebuggingDirectivesSpec extends RoutingSpec {
         responseAs[String] shouldEqual "ok"
         normalizedDebugMsg() should startWith(
           "HTTP/1.1 POST /login Headers(Content-Length: 27, Content-Type: application/x-www-form-urlencoded; charset=UTF-8) body=\"user=alice&password=REDACTED\"\n")
+      }
+    }
+
+    "mask form fields whose percent-encoded names decode with the body charset" in {
+      val name = "%00%70%00%61%00%73%00%73%00%77%00%6F%00%72%00%64" // "password" as UTF-16BE bytes
+      val utf16 = Post("/login").withEntity(s"$name=CANARY&user=a".getBytes(StandardCharsets.UTF_16BE))
+        .withContentType(`Content-Type`(MediaType.application.`x-www-form-urlencoded`, Charset.`UTF-16BE`))
+      resetDebugMsg()
+      val decodesPassword = formField("password") { v => complete(if (v == "CANARY") "decoded" else "mismatch") }
+      utf16 ~> logRequestResult(logAction = logAction)(decodesPassword) ~> check {
+        responseAs[String] shouldEqual "decoded"
+        normalizedDebugMsg() should include(s"body=\"$name=REDACTED&user=a\"")
+        (normalizedDebugMsg() should not).include("CANARY")
       }
     }
 

@@ -7,7 +7,8 @@ import org.scalatest.wordspec.AnyWordSpec
 
 class FormRedactionSpec extends AnyWordSpec with Matchers {
   val sensitive: String => Boolean = SensitiveNames.default
-  def mask(text: String, truncated: Boolean = false): String = FormRedaction.maskFields(text, truncated, sensitive)
+  def mask(text: String, truncated: Boolean = false): String =
+    FormRedaction.maskFields(text, truncated, StandardCharsets.UTF_8, sensitive)
 
   "maskFields" should {
     "mask the values of sensitive fields and keep everything else verbatim" in {
@@ -23,6 +24,15 @@ class FormRedactionSpec extends AnyWordSpec with Matchers {
     "decode the field name for matching only" in {
       mask("pass%77ord=x&user+name=y&%74oken=z") shouldEqual "pass%77ord=REDACTED&user+name=y&%74oken=REDACTED"
     }
+    "decode the field name with the body charset, as UrlForm does" in {
+      // "password" percent-encoded as UTF-16BE bytes; decoded as UTF-8 it is NUL-separated letters and matches nothing
+      val name = "%00%70%00%61%00%73%00%73%00%77%00%6F%00%72%00%64"
+      val text = s"$name=CANARY&user=a"
+      UrlForm.decodeString(Charset.`UTF-16BE`)(text).toOption.get.getFirst("password") shouldEqual Some("CANARY")
+      FormRedaction.maskFields(text, truncated = false, StandardCharsets.UTF_16BE, sensitive) shouldEqual
+      s"$name=REDACTED&user=a"
+      mask(text) shouldEqual text
+    }
     "keep a value containing = intact" in {
       mask("q=a=b&password=c=d") shouldEqual "q=a=b&password=REDACTED"
     }
@@ -37,7 +47,7 @@ class FormRedactionSpec extends AnyWordSpec with Matchers {
     "agree with UrlForm on which names carry which values" in {
       val text = "a=1;b=2&c=3&e=%26"
       val form = UrlForm.decodeString(Charset.`UTF-8`)(text).toOption.get
-      val masked = FormRedaction.maskFields(text, truncated = false, Set("b", "e"))
+      val masked = FormRedaction.maskFields(text, truncated = false, StandardCharsets.UTF_8, Set("b", "e"))
       masked shouldEqual "a=1;b=REDACTED&c=3&e=REDACTED"
       form.values.keySet shouldEqual Set("a", "b", "c", "e")
       form.getFirst("e") shouldEqual Some("&")
@@ -45,7 +55,8 @@ class FormRedactionSpec extends AnyWordSpec with Matchers {
     "be prefix-safe at every cut" in {
       val body = "user=alice&password=ZZZZ&token=ZZ;note=ok&x=Z-free"
       for (n <- 0 to body.length) withClue(n) {
-        val out = FormRedaction.maskFields(body.take(n), truncated = true, Set("password", "token"))
+        val out =
+          FormRedaction.maskFields(body.take(n), truncated = true, StandardCharsets.UTF_8, Set("password", "token"))
         out.indexOf("ZZ") shouldBe -1
       }
     }
