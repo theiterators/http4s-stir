@@ -127,7 +127,9 @@ With no configuration, values under conventionally named keys never reach the lo
   `body=<hidden> (N bytes total)`;
 - the four rejections that carry a value (`MalformedQueryParamRejection`, `MalformedFormFieldRejection`,
   `InvalidRequiredValueForQueryParamRejection`, `MalformedHeaderRejection`) render as `Name(field,<REDACTED>)` when
-  the field name matches.
+  the field name matches, and `InvalidRequiredValueForQueryParamRejection` masks both the expected and the actual
+  value (`InvalidRequiredValueForQueryParamRejection(field,<REDACTED>,<REDACTED>)`); a `MalformedHeaderRejection` for
+  `Referer` or `Location` is always masked, and one for a header selected by `redactHeadersWhen` is masked too.
 
 A name matches when, after lowercasing and splitting on `-`, `_`, other punctuation and camelCase boundaries, one of
 its words is one of `auth authorization apikey certificate cookie credential csrf cvc cvv key otp pass passphrase
@@ -168,7 +170,8 @@ logRequestResult(redaction = LogRedaction.default.withBodyRedactor(BodyRedactor.
 logRequestResult(redaction =
   LogRedaction.default.addNames("pin", "iban").redactPath("/users/*/tokens/{token}").hideRejectionValues) { route }
 
-// the 0.5.0 output, and the 0.5.0 output plus one name masked in every channel
+// the 0.5.0 output, except that control characters are escaped, logAction errors are swallowed and JSON content
+// types with parameters are logged as text; and the same plus one name masked in every channel
 logRequestResult(redaction = LogRedaction.none) { route }
 logRequestResult(redaction = LogRedaction.none.addNames("pin")) { route }
 ```
@@ -194,7 +197,9 @@ logged without a body part; response bodies cannot be scoped by route (`LoggedBo
 `logAction` hook receives the finished line and remains the last resort.
 
 **Failures.** A redactor or predicate that throws never fails the request or the response: the affected part of the
-line renders as `<redaction failed: ExceptionClass>` and nothing raw is logged.
+line renders as `<redaction failed: ExceptionClass>`, where `ExceptionClass` is the fully qualified class name (for
+example `java.lang.IllegalStateException`), and nothing raw is logged. A predicate that throws while deciding a
+rejection makes the field count as sensitive: it renders as `<REDACTED>`, not as `<redaction failed: …>`.
 
 #### Changes in 0.6.0
 
@@ -205,7 +210,15 @@ For an unconfigured `logRequestResult()`:
 2. More header names are masked than `Authorization`, `Cookie` and `Set-Cookie`.
 3. JSON bodies are logged compact, and truncated JSON closed, instead of as a raw prefix.
 4. Multipart, binary, XML and HTML bodies show their size instead of content (binary was hex).
-5. Control characters in bodies are escaped (`\n`, `\u0001`), so one entry is one line.
+5. Control characters in bodies and rejection lines are escaped (`\n`, `\u0001`), so one entry is one line.
 6. A failing `logAction` no longer fails the request or the response.
+7. A URI whose query had a value masked is re-rendered: `;` separators become `&` and percent-encoding is normalised.
+   A query with nothing masked is logged as received.
+8. A JSON body that does not parse is logged up to the first invalid character, closed, and followed by
+   `(unparseable from position N)`.
 
-`logRequestResult(redaction = LogRedaction.none)` reproduces the 0.5.0 output except for items 5 and 6.
+`logRequestResult(redaction = LogRedaction.none)` reproduces the 0.5.0 output except for items 5 and 6, and except that
+a JSON content type with parameters (`application/json; version=2`) is logged as text, where 0.5.0 logged it as hex.
+
+0.6.0 is source-compatible with 0.5.x call sites but not binary-compatible: the MiMa baseline restarts, so code
+compiled against 0.5.x has to be recompiled.
