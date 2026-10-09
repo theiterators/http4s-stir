@@ -68,6 +68,16 @@ class UriRedactorSpec extends AnyWordSpec with Matchers {
       Some("id_token=REDACTED&state=a?b")
       val routeOnly = uri("/cb#/login?")
       UriRedactor.fragment(exact)(routeOnly) shouldEqual routeOnly
+      // the route prefix may itself contain =, and there may be more than one ?
+      UriRedactor.fragment(names)(uri("/a#/user/YQ==?access_token=CANARY&state=s")).fragment shouldEqual
+      Some("/user/YQ==?access_token=REDACTED&state=s")
+      UriRedactor.fragment(_ == "token")(uri("/a#/x?y?token=X")).fragment shouldEqual Some("/x?y?token=REDACTED")
+    }
+    "match a legacy ;-separated name before the first = as well, masking the whole value" in {
+      UriRedactor.fragment(_ == "id_token")(uri("/cb#flag;id_token=CANARY&x=1")).fragment shouldEqual
+      Some("flag;id_token=REDACTED&x=1")
+      UriRedactor.fragment(_ == "id_token")(uri("/cb#/r?flag;id_token=a;b")).fragment shouldEqual
+      Some("/r?flag;id_token=REDACTED")
     }
     "leave a fragment that is not query-shaped and a URI without a fragment untouched" in {
       val route = uri("https://app.example/#/users/42")

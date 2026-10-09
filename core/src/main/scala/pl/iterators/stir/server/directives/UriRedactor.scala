@@ -35,17 +35,22 @@ object UriRedactor {
    * A query-shaped fragment (one containing `=`, as the OAuth 2.0 implicit grant writes `access_token=…` into the
    * `Location` fragment) has the value of every pair whose decoded name satisfies `isSensitive` replaced by
    * `REDACTED`; other fragments and a URI without one are untouched. Pairs are separated by `&` alone, as
-   * `URLSearchParams` reads a fragment, so a sensitive value is masked whole even when it contains `;`; inside
-   * another value, a `;`-separated sensitive pair (the legacy separator) is masked as well. In a hash route
-   * (`#/login?id_token=…`) the text up to the first `?` is a route prefix and names start after it. The fragment is
-   * rewritten as text, never re-encoded, and `LogRendering` logs it as received.
+   * `URLSearchParams` reads a fragment, so a sensitive value is masked whole even when it contains `;`. Because a
+   * fragment has no single grammar, the names are matched under every reading and the maskings are combined: as
+   * written, after each `?` (a hash route, `#/login?id_token=…`, whose path may itself contain `=`), and with
+   * `;`, the legacy separator, splitting a name (`flag;id_token=…`) or a value (`state=s;id_token=…`). Masking only
+   * ever replaces a value, so a reading that does not apply can hide more, never expose. The fragment is rewritten
+   * as text, never re-encoded, and `LogRendering` logs it as received.
    */
   def fragment(isSensitive: String => Boolean): Uri => Uri = { uri =>
     uri.fragment match {
       case Some(f) if f.contains('=') =>
-        val q = f.indexOf('?')
-        val prefixLength = if (q >= 0 && q < f.indexOf('=')) q + 1 else 0
-        val masked = f.substring(0, prefixLength) + maskPairs(f.substring(prefixLength), isSensitive)
+        var masked = maskPairs(f, isSensitive)
+        var q = masked.indexOf('?')
+        while (q >= 0) {
+          masked = masked.substring(0, q + 1) + maskPairs(masked.substring(q + 1), isSensitive)
+          q = masked.indexOf('?', q + 1)
+        }
         if (masked == f) uri else uri.copy(fragment = Some(masked))
       case _ => uri
     }
@@ -53,8 +58,9 @@ object UriRedactor {
 
   private def maskPairs(text: String, isSensitive: String => Boolean): String = {
     def sensitive(name: String) = isSensitive(Uri.decode(name, StandardCharsets.UTF_8, plusIsSpace = true))
+    def nameSensitive(name: String) = sensitive(name) || name.split(';').exists(sensitive)
     FormRedaction.rewrite(text, truncated = false, separators = "&") { (name, value) =>
-      if (sensitive(name)) Mask
+      if (nameSensitive(name)) Mask
       else FormRedaction.rewrite(value, truncated = false, separators = ";") { (n, v) => if (sensitive(n)) Mask else v }
     }
   }
