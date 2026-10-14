@@ -31,6 +31,7 @@ const sidebars = {
         'directives/directives-cache-condition',
         'directives/directives-coding',
         'directives/directives-attribute',
+        'directives/directives-entity-streaming',
       ],
     },
     'rejection-handling',
