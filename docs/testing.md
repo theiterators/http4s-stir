@@ -98,6 +98,26 @@ Inside a `check { }` block, the following members are available for assertions:
 | `rejections` | `Seq[Rejection]` | The list of rejections. Fails if the request was completed. |
 | `rejection` | `Rejection` | The single rejection. Fails if zero or more than one rejection was produced. |
 
+## WebSocket Routes
+
+A WebSocket route run with `~>` answers an upgrade request with the handshake decision: `isWebSocketUpgrade` is
+true when the route accepted the upgrade, and `expectWebSocketUpgradeWithProtocol` asserts the upgrade and hands
+the selected `Sec-WebSocket-Protocol` to the given function. Frames are not exchanged; the server performs the
+real handshake.
+
+```scala
+val upgrade = addHeaders(
+  Connection(ci"Upgrade"),
+  Upgrade(Protocol(ci"websocket", None)),
+  Header.Raw(ci"Sec-WebSocket-Version", "13"),
+  Header.Raw(ci"Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ=="),
+  Header.Raw(ci"Sec-WebSocket-Protocol", "json"))
+
+Get("/ws") ~> upgrade ~> handleWebSocketMessagesForProtocol(ws, handler, "json") ~> check {
+  expectWebSocketUpgradeWithProtocol { protocol => protocol shouldEqual "json" }
+}
+```
+
 ## Request Builders
 
 The following request builders are available. Each accepts a URI string or `Uri` value, and optionally a request body:
