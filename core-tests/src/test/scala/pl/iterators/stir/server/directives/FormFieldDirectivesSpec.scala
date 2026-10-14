@@ -1,6 +1,12 @@
 package pl.iterators.stir.server.directives
 
+import cats.effect.IO
 import cats.effect.unsafe.IORuntime
+import fs2.Stream
+import org.http4s.MediaType
+import org.http4s.headers.`Content-Type`
+
+import scala.concurrent.duration._
 import org.http4s.{ Status, UrlForm }
 import pl.iterators.stir.unmarshalling.Unmarshaller._
 import pl.iterators.stir.server._
@@ -337,6 +343,13 @@ class FormFieldDirectivesSpec extends RoutingSpec {
         formFields("firstName") { firstName =>
           formFields("age".as[Int]) { age => complete(firstName + age) }
         }
+      } ~> check { responseAs[String] shouldEqual "Mike42" }
+    }
+    "wait more than a second for a slow form body, as Pekko does" in {
+      val slowBody: Stream[IO, Byte] =
+        Stream.sleep_[IO](2.seconds) ++ Stream.emits("firstName=Mike&age=42".getBytes("UTF-8"))
+      Post("/", slowBody) ~> addHeader(`Content-Type`(MediaType.application.`x-www-form-urlencoded`)) ~!> {
+        formFields("firstName", "age".as[Int]) { (firstName, age) => complete(firstName + age) }
       } ~> check { responseAs[String] shouldEqual "Mike42" }
     }
   }

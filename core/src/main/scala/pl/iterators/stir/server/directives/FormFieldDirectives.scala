@@ -66,8 +66,8 @@ object FormFieldDirectives {
 
   private def toMap(seq: Seq[(String, String)]): Map[String, String] = immutable.TreeMap(seq: _*)
 
-  /** How long a field directive waits for the form body before failing the request with 408 (same as Pekko). */
-  private[stir] val StrictFormTimeout: FiniteDuration = 1.second
+  /** How long a field directive waits for the form body before failing the request with 408 (10 s, as Pekko). */
+  private[stir] val StrictFormTimeout: FiniteDuration = 10.seconds
 
   trait FieldSpec {
     type Out
