@@ -3,6 +3,7 @@ package pl.iterators.stir.server.directives
 import cats.implicits._
 import cats.effect.IO
 import pl.iterators.stir.common._
+import pl.iterators.stir.impl.util._
 import pl.iterators.stir.server._
 import pl.iterators.stir.server.directives.BasicDirectives._
 import pl.iterators.stir.server.directives.IODirectives._
@@ -139,7 +140,7 @@ trait ParameterDirectives extends ToNameReceptacleEnhancements with ParameterDir
       onComplete(result).flatMap {
         case Success(x)                               => provide(x)
         case Failure(Unmarshaller.NoContentException) => reject(MissingQueryParamRejection(paramName))
-        case Failure(x)                               => reject(MalformedQueryParamRejection(paramName, x.getMessage, Option(x.getCause)))
+        case Failure(x)                               => reject(MalformedQueryParamRejection(paramName, x.getMessage.nullAsEmpty, Option(x.getCause)))
       }
   }
 }
