@@ -1,12 +1,15 @@
 package pl.iterators.stir.server.directives
 
 import cats.effect.{ IO, SyncIO }
+import cats.effect.std.Console
 import com.comcast.ip4s.IpAddress
 import fs2.{ Pull, Stream }
 import org.http4s.{ EmptyBody, EntityBody, LanguageTag, Request, Response }
 import org.http4s.headers._
 import org.typelevel.vault.Key
 import pl.iterators.stir.server._
+
+import java.util.concurrent.atomic.AtomicLong
 
 trait MiscDirectives {
   import BasicDirectives._
@@ -150,11 +153,32 @@ object MiscDirectives extends MiscDirectives {
 
   private val _extractDirectClientIP: Directive1[Option[IpAddress]] = extract(_.request.remote.map(_.host))
 
+  /** How often the HTTP/2 length-less body heuristic was applied; the first time prints a warning. */
+  private[stir] val lengthlessHttp2Warnings = new AtomicLong(0L)
+
+  /** Whether the request is known to be empty, warning once per process about length-less HTTP/2 bodies. */
+  private val knownEmpty: Directive1[Boolean] =
+    Directive[Tuple1[Boolean]] { inner => ctx =>
+      val request = ctx.request
+      val lengthless = request.httpVersion.major >= 2 && request.contentLength.isEmpty && !request.isChunked
+      val warn =
+        if (!lengthless) IO.unit
+        else IO(lengthlessHttp2Warnings.incrementAndGet()).flatMap { count =>
+          if (count == 1)
+            Console[IO].errorln(
+              "requestEntityEmpty / requestEntityPresent met an HTTP/2 request without Content-Length and treats " +
+              "it as empty; HTTP/2 bodies carry no length, so prefer Content-Length: 0 or a body check there " +
+              "(this warning is printed once).")
+          else IO.unit
+        }
+      warn *> inner(Tuple1(isKnownEmpty(request)))(ctx)
+    }
+
   private val _requestEntityEmpty: Directive0 =
-    extract(ctx => isKnownEmpty(ctx.request)).flatMap(if (_) pass else reject)
+    knownEmpty.flatMap(if (_) pass else reject)
 
   private val _requestEntityPresent: Directive0 =
-    extract(ctx => isKnownEmpty(ctx.request)).flatMap(if (_) reject(RequestEntityExpectedRejection) else pass)
+    knownEmpty.flatMap(if (_) reject(RequestEntityExpectedRejection) else pass)
 
   private val _rejectEmptyResponse: Directive0 =
     mapRouteResultPF {
