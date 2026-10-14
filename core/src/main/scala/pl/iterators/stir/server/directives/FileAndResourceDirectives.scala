@@ -24,12 +24,12 @@ trait FileAndResourceDirectives {
   import BasicDirectives._
 
   /**
-   * Completes GET requests with the content of the given file.
-   * If the file cannot be found or read the request is rejected.
+   * Completes GET requests with the content of the given file, typed by the in-scope [[ContentTypeResolver]]
+   * (http4s' extension lookup by default). If the file cannot be found or read the request is rejected.
    *
    * @group fileandresource
    */
-  def getFromFile(fileName: String): Route = getFromFile(new File(fileName))
+  def getFromFile(fileName: String)(implicit resolver: ContentTypeResolver): Route = getFromFile(new File(fileName))
 
   /**
    * Completes GET requests with the content of the given file, served with the given content type instead of the
@@ -45,7 +45,8 @@ trait FileAndResourceDirectives {
    *
    * @group fileandresource
    */
-  def getFromFile(file: File): Route = serveFile(file, None)
+  def getFromFile(file: File)(implicit resolver: ContentTypeResolver): Route =
+    serveFile(file, resolver(file.getName))
 
   /**
    * Completes GET requests with the content of the given file, served with the given content type instead of the
@@ -72,7 +73,8 @@ trait FileAndResourceDirectives {
    *
    * @group fileandresource
    */
-  def getFromResource(resourceName: String): Route = serveResource(resourceName, None)
+  def getFromResource(resourceName: String)(implicit resolver: ContentTypeResolver): Route =
+    serveResource(resourceName, resolver(resourceName))
 
   /**
    * Completes GET requests with the content of the given class-path resource, served with the given content type
@@ -133,7 +135,8 @@ trait FileAndResourceDirectives {
    *
    * @group fileandresource
    */
-  def getFromBrowseableDirectory(directory: String)(implicit renderer: DirectoryRenderer): Route =
+  def getFromBrowseableDirectory(directory: String)(implicit renderer: DirectoryRenderer,
+      resolver: ContentTypeResolver): Route =
     getFromBrowseableDirectories(directory)
 
   /**
@@ -142,9 +145,10 @@ trait FileAndResourceDirectives {
    *
    * @group fileandresource
    */
-  def getFromBrowseableDirectories(directories: String*)(implicit renderer: DirectoryRenderer): Route = {
+  def getFromBrowseableDirectories(directories: String*)(implicit renderer: DirectoryRenderer,
+      resolver: ContentTypeResolver): Route = {
     import RouteConcatenation._
-    directories.map(getFromDirectory).reduceLeft(_ ~ _) ~ listDirectoryContents(directories: _*)
+    directories.map(getFromDirectory(_)).reduceLeft(_ ~ _) ~ listDirectoryContents(directories: _*)
   }
 
   /**
@@ -153,7 +157,7 @@ trait FileAndResourceDirectives {
    *
    * @group fileandresource
    */
-  def getFromDirectory(directoryName: String): Route =
+  def getFromDirectory(directoryName: String)(implicit resolver: ContentTypeResolver): Route =
     extractUnmatchedPath { unmatchedPath =>
       safeDirectoryChildPath(withTrailingSlash(directoryName), unmatchedPath) match {
         case ""       => reject
@@ -169,7 +173,7 @@ trait FileAndResourceDirectives {
    *
    * @group fileandresource
    */
-  def getFromResourceDirectory(directoryName: String): Route = {
+  def getFromResourceDirectory(directoryName: String)(implicit resolver: ContentTypeResolver): Route = {
     val base = if (directoryName.isEmpty) "" else withTrailingSlash(directoryName)
     extractUnmatchedPath { path =>
       safeJoinPaths(base, path, separator = '/') match {
@@ -256,4 +260,18 @@ object FileAndResourceDirectives extends FileAndResourceDirectives {
 
   private def canonicalSegments(file: File): Seq[String] =
     file.getCanonicalPath.split(File.separatorChar).toSeq.filter(_.nonEmpty)
+}
+
+/**
+ * Resolves the `Content-Type` of a served file or resource from its name. `None` leaves the choice to http4s,
+ * which looks the extension up in its media type registry.
+ */
+trait ContentTypeResolver {
+  def apply(fileName: String): Option[`Content-Type`]
+}
+
+object ContentTypeResolver {
+
+  /** Lets http4s derive the content type from the file extension. */
+  implicit val Default: ContentTypeResolver = _ => None
 }

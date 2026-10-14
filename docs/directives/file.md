@@ -22,6 +22,13 @@ val route: Route = path("download") {
 
 Both overloads accept a second `Content-Type` argument that replaces the content type derived from the file name, for example `getFromFile("logo.svgz", `Content-Type`(MediaType.image.`svg+xml`))`.
 
+The content type is otherwise chosen by an implicit `ContentTypeResolver` (a `String => Option[Content-Type]` over the file name); the default, `ContentTypeResolver.Default`, returns `None` and leaves the choice to http4s' extension registry. `getFromResource`, `getFromDirectory`, `getFromResourceDirectory` and the browseable directory directives use the same resolver.
+
+```scala
+implicit val resolver: ContentTypeResolver =
+  name => if (name.endsWith(".map")) Some(`Content-Type`(MediaType.application.json)) else None
+```
+
 The directive also accepts a `java.io.File` instance:
 
 ```scala
