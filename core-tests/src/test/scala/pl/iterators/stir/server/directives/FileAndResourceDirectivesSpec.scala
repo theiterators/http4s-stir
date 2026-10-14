@@ -403,217 +403,180 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
     }
   }
 
-//  "listDirectoryContents" should {
-//    val base = new File(getClass.getClassLoader.getResource("").toURI).getPath
-//    new File(base, "subDirectory/emptySub").mkdir()
-//    def eraseDateTime(s: String) = s.replaceAll("""\d\d\d\d-\d\d-\d\d \d\d:\d\d:\d\d""", "xxxx-xx-xx xx:xx:xx")
-//    val settings = RoutingSettings.default.withRenderVanityFooter(false)
-//
-//    "properly render a simple directory" in {
-//      Get() ~> withSettings(settings)(listDirectoryContents(base + "/someDir")) ~> check {
-//        eraseDateTime(responseAs[String]) shouldEqual prep {
-//          """<html>
-//            |<head><title>Index of /</title></head>
-//            |<body>
-//            |<h1>Index of /</h1>
-//            |<hr>
-//            |<pre>
-//            |<a href="/sub/">sub/</a>             xxxx-xx-xx xx:xx:xx
-//            |<a href="/fileA.txt">fileA.txt</a>        xxxx-xx-xx xx:xx:xx            3  B
-//            |<a href="/fileB.xml">fileB.xml</a>        xxxx-xx-xx xx:xx:xx            0  B
-//            |</pre>
-//            |<hr>
-//            |</body>
-//            |</html>
-//            |"""
-//        }
-//      }
-//    }
-//    "properly render a sub directory" in {
-//      Get("/sub/") ~> withSettings(settings)(listDirectoryContents(base + "/someDir")) ~> check {
-//        eraseDateTime(responseAs[String]) shouldEqual prep {
-//          """<html>
-//            |<head><title>Index of /sub/</title></head>
-//            |<body>
-//            |<h1>Index of /sub/</h1>
-//            |<hr>
-//            |<pre>
-//            |<a href="/">../</a>
-//            |<a href="/sub/file.html">file.html</a>        xxxx-xx-xx xx:xx:xx            0  B
-//            |</pre>
-//            |<hr>
-//            |</body>
-//            |</html>
-//            |"""
-//        }
-//      }
-//    }
-//    "properly render the union of several directories" in {
-//      Get() ~> withSettings(settings)(listDirectoryContents(base + "/someDir", base + "/subDirectory")) ~> check {
-//        eraseDateTime(responseAs[String]) shouldEqual prep {
-//          """<html>
-//            |<head><title>Index of /</title></head>
-//            |<body>
-//            |<h1>Index of /</h1>
-//            |<hr>
-//            |<pre>
-//            |<a href="/emptySub/">emptySub/</a>        xxxx-xx-xx xx:xx:xx
-//            |<a href="/sub/">sub/</a>             xxxx-xx-xx xx:xx:xx
-//            |<a href="/empty.pdf">empty.pdf</a>        xxxx-xx-xx xx:xx:xx            3  B
-//            |<a href="/fileA.txt">fileA.txt</a>        xxxx-xx-xx xx:xx:xx            3  B
-//            |<a href="/fileB.xml">fileB.xml</a>        xxxx-xx-xx xx:xx:xx            0  B
-//            |</pre>
-//            |<hr>
-//            |</body>
-//            |</html>
-//            |"""
-//        }
-//      }
-//    }
-//    "properly render an empty sub directory with vanity footer" in {
-//      Get("/emptySub/") ~> listDirectoryContents(base + "/subDirectory") ~> check {
-//        eraseDateTime(responseAs[String]) shouldEqual prep {
-//          """<html>
-//            |<head><title>Index of /emptySub/</title></head>
-//            |<body>
-//            |<h1>Index of /emptySub/</h1>
-//            |<hr>
-//            |<pre>
-//            |<a href="/">../</a>
-//            |</pre>
-//            |<hr>
-//            |<div style="width:100%;text-align:right;color:gray">
-//            |<small>rendered by <a href="https://pekko.apache.org">Pekko Http</a> on xxxx-xx-xx xx:xx:xx</small>
-//            |</div>
-//            |</body>
-//            |</html>
-//            |"""
-//        }
-//      }
-//    }
-//    "properly render an empty top-level directory" in {
-//      Get() ~> withSettings(settings)(listDirectoryContents(base + "/subDirectory/emptySub")) ~> check {
-//        eraseDateTime(responseAs[String]) shouldEqual prep {
-//          """<html>
-//            |<head><title>Index of /</title></head>
-//            |<body>
-//            |<h1>Index of /</h1>
-//            |<hr>
-//            |<pre>
-//            |(no files)
-//            |</pre>
-//            |<hr>
-//            |</body>
-//            |</html>
-//            |"""
-//        }
-//      }
-//    }
-//    "properly render a simple directory with a path prefix" in {
-//      Get("/files/") ~> withSettings(settings)(pathPrefix("files")(listDirectoryContents(base + "/someDir"))) ~> check {
-//        eraseDateTime(responseAs[String]) shouldEqual prep {
-//          """<html>
-//            |<head><title>Index of /files/</title></head>
-//            |<body>
-//            |<h1>Index of /files/</h1>
-//            |<hr>
-//            |<pre>
-//            |<a href="/files/sub/">sub/</a>             xxxx-xx-xx xx:xx:xx
-//            |<a href="/files/fileA.txt">fileA.txt</a>        xxxx-xx-xx xx:xx:xx            3  B
-//            |<a href="/files/fileB.xml">fileB.xml</a>        xxxx-xx-xx xx:xx:xx            0  B
-//            |</pre>
-//            |<hr>
-//            |</body>
-//            |</html>
-//            |"""
-//        }
-//      }
-//    }
-//    "properly render a sub directory with a path prefix" in {
-//      Get("/files/sub/") ~> withSettings(settings)(
-//        pathPrefix("files")(listDirectoryContents(base + "/someDir"))) ~> check {
-//        eraseDateTime(responseAs[String]) shouldEqual prep {
-//          """<html>
-//            |<head><title>Index of /files/sub/</title></head>
-//            |<body>
-//            |<h1>Index of /files/sub/</h1>
-//            |<hr>
-//            |<pre>
-//            |<a href="/files/">../</a>
-//            |<a href="/files/sub/file.html">file.html</a>        xxxx-xx-xx xx:xx:xx            0  B
-//            |</pre>
-//            |<hr>
-//            |</body>
-//            |</html>
-//            |"""
-//        }
-//      }
-//    }
-//    "properly render an empty top-level directory with a path prefix" in {
-//      Get("/files/") ~> withSettings(settings)(
-//        pathPrefix("files")(listDirectoryContents(base + "/subDirectory/emptySub"))) ~> check {
-//        eraseDateTime(responseAs[String]) shouldEqual prep {
-//          """<html>
-//            |<head><title>Index of /files/</title></head>
-//            |<body>
-//            |<h1>Index of /files/</h1>
-//            |<hr>
-//            |<pre>
-//            |(no files)
-//            |</pre>
-//            |<hr>
-//            |</body>
-//            |</html>
-//            |"""
-//        }
-//      }
-//    }
-//    "reject requests to file resources" in {
-//      Get() ~> listDirectoryContents(base + "subDirectory/empty.pdf") ~> check { handled shouldEqual false }
-//    }
-//
-//    "reject path traversal attempts" in {
-//      def _listDirectoryContents(directory: String) =
-//        listDirectoryContents(new File(testRoot, directory).getCanonicalPath)
-//      def route(uri: String) =
-//        mapRequestContext(_.withUnmatchedPath(Path("/" + uri)).mapRequest(_.withUri("/" + uri))) {
-//          _listDirectoryContents("someDir/sub")
-//        }
-//
-//      Get() ~> route("") ~> check {
-//        handled shouldEqual true
-//      }
-//
-//      def shouldReject(prefix: String, warnings: Int = 2) = // FIXME these generate two log entries per request for some reason
-//        try {
-//          EventFilter.warning(start = "File-system path for base", occurrences = warnings).intercept {
-//            Get() ~> route(prefix) ~> check {
-//              handled shouldEqual false
-//            }
-//          }
-//        } catch {
-//          case err: AssertionError => throw new AssertionError(s"Failure for prefix $prefix", err)
-//        }
-//
-//      shouldReject("../") // resolved
-//      shouldReject("%5c../")
-//      shouldReject("%2e%2e%2f")
-//      shouldReject("%2e%2e/") // resolved
-//      shouldReject("..%2f")
-//      shouldReject("%2e%2e%5c")
-//      shouldReject("%2e%2e\\")
-//      shouldReject("..\\")
-//      shouldReject("\\")
-//      shouldReject("%5c")
-//      shouldReject("..%5c")
-//
-//      // FIXME these do not cause log entries for some reason
-//      shouldReject("..%255c", warnings = 0)
-//      shouldReject("..%c0%af", warnings = 0)
-//      shouldReject("..%c1%9c", warnings = 0)
-//    }
-//
-//  }
+  "listDirectoryContents" should {
+    val base = testRoot.getCanonicalPath
+    NioFiles.createDirectories(java.nio.file.Paths.get(base, "subDirectory", "emptySub"))
+    def eraseDateTime(s: String) = s.replaceAll("""\d\d\d\d-\d\d-\d\d \d\d:\d\d:\d\d""", "xxxx-xx-xx xx:xx:xx")
+
+    "properly render a simple directory" in {
+      Get() ~> listDirectoryContents(base + "/someDir") ~> check {
+        eraseDateTime(responseAs[String]) shouldEqual prep {
+          """<html>
+            |<head><title>Index of /</title></head>
+            |<body>
+            |<h1>Index of /</h1>
+            |<hr>
+            |<pre>
+            |<a href="/sub/">sub/</a>             xxxx-xx-xx xx:xx:xx
+            |<a href="/fileA.txt">fileA.txt</a>        xxxx-xx-xx xx:xx:xx            3  B
+            |<a href="/fileB.xml">fileB.xml</a>        xxxx-xx-xx xx:xx:xx            0  B
+            |</pre>
+            |<hr>
+            |</body>
+            |</html>
+            |"""
+        }
+      }
+    }
+    "properly render a sub directory" in {
+      Get("/sub/") ~> listDirectoryContents(base + "/someDir") ~> check {
+        eraseDateTime(responseAs[String]) shouldEqual prep {
+          """<html>
+            |<head><title>Index of /sub/</title></head>
+            |<body>
+            |<h1>Index of /sub/</h1>
+            |<hr>
+            |<pre>
+            |<a href="/">../</a>
+            |<a href="/sub/file.html">file.html</a>        xxxx-xx-xx xx:xx:xx            0  B
+            |</pre>
+            |<hr>
+            |</body>
+            |</html>
+            |"""
+        }
+      }
+    }
+    "properly render the union of several directories" in {
+      Get() ~> listDirectoryContents(base + "/someDir", base + "/subDirectory") ~> check {
+        eraseDateTime(responseAs[String]) shouldEqual prep {
+          """<html>
+            |<head><title>Index of /</title></head>
+            |<body>
+            |<h1>Index of /</h1>
+            |<hr>
+            |<pre>
+            |<a href="/emptySub/">emptySub/</a>        xxxx-xx-xx xx:xx:xx
+            |<a href="/sub/">sub/</a>             xxxx-xx-xx xx:xx:xx
+            |<a href="/empty.pdf">empty.pdf</a>        xxxx-xx-xx xx:xx:xx            3  B
+            |<a href="/fileA.txt">fileA.txt</a>        xxxx-xx-xx xx:xx:xx            3  B
+            |<a href="/fileB.xml">fileB.xml</a>        xxxx-xx-xx xx:xx:xx            0  B
+            |</pre>
+            |<hr>
+            |</body>
+            |</html>
+            |"""
+        }
+      }
+    }
+    "properly render an empty sub directory with vanity footer" in {
+      Get("/emptySub/") ~> listDirectoryContents(base + "/subDirectory")(DirectoryRenderer.withVanityFooter) ~> check {
+        eraseDateTime(responseAs[String]) shouldEqual prep {
+          """<html>
+            |<head><title>Index of /emptySub/</title></head>
+            |<body>
+            |<h1>Index of /emptySub/</h1>
+            |<hr>
+            |<pre>
+            |<a href="/">../</a>
+            |</pre>
+            |<hr>
+            |<div style="width:100%;text-align:right;color:gray">
+            |<small>rendered by <a href="https://github.com/theiterators/http4s-stir">http4s-stir</a> on xxxx-xx-xx xx:xx:xx</small>
+            |</div>
+            |</body>
+            |</html>
+            |"""
+        }
+      }
+    }
+    "properly render an empty top-level directory" in {
+      Get() ~> listDirectoryContents(base + "/subDirectory/emptySub") ~> check {
+        eraseDateTime(responseAs[String]) shouldEqual prep {
+          """<html>
+            |<head><title>Index of /</title></head>
+            |<body>
+            |<h1>Index of /</h1>
+            |<hr>
+            |<pre>
+            |(no files)
+            |</pre>
+            |<hr>
+            |</body>
+            |</html>
+            |"""
+        }
+      }
+    }
+    "properly render a simple directory with a path prefix" in {
+      Get("/files/") ~> pathPrefix("files")(listDirectoryContents(base + "/someDir")) ~> check {
+        eraseDateTime(responseAs[String]) shouldEqual prep {
+          """<html>
+            |<head><title>Index of /files/</title></head>
+            |<body>
+            |<h1>Index of /files/</h1>
+            |<hr>
+            |<pre>
+            |<a href="/files/sub/">sub/</a>             xxxx-xx-xx xx:xx:xx
+            |<a href="/files/fileA.txt">fileA.txt</a>        xxxx-xx-xx xx:xx:xx            3  B
+            |<a href="/files/fileB.xml">fileB.xml</a>        xxxx-xx-xx xx:xx:xx            0  B
+            |</pre>
+            |<hr>
+            |</body>
+            |</html>
+            |"""
+        }
+      }
+    }
+    "properly render a sub directory with a path prefix" in {
+      Get("/files/sub/") ~> pathPrefix("files")(listDirectoryContents(base + "/someDir")) ~> check {
+        eraseDateTime(responseAs[String]) shouldEqual prep {
+          """<html>
+            |<head><title>Index of /files/sub/</title></head>
+            |<body>
+            |<h1>Index of /files/sub/</h1>
+            |<hr>
+            |<pre>
+            |<a href="/files/">../</a>
+            |<a href="/files/sub/file.html">file.html</a>        xxxx-xx-xx xx:xx:xx            0  B
+            |</pre>
+            |<hr>
+            |</body>
+            |</html>
+            |"""
+        }
+      }
+    }
+    "reject requests to file resources" in {
+      Get() ~> listDirectoryContents(base + "/subDirectory/empty.pdf") ~> check { handled shouldEqual false }
+    }
+    "reject non-GET requests" in {
+      Put() ~> listDirectoryContents(base + "/someDir") ~> check { handled shouldEqual false }
+    }
+    "reject path traversal attempts" in {
+      Get("/../") ~> listDirectoryContents(base + "/someDir/sub") ~> check { handled shouldEqual false }
+    }
+    "serve a listing over a real server" in {
+      Get("/") ~!> listDirectoryContents(base + "/someDir") ~> check {
+        mediaType shouldEqual MediaType.text.html
+        responseAs[String] should include("""<a href="/fileA.txt">fileA.txt</a>""")
+      }
+    }
+  }
+
+  "getFromBrowseableDirectory" should {
+    val base = testRoot.getCanonicalPath
+    "serve files" in {
+      Get("/fileA.txt") ~> getFromBrowseableDirectory(base + "/someDir") ~> check {
+        responseAs[String] shouldEqual "123"
+      }
+    }
+    "list directories" in {
+      Get("/sub/") ~> getFromBrowseableDirectory(base + "/someDir") ~> check {
+        responseAs[String] should include("""<a href="/sub/file.html">file.html</a>""")
+      }
+    }
+  }
 
   def prep(s: String) = s.stripMarginWithNewline("\n")
 }
