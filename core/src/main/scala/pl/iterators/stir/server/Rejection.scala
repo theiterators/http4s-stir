@@ -2,6 +2,7 @@ package pl.iterators.stir.server
 
 import org.http4s.{ Challenge, ContentCoding, MediaRange, MediaType, Method }
 import org.http4s.headers.Origin
+import org.typelevel.vault.Key
 
 trait Rejection
 
@@ -185,3 +186,10 @@ case object ExpectedWebSocketRequestRejection extends Rejection
  * Signals that the request was rejected because none of the offered subprotocols is supported.
  */
 final case class UnsupportedWebSocketSubprotocolRejection(supportedProtocol: String) extends Rejection
+
+/**
+ * Rejection created by the `attribute` directive.
+ * Signals that the request was rejected because a request attribute was expected but missing; the default handler
+ * answers `500 Internal Server Error`, since a missing attribute is a server-side configuration error.
+ */
+final case class MissingAttributeRejection[T](key: Key[T]) extends Rejection
