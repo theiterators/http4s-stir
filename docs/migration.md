@@ -45,7 +45,6 @@ The following directive categories and individual directives are **not available
 ### Unimplemented individual directives
 
 - **FileAndResourceDirectives**: directory listing is not supported
-- `extractRequestTimeout` / `withRequestTimeoutResponse`
 
 ## Behaviour changes in 0.7
 
