@@ -110,9 +110,7 @@ trait CodingDirectives {
    */
   def withPrecompressedMediaTypeSupport: Directive0 =
     mapResponse { response =>
-      val precompressed = response.attributes.lookup(FileAndResourceDirectives.ServedNameKey)
-        .exists(_.toLowerCase.endsWith(".svgz"))
-      if (precompressed && response.headers.get[`Content-Encoding`].isEmpty)
+      if (isPrecompressed(response) && response.headers.get[`Content-Encoding`].isEmpty)
         response.putHeaders(`Content-Encoding`(ContentCoding.gzip))
       else response
     }
@@ -141,6 +139,10 @@ object CodingDirectives extends CodingDirectives {
   private def sameCoding(a: ContentCoding, b: ContentCoding): Boolean = a.coding.equalsIgnoreCase(b.coding)
   private def isIdentity(coding: ContentCoding): Boolean = sameCoding(coding, ContentCoding.identity)
   private def isGzip(coding: ContentCoding): Boolean = sameCoding(coding, ContentCoding.gzip)
+
+  /** A response served from a `.svgz` file is already gzipped; never compress it again. */
+  private def isPrecompressed(response: Response[IO]): Boolean =
+    response.attributes.lookup(FileAndResourceDirectives.ServedNameKey).exists(_.toLowerCase.endsWith(".svgz"))
 
   /** Passes only requests that declare `Content-Length: 0`; a bodiless request without that header has no encoding. */
   private val contentLengthZero: Directive0 =
@@ -177,6 +179,7 @@ object CodingDirectives extends CodingDirectives {
 
   private def isCompressible(response: Response[IO]): Boolean =
     response.status.isEntityAllowed &&
+    !isPrecompressed(response) &&
     !MiscDirectives.isKnownEmpty(response) &&
     response.headers.get[`Content-Encoding`].isEmpty &&
     response.contentType.forall(_.mediaType.compressible)

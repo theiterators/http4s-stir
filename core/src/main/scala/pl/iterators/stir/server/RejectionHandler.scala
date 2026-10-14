@@ -227,8 +227,10 @@ object RejectionHandler {
 //      }
       .handle {
         case UnsatisfiableRangeRejection(unsatisfiableRanges, actualEntityLength) =>
-          rejectRequestEntityAndComplete((RangeNotSatisfiable,
-            Headers(Header.Raw(ci"Content-Range", s"bytes */$actualEntityLength")),
+          val contentRange =
+            if (actualEntityLength >= 0) Headers(Header.Raw(ci"Content-Range", s"bytes */$actualEntityLength"))
+            else Headers.empty
+          rejectRequestEntityAndComplete((RangeNotSatisfiable, contentRange,
             unsatisfiableRanges.map(_.renderString)
               .mkString("None of the following requested Ranges were satisfiable:\n", "\n", "")))
       }

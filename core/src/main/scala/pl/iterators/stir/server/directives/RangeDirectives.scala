@@ -20,7 +20,7 @@ trait RangeDirectives {
   /**
    * Answers GET requests with a `Range` header by a `206 Partial Content` response as defined by
    * http://tools.ietf.org/html/rfc7233 and adds an `Accept-Ranges: bytes` header to every GET response.
-   * Several ranges are coalesced when they are at most one byte apart and answered as `multipart/byteranges`;
+   * Several ranges are coalesced when they are at most 80 bytes apart and answered as `multipart/byteranges`;
    * more than 16 ranges reject with a [[TooManyRangesRejection]]. Ranges beyond the entity reject with an
    * [[UnsatisfiableRangeRejection]] (`416` when sealed), as do responses without a `Content-Length`.
    * Only `200` responses are sliced; everything else passes through unchanged.
@@ -69,7 +69,9 @@ trait RangeDirectives {
 
 object RangeDirectives extends RangeDirectives {
   val DefaultRangeCountLimit: Int = 16
-  val DefaultRangeCoalescingThreshold: Long = 1
+
+  /** Pekko's `range-coalescing-threshold`: ranges closer than this are sent as one part (a part costs ~80 bytes). */
+  val DefaultRangeCoalescingThreshold: Long = 80
 
   private val acceptByteRanges: Directive0 = BasicDirectives.mapResponse(_.putHeaders(`Accept-Ranges`.bytes))
 

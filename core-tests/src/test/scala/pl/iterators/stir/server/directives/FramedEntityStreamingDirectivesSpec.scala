@@ -53,6 +53,19 @@ class FramedEntityStreamingDirectivesSpec extends RoutingSpec {
         status shouldEqual Status.BadRequest
       }
     }
+    "reject a top-level array of scalars with 400" in {
+      Post("/", "[1,2,3]") ~> addHeader(json) ~> Route.seal(sumRoute) ~> check { status shouldEqual Status.BadRequest }
+    }
+    "reject trailing garbage after the last object with 400" in {
+      Post("/", """[{"a":1}] nonsense""") ~> addHeader(json) ~> Route.seal(sumRoute) ~> check {
+        status shouldEqual Status.BadRequest
+      }
+    }
+    "reject a body cut off inside an object with 400" in {
+      Post("/", """[{"a":1""") ~> addHeader(json) ~> Route.seal(sumRoute) ~> check {
+        status shouldEqual Status.BadRequest
+      }
+    }
     "decode a streamed array over a real server" in {
       Post("/", """[{"a":1},{"a":2},{"a":3}]""") ~> addHeader(json) ~!> sumRoute ~> check {
         responseAs[String] shouldEqual "1,2,3"
@@ -73,6 +86,20 @@ class FramedEntityStreamingDirectivesSpec extends RoutingSpec {
       Post("/", "a,b\r\nc,d\n") ~> addHeader(csv) ~> entity(asSourceOf[String]) { lines =>
         onSuccess(lines.compile.toList) { list => complete(list.mkString("|")) }
       } ~> check { responseAs[String] shouldEqual "a,b|c,d" }
+    }
+    "fail a line over the limit before the line ends" in {
+      val small = EntityStreamingSupport.csv(maxLineLength = 4)
+      val readPastTheLimit = new java.util.concurrent.atomic.AtomicBoolean(false)
+      val body: Stream[IO, Byte] =
+        Stream.emits("abcdefgh".getBytes("UTF-8")).covary[IO] ++
+        Stream.exec(IO(readPastTheLimit.set(true))) ++
+        Stream.emits("ijkl\n".getBytes("UTF-8"))
+      Post("/", body) ~> addHeader(csv) ~> Route.seal(entity(asSourceOf[String](small)) { lines =>
+        onSuccess(lines.compile.toList) { list => complete(list.mkString("|")) }
+      }) ~> check {
+        status shouldEqual Status.BadRequest
+        readPastTheLimit.get shouldEqual false
+      }
     }
     "render a stream as lines" in {
       Get() ~> complete(Stream("a,b", "c,d").covary[IO]) ~> check {

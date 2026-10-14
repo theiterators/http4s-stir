@@ -194,9 +194,10 @@ object FileAndResourceDirectives extends FileAndResourceDirectives {
   private def directoryEntries(directories: List[Path]): IO[List[DirectoryListing.Entry]] =
     directories.flatTraverse { directory =>
       Files[IO].list(directory).evalMap { child =>
-        Files[IO].getBasicFileAttributes(child).map(attributes =>
-          DirectoryListing.Entry(child.fileName.toString, attributes.isDirectory, attributes.size,
-            attributes.lastModifiedTime.toMillis))
+        Files[IO].getBasicFileAttributes(child, followLinks = true)
+          .handleErrorWith(_ => Files[IO].getBasicFileAttributes(child, followLinks = false)).map(attributes =>
+            DirectoryListing.Entry(child.fileName.toString, attributes.isDirectory, attributes.size,
+              attributes.lastModifiedTime.toMillis))
       }.compile.toList
     }
 

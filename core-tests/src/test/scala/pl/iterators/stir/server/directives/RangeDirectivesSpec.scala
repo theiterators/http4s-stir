@@ -1,7 +1,9 @@
 package pl.iterators.stir.server.directives
 
+import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import org.http4s.{ MediaType, RangeUnit, Status }
+import fs2.Stream
+import org.http4s.{ MediaType, RangeUnit, Response, Status }
 import org.http4s.headers.{ `Accept-Ranges`, `Content-Range`, Range }
 import org.http4s.headers.Range.SubRange
 import pl.iterators.stir.server._
@@ -71,6 +73,21 @@ class RangeDirectivesSpec extends RoutingSpec {
         status shouldEqual Status.PartialContent
         mediaType.withExtensions(Map.empty) shouldEqual MediaType.multipart.byteranges
         header("Content-Length") shouldEqual None
+      }
+    }
+    "merge ranges closer than Pekko's default threshold of 80 bytes" in {
+      Get() ~> addHeader(Range(SubRange(0L, 1L), SubRange(8L, 9L))) ~> completeWithRangedBytes(10) ~> check {
+        status shouldEqual Status.PartialContent
+        val body = responseAs[String]
+        body should include("Content-Range: bytes 0-9/10")
+        body.indexOf("bytes 8-9/10") shouldEqual -1
+      }
+    }
+    "omit Content-Range from the 416 when the entity length is unknown" in {
+      val streamed = complete(Response[IO]().withBodyStream(Stream.emits(bytes(10)).covary[IO]))
+      Get() ~> addHeader(Range(0, 1)) ~> Route.seal(withRangeSupport(streamed)) ~> check {
+        status shouldEqual Status.RangeNotSatisfiable
+        header("Content-Range") shouldEqual None
       }
     }
     "return coalesced parts in ascending order for multiple ranges" in {

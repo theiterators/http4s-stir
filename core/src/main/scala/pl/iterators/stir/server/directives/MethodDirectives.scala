@@ -110,7 +110,7 @@ trait MethodDirectives {
 
 object MethodDirectives extends MethodDirectives {
 
-  /** The `QUERY` method, which http4s 0.23 does not define; safe and idempotent per the draft, but with a body. */
+  /** The `QUERY` method, which http4s 0.23 does not define. `isSafe` / `isIdempotent` are false on this instance. */
   val QUERY: Method = Method.fromString("QUERY").fold(failure => throw failure, identity)
 
   private val _extractMethod: Directive1[Method] =
