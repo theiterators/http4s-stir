@@ -2,11 +2,12 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.IO
 import cats.syntax.all._
-import org.http4s.headers.`Content-Type`
-import org.http4s.multipart.Multipart
-import pl.iterators.stir.server._
 import fs2.Stream
 import fs2.io.file.{ Files, Path }
+import org.http4s.{ EntityDecoder, MediaType }
+import org.http4s.headers.`Content-Type`
+import org.http4s.multipart.{ Multipart, Part }
+import pl.iterators.stir.server._
 
 import java.io.File
 import scala.annotation.unused
@@ -16,79 +17,56 @@ import scala.annotation.unused
  * @groupprio fileupload 80
  */
 trait FileUploadDirectives {
-  import IODirectives._
+  import BasicDirectives._
+  import FileUploadDirectives._
   import MarshallingDirectives._
+  import RouteDirectives._
 
   /**
    * Streams the bytes of the file submitted using multipart with the given file name into a designated file on disk.
    * If there is an error writing to disk the request will be failed with the thrown exception, if there is no such
    * field the request will be rejected, if there are multiple file parts with the same name, the first one will be
-   * used and the subsequent ones ignored.
+   * used and the subsequent ones ignored. Parts larger than 50 MiB are spooled to a temporary file while decoding.
    *
    * @group fileupload
    */
-  def storeUploadedFile(fieldName: String, destFn: FileInfo => File): Directive[(FileInfo, File)] = {
-    fileUpload(fieldName).flatMap {
-      case (fileInfo, bytes) =>
-        val dest = destFn(fileInfo)
-        val path = Path(dest.getAbsolutePath)
-        val uploadedF: IO[(FileInfo, File)] =
-          bytes.through(Files[IO].writeAll(path)).compile.drain.map(_ => (fileInfo, dest)).onError(_ =>
-            IO.delay(dest.delete()).as(()))
-        onSuccess(uploadedF)
+  def storeUploadedFile(fieldName: String, destFn: FileInfo => File): Directive[(FileInfo, File)] =
+    multipartToDisk(fieldName, destFn, firstOnly = true).flatMap {
+      case (fileInfo, file) +: _ => tprovide((fileInfo, file))
+      case _                     => reject(MissingFormFieldRejection(fieldName)): Directive[(FileInfo, File)]
     }
-  }
-//
+
   /**
-   * Streams the bytes of the file submitted using multipart with the given field name into designated files on disk.
-   * If there is an error writing to disk the request will be failed with the thrown exception, if there is no such
-   * field the request will be rejected. Stored files are cleaned up on exit but not on failure.
+   * Streams the bytes of the files submitted using multipart with the given field name into designated files on
+   * disk. If there is an error writing to disk the request will be failed with the thrown exception. Parts without
+   * a `Content-Type` are stored as `application/octet-stream`; parts larger than 50 MiB are spooled to a temporary
+   * file while decoding.
    *
    * @group fileupload
    */
   def storeUploadedFiles(fieldName: String, destFn: FileInfo => File): Directive1[Seq[(FileInfo, File)]] =
-    entity(as[Multipart[IO]]).flatMap { formData =>
-      val uploadedF: IO[Seq[(FileInfo, File)]] = formData.parts
-        .filter(p => p.name.contains(fieldName) && p.filename.isDefined && p.contentType.isDefined)
-        .map { part =>
-          val fileInfo = FileInfo(part.name.getOrElse(""), part.filename.get,
-            part.contentType.getOrElse(throw new IllegalStateException(s"Missing content type for part $fieldName")))
-          val dest = destFn(fileInfo)
-          val path = Path(dest.getAbsolutePath)
-          part.body.through(Files[IO].writeAll(path)).compile.drain.map(_ => (fileInfo, dest)).onError(_ =>
-            IO.delay(dest.delete()).as(()))
-        }.parSequence
-      onSuccess(uploadedF)
-    }
+    multipartToDisk(fieldName, destFn, firstOnly = false)
 
   /**
-   * Collects each body part that is a multipart file as a tuple containing metadata and a `Source`
-   * for streaming the file contents somewhere. If there is no such field the request will be rejected,
-   * if there are multiple file parts with the same name, the first one will be used and the subsequent
-   * ones ignored.
+   * Collects the first body part that is a multipart file with the given field name as a tuple containing metadata
+   * and a stream of the file contents. If there is no such field the request will be rejected. The whole multipart
+   * body is buffered in memory, because the part's stream outlives the decoder; use `storeUploadedFile` or
+   * `fileUploadAll` for large uploads.
    *
    * @group fileupload
    */
   def fileUpload(fieldName: String): Directive1[(FileInfo, Stream[IO, Byte])] =
     entity(as[Multipart[IO]]).flatMap { formData =>
-      Directive[Tuple1[(FileInfo, Stream[IO, Byte])]] { inner => ctx =>
-        formData.parts.find(_.name.contains(fieldName)) match {
-          case Some(part) if part.filename.isDefined && part.contentType.isDefined =>
-            val fileInfo = FileInfo(part.name.getOrElse(fieldName), part.filename.getOrElse(""),
-              part.contentType.getOrElse(throw new IllegalStateException(s"Missing content type for part $fieldName")))
-            val data = part.body
-            inner(Tuple1((fileInfo, data)))(ctx)
-          case _ =>
-            IO.pure(RouteResult.Rejected(MissingFormFieldRejection(fieldName) :: Nil))
-        }
+      formData.parts.find(part => part.name.contains(fieldName) && part.filename.isDefined) match {
+        case Some(part) => provide((fileInfo(part), part.body))
+        case None       => reject(MissingFormFieldRejection(fieldName)): Directive1[(FileInfo, Stream[IO, Byte])]
       }
     }
 
   /**
-   * Collects each body part that is a multipart file as a tuple containing metadata and a `Source`
-   * for streaming the file contents somewhere. If there is no such field the request will be rejected.
-   * Files are buffered into temporary files on disk so in-memory buffers don't overflow. The temporary
-   * files are cleaned up once materialized, or on exit if the stream is not consumed.
+   * Collects each body part that is a multipart file with the given field name as a tuple containing metadata and
+   * a stream of the file contents. Files are stored in temporary files on disk so in-memory buffers don't overflow;
+   * each temporary file is deleted once its stream is consumed, or on exit if it is not.
    *
    * @group fileupload
    */
@@ -101,16 +79,49 @@ trait FileUploadDirectives {
 
     storeUploadedFiles(fieldName, tempDest).map { files =>
       files.map {
-        case (fileInfo, src) =>
+        case (info, src) =>
           val path = Path(src.getAbsolutePath)
-          val byteSource: Stream[IO, Byte] = Files[IO].readAll(path).onFinalize(IO.delay(src.delete()).as(()))
-          (fileInfo, byteSource)
+          (info, Files[IO].readAll(path).onFinalize(IO.delay(src.delete()).void))
       }
     }
   }
+
+  private def multipartToDisk(fieldName: String, destFn: FileInfo => File,
+      firstOnly: Boolean): Directive1[Seq[(FileInfo, File)]] =
+    Directive[Tuple1[Seq[(FileInfo, File)]]] { inner => ctx =>
+      EntityDecoder.mixedMultipartResource[IO]().use { decoder =>
+        MarshallingDirectives.decodeEntity(ctx.request, decoder).flatMap {
+          case Left(rejection) => IO.pure(Left(rejection): Either[Rejection, Seq[(FileInfo, File)]])
+          case Right(formData) =>
+            val matching = formData.parts.filter(part => part.name.contains(fieldName) && part.filename.isDefined)
+            val selected = if (firstOnly) matching.take(1) else matching
+            selected.toList.traverse(store(_, destFn)).map(files =>
+              Right(files): Either[Rejection, Seq[(FileInfo, File)]])
+        }
+      }.flatMap {
+        case Right(files)    => inner(Tuple1(files))(ctx)
+        case Left(rejection) => IO.pure(RouteResult.Rejected(rejection :: Nil))
+      }
+    } & cancelRejections(classOf[UnsupportedRequestContentTypeRejection])
+
+  private def store(part: Part[IO], destFn: FileInfo => File): IO[(FileInfo, File)] = {
+    val info = fileInfo(part)
+    val dest = destFn(info)
+    val path = Path(dest.getAbsolutePath)
+    part.body.through(Files[IO].writeAll(path)).compile.drain.as((info, dest)).onError {
+      case _ => IO.delay(dest.delete()).void
+    }
+  }
+
+  private def fileInfo(part: Part[IO]): FileInfo =
+    FileInfo(part.name.getOrElse(""), part.filename.getOrElse(""), part.contentType.getOrElse(DefaultPartContentType))
 }
 
-object FileUploadDirectives extends FileUploadDirectives
+object FileUploadDirectives extends FileUploadDirectives {
+
+  /** Content type assumed for a multipart file part that declares none. */
+  val DefaultPartContentType: `Content-Type` = `Content-Type`(MediaType.application.`octet-stream`)
+}
 
 /**
  * Additional metadata about the file being uploaded/that was uploaded using the [[FileUploadDirectives]]
