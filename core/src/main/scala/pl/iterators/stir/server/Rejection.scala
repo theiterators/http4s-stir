@@ -1,7 +1,7 @@
 package pl.iterators.stir.server
 
 import org.http4s.{ Challenge, ContentCoding, MediaRange, MediaType, Method }
-import org.http4s.headers.Origin
+import org.http4s.headers.{ Origin, Range }
 import org.typelevel.vault.Key
 
 trait Rejection
@@ -193,3 +193,17 @@ final case class UnsupportedWebSocketSubprotocolRejection(supportedProtocol: Str
  * answers `500 Internal Server Error`, since a missing attribute is a server-side configuration error.
  */
 final case class MissingAttributeRejection[T](key: Key[T]) extends Rejection
+
+/**
+ * Rejection created by the `withRangeSupport` directive.
+ * Signals that the request was rejected because none of the requested ranges can be satisfied by an entity of
+ * `actualEntityLength` bytes (-1 when the length is unknown).
+ */
+final case class UnsatisfiableRangeRejection(unsatisfiableRanges: Seq[Range.SubRange], actualEntityLength: Long)
+    extends Rejection
+
+/**
+ * Rejection created by the `withRangeSupport` directive.
+ * Signals that the request was rejected because it asked for more than `maxRanges` ranges.
+ */
+final case class TooManyRangesRejection(maxRanges: Int) extends Rejection

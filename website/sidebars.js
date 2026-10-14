@@ -32,6 +32,7 @@ const sidebars = {
         'directives/directives-coding',
         'directives/directives-attribute',
         'directives/directives-entity-streaming',
+        'directives/directives-range',
       ],
     },
     'rejection-handling',

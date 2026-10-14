@@ -217,19 +217,21 @@ object RejectionHandler {
           rejectRequestEntityAndComplete((NotFound,
             s"Request is missing required value '$requiredValue' for query parameter '$paramName'"))
       }
-//      .handle {
-//        case TooManyRangesRejection(_) =>
-//          rejectRequestEntityAndComplete((RangeNotSatisfiable, "Request contains too many ranges"))
-//      }
+      .handle {
+        case TooManyRangesRejection(_) =>
+          rejectRequestEntityAndComplete((RangeNotSatisfiable, "Request contains too many ranges"))
+      }
 //      .handle {
 //        case CircuitBreakerOpenRejection(_) =>
 //          rejectRequestEntityAndComplete(ServiceUnavailable)
 //      }
-//      .handle {
-//        case UnsatisfiableRangeRejection(unsatisfiableRanges, actualEntityLength) =>
-//          rejectRequestEntityAndComplete((RangeNotSatisfiable, List(`Content-Range`(ContentRange.Unsatisfiable(actualEntityLength))),
-//            unsatisfiableRanges.mkString("None of the following requested Ranges were satisfiable:\n", "\n", "")))
-//      }
+      .handle {
+        case UnsatisfiableRangeRejection(unsatisfiableRanges, actualEntityLength) =>
+          rejectRequestEntityAndComplete((RangeNotSatisfiable,
+            Headers(Header.Raw(ci"Content-Range", s"bytes */$actualEntityLength")),
+            unsatisfiableRanges.map(_.renderString)
+              .mkString("None of the following requested Ranges were satisfiable:\n", "\n", "")))
+      }
       .handleAll[AuthenticationFailedRejection] { rejections =>
         val rejectionMessage = rejections.head.cause match {
           case AuthenticationFailedRejection.CredentialsMissing =>
