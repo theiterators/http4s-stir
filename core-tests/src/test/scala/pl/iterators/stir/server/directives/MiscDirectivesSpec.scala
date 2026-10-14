@@ -8,6 +8,8 @@ import org.http4s.headers.`X-Forwarded-For`
 import org.typelevel.ci.CIString
 import pl.iterators.stir.server._
 
+import scala.concurrent.duration._
+
 class MiscDirectivesSpec extends RoutingSpec {
   override implicit def runtime: IORuntime = IORuntime.global
 
@@ -153,6 +155,27 @@ class MiscDirectivesSpec extends RoutingSpec {
     "skip request entity size verification" in {
       val route = withSizeLimit(500) { withoutSizeLimit { entity(as[String]) { _ => completeOk } } }
       Post("/abc", entityOfSize(501)) ~> route ~> check { status shouldEqual Status.Ok }
+    }
+    "keep a body that was buffered in between instead of restoring the consumed stream" in {
+      val route = withSizeLimit(500) {
+        toStrictEntity(1.second) { withoutSizeLimit { entity(as[String]) { body => complete(body) } } }
+      }
+      Post("/abc", "abc") ~> removeHeader("Content-Length") ~!> route ~> check {
+        responseAs[String] shouldEqual "abc"
+      }
+    }
+  }
+
+  "nested withSizeLimit directives" should {
+    "limit the body a directive in between produced instead of restoring the original stream" in {
+      val route = withSizeLimit(500) {
+        toStrictEntity(1.second) {
+          mapRequest(_.withEntity("replaced")) { withSizeLimit(400) { entity(as[String]) { body => complete(body) } } }
+        }
+      }
+      Post("/abc", "abc") ~> removeHeader("Content-Length") ~!> route ~> check {
+        responseAs[String] shouldEqual "replaced"
+      }
     }
   }
 }

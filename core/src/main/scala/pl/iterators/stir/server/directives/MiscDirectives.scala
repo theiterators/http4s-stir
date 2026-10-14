@@ -97,18 +97,20 @@ trait MiscDirectives {
    * @group misc
    */
   def withSizeLimit(maxBytes: Long): Directive0 = mapRequest { request =>
-    val original = request.attributes.lookup(MiscDirectives.OriginalBodyKey).getOrElse(request.body)
+    val original = MiscDirectives.originalBody(request)
     val limited = request.contentLength match {
       case Some(length) if length > maxBytes =>
         Stream.raiseError[IO](EntityStreamSizeException(maxBytes, Some(length)))
       case _ => MiscDirectives.limitBytes(original, maxBytes)
     }
-    request.withAttributes(request.attributes.insert(MiscDirectives.OriginalBodyKey, original)).withBodyStream(limited)
+    request.withAttributes(request.attributes.insert(MiscDirectives.LimitedBodyKey,
+      MiscDirectives.LimitedBody(original, limited))).withBodyStream(limited)
   }
 
   /**
    * Disables the size limit set by an enclosing `withSizeLimit` directive on the incoming request entity.
-   * Can be useful when handling arbitrarily large data uploads in specific parts of your routes.
+   * Can be useful when handling arbitrarily large data uploads in specific parts of your routes. A body that was
+   * replaced in between (for example buffered by `toStrictEntity` or decoded by `decodeRequest`) is left alone.
    *
    * @note  Usage of `withoutSizeLimit` is not recommended as it turns off the too large payload protection.
    *        Prefer `withSizeLimit` with a value high enough for the route in need of big entities.
@@ -123,7 +125,14 @@ object MiscDirectives extends MiscDirectives {
   import HeaderDirectives._
   import RouteDirectives._
 
-  private[stir] val OriginalBodyKey: Key[EntityBody[IO]] = Key.newKey[SyncIO, EntityBody[IO]].unsafeRunSync()
+  /** The body `withSizeLimit` found and the limited stream it installed, so a later directive can tell them apart. */
+  private[stir] final case class LimitedBody(original: EntityBody[IO], limited: EntityBody[IO])
+
+  private[stir] val LimitedBodyKey: Key[LimitedBody] = Key.newKey[SyncIO, LimitedBody].unsafeRunSync()
+
+  /** The unlimited body: the stored original while the request still carries the limited stream, else the body. */
+  private[stir] def originalBody(request: Request[IO]): EntityBody[IO] =
+    request.attributes.lookup(LimitedBodyKey).filter(_.limited eq request.body).map(_.original).getOrElse(request.body)
 
   private val _extractClientIP: Directive1[Option[IpAddress]] =
     optionalHeaderValueByType[`X-Forwarded-For`].flatMap { xForwardedFor =>
@@ -153,7 +162,10 @@ object MiscDirectives extends MiscDirectives {
     }
 
   private val _withoutSizeLimit: Directive0 =
-    mapRequest(request => request.attributes.lookup(OriginalBodyKey).fold(request)(request.withBodyStream))
+    mapRequest { request =>
+      request.attributes.lookup(LimitedBodyKey).filter(_.limited eq request.body)
+        .fold(request)(stored => request.withBodyStream(stored.original))
+    }
 
   /** A request is known to be empty when it declares `Content-Length: 0` or has neither a length nor chunking. */
   private[stir] def isKnownEmpty(request: Request[IO]): Boolean =

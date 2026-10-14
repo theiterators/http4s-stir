@@ -81,7 +81,9 @@ val route: Route =
 `maxBytes` are consumed, or immediately when the declared `Content-Length` exceeds the limit. The default
 handlers complete it with `413 Payload Too Large` (through a `MalformedRequestContentRejection` from `entity`,
 or through the exception handler elsewhere). The check runs only when the entity is consumed. Nested limits
-apply the innermost one to the original entity; `withoutSizeLimit` restores the original, unlimited entity.
+apply the innermost one to the original entity; `withoutSizeLimit` restores the original, unlimited entity. Both
+leave a body alone that another directive replaced in between (for example one buffered by `toStrictEntity` or
+decoded by `decodeRequest`), and limit or restore that body instead.
 
 ```scala
 val route: Route = withSizeLimit(1024 * 1024) {
