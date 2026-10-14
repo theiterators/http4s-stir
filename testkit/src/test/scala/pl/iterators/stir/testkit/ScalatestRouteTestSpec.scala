@@ -40,6 +40,14 @@ class ScalatestRouteTestSpec extends AnyFreeSpec with Matchers with ScalatestRou
       }
     }
 
+    "reading the trailer of a chunked response that came through a real server before its body" in {
+      val chunked = Response[IO]().withBodyStream(Stream.emits("abc".getBytes("UTF-8")).covary[IO])
+      Get() ~!> complete(chunked) ~> check {
+        trailer shouldEqual Headers.empty
+        responseAs[String] shouldEqual "abc"
+      }
+    }
+
     "the most simple and direct route test" in {
       Get() ~> complete(Response[IO]()) ~> { rr => rr.response.status } shouldEqual Response[IO]().status
     }

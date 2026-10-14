@@ -103,6 +103,16 @@ class MiscDirectivesSpec extends RoutingSpec {
     }
   }
 
+  "the requestEntityEmpty directive on a bodiless HTTP/2 GET" should {
+    "not count it as a length-less body" in {
+      val before = MiscDirectives.lengthlessHttp2Warnings.get
+      Get() ~> ((_: Request[IO]).withHttpVersion(HttpVersion.`HTTP/2`)) ~> requestEntityEmpty { completeOk } ~> check {
+        status shouldEqual Status.Ok
+      }
+      MiscDirectives.lengthlessHttp2Warnings.get shouldEqual before
+    }
+  }
+
   "the rejectEmptyResponse directive" should {
     "turn a response without body into a rejection" in {
       Get() ~> (rejectEmptyResponse { complete(Status.Ok) } ~ complete("fallback")) ~> check {

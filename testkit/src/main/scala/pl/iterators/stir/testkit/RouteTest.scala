@@ -46,8 +46,14 @@ trait RouteTest extends RequestBuilding with RouteTestResultComponent
   /** The response body as a stream of chunks; see `chunks` for the consumption caveat. */
   def chunksStream: Stream[IO, Chunk[Byte]] = rawResponse.body.chunks
 
-  /** The trailer headers the route attached to the response (`Response.withTrailerHeaders`), empty when none. */
-  def trailer: Headers = rawResponse.trailerHeaders.unsafeRunSync()
+  /**
+   * The trailer headers the route attached to the response (`Response.withTrailerHeaders`), empty when none.
+   * Over a real server (`~!>`) trailers arrive after the body, so the body is read (and cached) first.
+   */
+  def trailer: Headers = {
+    val _ = responseEntity
+    rawResponse.trailerHeaders.unsafeRunSync()
+  }
   def entityAs[T](implicit um: EntityDecoder[IO, T], cls: ClassTag[T]): T = {
     def msg(e: Throwable) =
       s"Could not unmarshal entity to type '${implicitly[ClassTag[T]]}' for `entityAs` assertion: $e\n\nResponse was: $responseSafe"
@@ -200,8 +206,14 @@ private[stir] object RouteTest {
         authority = Some(Uri.Authority(None, host = Uri.Host.fromIp4sHost(ipv4"127.0.0.1"),
           port = Some(server.address.getPort)))))
       response <- client.run(updatedRequest)
-    } yield {
-      response
-    }).use(IO.pure)
+    } yield response).use { response =>
+      // read the body and the trailers while the client and the server are still alive: a chunked response
+      // cannot be read after the connection is closed
+      response.body.compile.to(Chunk).flatMap { bytes =>
+        response.trailerHeaders.map { trailers =>
+          response.withBodyStream(Stream.chunk(bytes)).withTrailerHeaders(IO.pure(trailers))
+        }
+      }
+    }
   }
 }

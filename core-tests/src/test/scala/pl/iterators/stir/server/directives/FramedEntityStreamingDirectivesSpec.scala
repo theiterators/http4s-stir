@@ -101,6 +101,12 @@ class FramedEntityStreamingDirectivesSpec extends RoutingSpec {
         readPastTheLimit.get shouldEqual false
       }
     }
+    "accept a CRLF-terminated line of exactly the maximum length" in {
+      val small = EntityStreamingSupport.csv(maxLineLength = 4)
+      Post("/", "abcd\r\nefgh\r\n") ~> addHeader(csv) ~> entity(asSourceOf[String](small)) { lines =>
+        onSuccess(lines.compile.toList) { list => complete(list.mkString("|")) }
+      } ~> check { responseAs[String] shouldEqual "abcd|efgh" }
+    }
     "render a stream as lines" in {
       Get() ~> complete(Stream("a,b", "c,d").covary[IO]) ~> check {
         mediaType shouldEqual MediaType.text.csv

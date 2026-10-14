@@ -65,24 +65,42 @@ trait FileUploadDirectives {
 
   /**
    * Like [[fileUpload]], but decodes the multipart body with http4s' mixed decoder, which spools parts above
-   * 50 MiB to a temporary file, and keeps that decoder open while the inner route runs. The part's stream must
-   * therefore be consumed inside the inner route (written to disk, folded, forwarded and awaited); a response
-   * whose body still reads from it would find the spooled file gone. If there is no such field the request is
-   * rejected; if several parts share the name the first one is used.
+   * 50 MiB to a temporary file, and keeps that decoder (and its temporary files) alive until the inner route has
+   * completed and the response body has been consumed. The part's stream can therefore be read inside the route
+   * or streamed as the response. If there is no such field the request is rejected; if several parts share the
+   * name the first one is used.
    *
    * @group fileupload
    */
   def fileUploadSpooled(fieldName: String): Directive1[(FileInfo, Stream[IO, Byte])] =
+    fileUploadSpooled(fieldName, DefaultMaxSizeBeforeWrite)
+
+  /**
+   * @param maxSizeBeforeWrite the size in bytes above which a part is spooled to a temporary file
+   * @group fileupload
+   */
+  def fileUploadSpooled(fieldName: String, maxSizeBeforeWrite: Int): Directive1[(FileInfo, Stream[IO, Byte])] =
     Directive[Tuple1[(FileInfo, Stream[IO, Byte])]] { inner => ctx =>
-      EntityDecoder.mixedMultipartResource[IO]().use { decoder =>
-        MarshallingDirectives.decodeEntity(ctx.request, decoder).flatMap {
-          case Left(rejection) => IO.pure(RouteResult.Rejected(rejection :: Nil))
-          case Right(formData) =>
-            formData.parts.find(part => part.name.contains(fieldName) && part.filename.isDefined) match {
-              case Some(part) => inner(Tuple1((fileInfo(part), part.body)))(ctx)
-              case None       => IO.pure(RouteResult.Rejected(MissingFormFieldRejection(fieldName) :: Nil))
+      EntityDecoder.mixedMultipartResource[IO](maxSizeBeforeWrite = maxSizeBeforeWrite).allocated.flatMap {
+        case (decoder, releaseDecoder) =>
+          IO.ref(false).flatMap { released =>
+            // the decoder is released once: on rejection, on error, or when the response body is finalized
+            val release = released.getAndSet(true).flatMap(done => if (done) IO.unit else releaseDecoder)
+            val run = MarshallingDirectives.decodeEntity(ctx.request, decoder).flatMap {
+              case Left(rejection) => IO.pure(RouteResult.Rejected(rejection :: Nil))
+              case Right(formData) =>
+                formData.parts.find(part => part.name.contains(fieldName) && part.filename.isDefined) match {
+                  case Some(part) => inner(Tuple1((fileInfo(part), part.body)))(ctx)
+                  case None       => IO.pure(RouteResult.Rejected(MissingFormFieldRejection(fieldName) :: Nil))
+                }
             }
-        }
+            run.attempt.flatMap {
+              case Right(RouteResult.Complete(response)) =>
+                IO.pure(RouteResult.Complete(response.withBodyStream(response.body.onFinalize(release))))
+              case Right(rejected) => release.as(rejected)
+              case Left(error)     => release *> IO.raiseError(error)
+            }
+          }
       }
     } & cancelRejections(classOf[UnsupportedRequestContentTypeRejection])
 
@@ -141,6 +159,9 @@ trait FileUploadDirectives {
 }
 
 object FileUploadDirectives extends FileUploadDirectives {
+
+  /** http4s' default: parts above 50 MiB are spooled to a temporary file. */
+  val DefaultMaxSizeBeforeWrite: Int = 52428800
 
   /** Content type assumed for a multipart file part that declares none. */
   val DefaultPartContentType: `Content-Type` = `Content-Type`(MediaType.application.`octet-stream`)

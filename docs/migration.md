@@ -53,6 +53,9 @@ size limits) is set per directive instead.
   `.optional` and `withAnonymousUser` apply.
 - The testkit builds request bodies with `withEntity`, so requests carry `Content-Type` and `Content-Length`.
 - `fileUpload` and friends no longer require a part `Content-Type`; a missing one is `application/octet-stream`.
+- `getFromFile`, `getFromResource`, `getFromDirectory`, `getFromResourceDirectory` and the browseable directory
+  directives take an implicit `ContentTypeResolver`; code that passed them as function values (`xs.map(getFromDirectory)`)
+  now needs `xs.map(getFromDirectory(_))`.
 
 ## Testkit differences
 

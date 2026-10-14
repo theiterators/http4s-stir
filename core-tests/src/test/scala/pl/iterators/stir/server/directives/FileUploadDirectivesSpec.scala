@@ -4,7 +4,7 @@ import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import cats.syntax.all._
 import fs2.Stream
-import org.http4s.{ Headers, MediaType, Request }
+import org.http4s.{ Headers, MediaType, Request, Response }
 import org.http4s.headers.{ `Content-Disposition`, `Content-Type` }
 import org.http4s.multipart.{ Multipart, Multiparts, Part }
 import org.typelevel.ci._
@@ -79,6 +79,11 @@ class FileUploadDirectivesSpec extends RoutingSpec {
       upload(textPart("other", "a.txt", "abc")) ~> fileUploadSpooled("file") { _ => completeOk } ~> check {
         rejection shouldEqual MissingFormFieldRejection("file")
       }
+    }
+    "keep a spooled part readable while the response body streams it" in {
+      upload(textPart("file", "a.txt", "spooled to disk")) ~!> fileUploadSpooled("file", maxSizeBeforeWrite = 1) {
+        case (_, data) => complete(Response[IO]().withBodyStream(data))
+      } ~> check { responseAs[String] shouldEqual "spooled to disk" }
     }
     "stream a part over a real server" in {
       upload(textPart("file", "a.txt", "streamed")) ~!> fileUploadSpooled("file") { case (_, data) =>
