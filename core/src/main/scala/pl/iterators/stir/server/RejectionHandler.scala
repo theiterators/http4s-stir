@@ -1,9 +1,10 @@
 package pl.iterators.stir.server
 
 import cats.effect.IO
-import org.http4s.{ Headers, MediaRange, MediaType, Response }
+import org.http4s.{ Header, Headers, MediaRange, MediaType, Response }
 import org.http4s.Status._
 import org.http4s.headers.{ `WWW-Authenticate`, Allow }
+import org.typelevel.ci._
 import pl.iterators.stir.marshalling.ToResponseMarshallable
 import pl.iterators.stir.server.directives.BasicDirectives
 
@@ -268,14 +269,17 @@ object RejectionHandler {
         rejectRequestEntityAndComplete((BadRequest,
           "The request's Content-Encoding is not supported. Expected:\n" + supported))
       }
-//      .handle { case ExpectedWebSocketRequestRejection => rejectRequestEntityAndComplete((BadRequest, "Expected WebSocket Upgrade request")) }
-//      .handleAll[UnsupportedWebSocketSubprotocolRejection] { rejections =>
-//        val supported = rejections.map(_.supportedProtocol)
-//        rejectRequestEntityAndComplete(HttpResponse(
-//          BadRequest,
-//          entity = s"None of the websocket subprotocols offered in the request are supported. Supported are ${supported.map("'" + _ + "'").mkString(",")}.",
-//          headers = `Sec-WebSocket-Protocol`(supported) :: Nil))
-//      }
+      .handle {
+        case ExpectedWebSocketRequestRejection =>
+          rejectRequestEntityAndComplete((BadRequest, "Expected WebSocket Upgrade request"))
+      }
+      .handleAll[UnsupportedWebSocketSubprotocolRejection] { rejections =>
+        val supported = rejections.map(_.supportedProtocol)
+        rejectRequestEntityAndComplete((BadRequest,
+          Headers(Header.Raw(ci"Sec-WebSocket-Protocol", supported.mkString(", "))),
+          "None of the websocket subprotocols offered in the request are supported. " +
+          s"Supported are ${supported.map("'" + _ + "'").mkString(",")}."))
+      }
       .handle { case ValidationRejection(msg, _) => rejectRequestEntityAndComplete((BadRequest, msg)) }
       .handle { case x => sys.error("Unhandled rejection: " + x) }
       .handleNotFound { rejectRequestEntityAndComplete((NotFound, "The requested resource could not be found.")) }

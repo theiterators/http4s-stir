@@ -6,7 +6,7 @@ sidebar_position: 21
 
 # WebSocket Directives
 
-WebSocket directives handle WebSocket upgrade requests within stir routes. WebSocket support in http4s-stir is limited compared to Pekko HTTP; subprotocol negotiation and WebSocket-specific rejections are not available.
+WebSocket directives handle WebSocket upgrade requests within stir routes. A request that is not a WebSocket upgrade (no `Connection: Upgrade` / `Upgrade: websocket` headers) is rejected with an `ExpectedWebSocketRequestRejection` (400 when sealed), so a plain GET on the same path can be served by the next route alternative.
 
 ## handleWebSocketMessages
 
@@ -46,6 +46,38 @@ val route: Route = path("ws") {
   handleWebSocketMessages(ws, send, receive)
 }
 ```
+
+## extractOfferedWsProtocols
+
+Extracts the subprotocols the client offered in `Sec-WebSocket-Protocol` as a `Seq[String]` (empty when the
+header is absent). Rejects non-upgrade requests with an `ExpectedWebSocketRequestRejection`.
+
+## handleWebSocketMessagesForProtocol
+
+Like the pipe-based `handleWebSocketMessages`, but only accepts the upgrade when the client offered the given
+subprotocol (compared case-insensitively); the handshake response then names it. Otherwise the request is
+rejected with an `UnsupportedWebSocketSubprotocolRejection`, which the default handler turns into a 400 whose
+`Sec-WebSocket-Protocol` header lists every protocol the rejecting routes support. Chain several of these to
+support several subprotocols:
+
+```scala
+val route: Route = path("ws") {
+  handleWebSocketMessagesForProtocol(ws, jsonHandler, "json") ~
+  handleWebSocketMessagesForProtocol(ws, binaryHandler, "binary")
+}
+```
+
+## handleWebSocketMessagesForOptionalProtocol
+
+`handleWebSocketMessagesForOptionalProtocol(ws, handler, Some("json"))` behaves like
+`handleWebSocketMessagesForProtocol`; with `None` any upgrade request is accepted.
+
+## Testing
+
+In the in-memory testkit (`~>`) an accepted upgrade completes with `101 Switching Protocols` and, for the protocol
+variants, the selected `Sec-WebSocket-Protocol` header; the real handshake and the frames are handled by the
+server and are not exercised. Send `Connection: Upgrade`, `Upgrade: websocket`, `Sec-WebSocket-Version: 13` and a
+`Sec-WebSocket-Key` header to simulate a client.
 
 ## Integration with http4s
 

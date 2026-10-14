@@ -46,6 +46,8 @@ A `PUT /order` request would be rejected by both the `get` and `post` directives
 | `InvalidOriginRejection(allowedOrigins)` | The `Origin` header is not in the allowed list. Produced by `checkSameOrigin`. Produces 403. |
 | `UnacceptedResponseEncodingRejection(supported)` | The client accepts none of the response encodings the route can produce. Produced by `encodeResponse*` and `responseEncodingAccepted`. Produces 406. |
 | `UnsupportedRequestEncodingRejection(supported)` | The request's `Content-Encoding` is not supported. Produced by `decodeRequest*` and `requestEncodedWith`. Produces 400. |
+| `ExpectedWebSocketRequestRejection` | The request is not a WebSocket upgrade. Produced by the WebSocket directives. Produces 400. |
+| `UnsupportedWebSocketSubprotocolRejection(supportedProtocol)` | None of the offered WebSocket subprotocols is supported. Produces 400 with a `Sec-WebSocket-Protocol` header listing the supported ones. |
 | `ValidationRejection(message, cause)` | An expected value was semantically invalid. Produced by the `validate` directive and by `IllegalArgumentException` from domain constructors. |
 | `AuthenticationFailedRejection(cause, challenge)` | Authentication failed. The `cause` is either `CredentialsMissing` or `CredentialsRejected`. |
 | `AuthorizationFailedRejection` | The authenticated user is not authorized to access the resource. |
