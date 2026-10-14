@@ -157,16 +157,13 @@ There's a compatibility layer, [`Http4sDirectives`](https://github.com/theiterat
 
 ## What's missing
 
-Some Pekko HTTP directives are absent or modified:
+Every Pekko HTTP directive category has a counterpart. What differs:
 
-* `CacheConditionDirectives`, `CodingDirectives`, `RangeDirectives`
-* Directory listing in `FileAndResourceDirectives`
-* `checkSameOrigin` in `HeaderDirectives`
-* Multipart form handling in `FormFieldDirectives`
-* `AttributeDirectives`, `FramedEntityStreamingDirectives`
-* Most of `WebSocketDirectives`
-* Strict entity conversion, `withSizeLimit`, `withoutSizeLimit`, `requestEntityEmpty`, `requestEntityPresent`, `rejectEmptyResponse`
-* Testkit differences: synchronous execution, no chunk support, limited request building, no WebSocket testing
+* Directives tied to the Pekko runtime (`extractExecutionContext`, `extractMaterializer`, `extractActorSystem`, `withLog`, `withSettings` and friends, `onCompleteWithBreaker`, `completeWith`) have no equivalent; settings-driven behaviour is configured per directive instead.
+* `DebuggingDirectives` have a different API (flags and `LogRedaction` instead of `LoggingMagnet`).
+* Testkit differences: synchronous execution, no incremental inspection of chunked responses, WebSocket tests cover the handshake but not frames.
+
+See the [migration guide](https://theiterators.github.io/http4s-stir/docs/migration) for the full list, including the behaviour changes in 0.7.
 
 ## What's with the name?
 
