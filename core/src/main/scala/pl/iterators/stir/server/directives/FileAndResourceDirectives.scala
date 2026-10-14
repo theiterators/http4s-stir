@@ -1,10 +1,11 @@
 package pl.iterators.stir.server.directives
 
 import cats.data.OptionT
-import cats.effect.IO
+import cats.effect.{ IO, SyncIO }
 import fs2.io.file.Path
 import org.http4s.{ Response, StaticFile, Uri }
 import org.http4s.headers.`Content-Type`
+import org.typelevel.vault.Key
 import pl.iterators.stir.server.{ Route, RouteResult }
 
 import java.io.{ File, IOException }
@@ -55,8 +56,9 @@ trait FileAndResourceDirectives {
     get {
       if (file.isFile && file.canRead)
         extractRequest { request =>
-          serve(StaticFile.fromPath(Path(file.getAbsolutePath), Some(request)).map(response =>
-            contentType.fold(response)(response.withContentType)))
+          serve(file.getName,
+            StaticFile.fromPath(Path(file.getAbsolutePath), Some(request)).map(response =>
+              contentType.fold(response)(response.withContentType)))
         }
       else reject
     }
@@ -83,8 +85,9 @@ trait FileAndResourceDirectives {
     if (!resourceName.endsWith("/"))
       get {
         extractRequest { request =>
-          serve(StaticFile.fromResource(resourceName, Some(request)).map(response =>
-            contentType.fold(response)(response.withContentType)))
+          serve(resourceName,
+            StaticFile.fromResource(resourceName, Some(request)).map(response =>
+              contentType.fold(response)(response.withContentType)))
         }
       }
     else reject // don't serve the content of resource "directories"
@@ -125,11 +128,15 @@ trait FileAndResourceDirectives {
 object FileAndResourceDirectives extends FileAndResourceDirectives {
   private def withTrailingSlash(path: String): String = if (path.endsWith("/")) path else path + '/'
 
+  /** The file or resource name a response was served from, for `withPrecompressedMediaTypeSupport`. */
+  private[stir] val ServedNameKey: Key[String] = Key.newKey[SyncIO, String].unsafeRunSync()
+
   /** Completes with the static content when http4s found it and rejects (with no rejections) otherwise. */
-  private def serve(content: OptionT[IO, Response[IO]]): Route = _ =>
+  private def serve(name: String, content: OptionT[IO, Response[IO]]): Route = _ =>
     content.value.map {
-      case Some(response) => RouteResult.Complete(response)
-      case None           => RouteResult.Rejected(Nil)
+      case Some(response) =>
+        RouteResult.Complete(response.withAttributes(response.attributes.insert(ServedNameKey, name)))
+      case None => RouteResult.Rejected(Nil)
     }
 
   /**

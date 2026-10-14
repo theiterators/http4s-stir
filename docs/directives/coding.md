@@ -68,7 +68,16 @@ val route: Route = decodeRequest {
 Rejects with an `UnsupportedRequestEncodingRejection` unless the request's `Content-Encoding` (`identity` when
 absent) matches the given coding.
 
-## Not implemented
+## withPrecompressedMediaTypeSupport
 
-`withPrecompressedMediaTypeSupport` has no counterpart: http4s media types do not record whether a type is a
-gzipped container. Add the `Content-Encoding` header with `respondWithHeader` where you need it.
+Adds `Content-Encoding: gzip` to a response that one of the static file directives served from a `.svgz` file
+(the only precompressed media type Pekko recognises) when no `Content-Encoding` is set yet. http4s media types
+carry no "gzipped" flag, so the directive looks at the served file name instead.
+
+```scala
+val route: Route = pathPrefix("static") {
+  withPrecompressedMediaTypeSupport {
+    getFromDirectory("/var/www/static")
+  }
+}
+```
