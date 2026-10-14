@@ -48,6 +48,7 @@ trait RequestBuilding {
   val Delete = new RequestBuilder(DELETE)
   val Options = new RequestBuilder(OPTIONS)
   val Head = new RequestBuilder(HEAD)
+  val Query = new RequestBuilder(pl.iterators.stir.server.directives.MethodDirectives.QUERY)
 
   def addHeader(header: Header.ToRaw): RequestTransformer = _.putHeaders(header)
 

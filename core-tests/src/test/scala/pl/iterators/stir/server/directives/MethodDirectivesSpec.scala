@@ -7,6 +7,22 @@ import pl.iterators.stir.server._
 class MethodDirectivesSpec extends RoutingSpec {
   override implicit def runtime: IORuntime = IORuntime.global
 
+  "query" should {
+    lazy val queryRoute = query { completeOk }
+
+    "block GET requests" in {
+      Get() ~> queryRoute ~> check { rejection shouldEqual MethodRejection(MethodDirectives.QUERY) }
+    }
+    "let QUERY requests pass" in {
+      Query("/", "select *") ~> queryRoute ~> check { response.status shouldEqual Status.Ok }
+    }
+    "let QUERY requests pass over a real server" in {
+      Query("/", "select *") ~!> (query & entity(as[String])) { body => complete(body) } ~> check {
+        responseAs[String] shouldEqual "select *"
+      }
+    }
+  }
+
   "get | put" should {
     lazy val getOrPut = (get | put) { completeOk }
 

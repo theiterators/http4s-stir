@@ -59,6 +59,14 @@ trait MethodDirectives {
   def put: Directive0 = _put
 
   /**
+   * Rejects all non-QUERY requests (the safe, idempotent method with a body from
+   * https://datatracker.ietf.org/doc/draft-ietf-httpbis-safe-method-w-body/).
+   *
+   * @group method
+   */
+  def query: Directive0 = _query
+
+  /**
    * Extracts the request method.
    *
    * @group method
@@ -101,6 +109,10 @@ trait MethodDirectives {
 }
 
 object MethodDirectives extends MethodDirectives {
+
+  /** The `QUERY` method, which http4s 0.23 does not define; safe and idempotent per the draft, but with a body. */
+  val QUERY: Method = Method.fromString("QUERY").fold(failure => throw failure, identity)
+
   private val _extractMethod: Directive1[Method] =
     BasicDirectives.extract(_.request.method)
 
@@ -112,4 +124,5 @@ object MethodDirectives extends MethodDirectives {
   private val _patch: Directive0 = method(Method.PATCH)
   private val _post: Directive0 = method(Method.POST)
   private val _put: Directive0 = method(Method.PUT)
+  private val _query: Directive0 = method(MethodDirectives.QUERY)
 }

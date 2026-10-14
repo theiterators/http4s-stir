@@ -92,6 +92,20 @@ val route: Route = path("resource") {
 }
 ```
 
+## query
+
+Passes only `QUERY` requests, the safe and idempotent method with a body from the
+[HTTP QUERY draft](https://datatracker.ietf.org/doc/draft-ietf-httpbis-safe-method-w-body/). http4s 0.23 has no
+constant for it, so stir defines `MethodDirectives.QUERY`; the testkit's `Query` request builder uses it.
+
+```scala
+val route: Route = path("search") {
+  (query & entity(as[String])) { queryText =>
+    complete(s"Results for $queryText")
+  }
+}
+```
+
 ## Combining Method Directives
 
 Method directives are commonly combined with route concatenation to handle multiple methods on the same path:
