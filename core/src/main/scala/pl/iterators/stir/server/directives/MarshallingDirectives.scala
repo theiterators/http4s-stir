@@ -1,29 +1,40 @@
 package pl.iterators.stir.server.directives
 
 import cats.effect.IO
-import org.http4s.EntityDecoder
+import org.http4s.{
+  DecodeFailure,
+  DecodeResult,
+  EntityDecoder,
+  InvalidMessageBodyFailure,
+  MediaRange,
+  MediaTypeMismatch,
+  MediaTypeMissing,
+  Request
+}
+import pl.iterators.stir.impl.util._
 import pl.iterators.stir.marshalling.ToResponseMarshaller
 import pl.iterators.stir.server._
-import pl.iterators.stir.server.EntityRejection
 
 trait MarshallingDirectives {
   import BasicDirectives._
   import RouteDirectives._
 
   /**
-   * Unmarshalls the requests entity to the given type passes it to its inner Route.
-   * If there is a problem with unmarshalling the request is rejected with the [[Rejection]]
-   * produced by the unmarshaller.
+   * Unmarshalls the request entity to the given type and passes it to its inner route.
+   * A `Content-Type` the decoder does not accept rejects with an [[UnsupportedRequestContentTypeRejection]]
+   * (a missing `Content-Type` is accepted), a body that cannot be decoded rejects with a
+   * [[MalformedRequestContentRejection]], and a decoder failure caused by an `IllegalArgumentException`
+   * rejects with a [[ValidationRejection]].
    *
    * @group marshalling
    */
   def entity[T](entityDecoder: EntityDecoder[IO, T]): Directive1[T] = Directive[Tuple1[T]] {
     inner => ctx =>
-      entityDecoder.decode(ctx.request, strict = false).value.flatMap {
-        case Right(value) => inner(Tuple1(value))(ctx)
-        case Left(e)      => IO.pure(RouteResult.Rejected(Seq(EntityRejection(e))))
+      MarshallingDirectives.decodeEntity(ctx.request, entityDecoder).flatMap {
+        case Right(value)    => inner(Tuple1(value))(ctx)
+        case Left(rejection) => IO.pure(RouteResult.Rejected(rejection :: Nil))
       }
-  } & cancelRejections(classOf[EntityRejection])
+  } & cancelRejections(classOf[UnsupportedRequestContentTypeRejection])
 
   /**
    * Returns the in-scope [[EntityDecoder]] for the given type.
@@ -31,6 +42,15 @@ trait MarshallingDirectives {
    * @group marshalling
    */
   def as[T](implicit um: EntityDecoder[IO, T]) = um
+
+  /**
+   * Decodes the request body as a `String` whatever its `Content-Type` is, like Pekko HTTP's string unmarshaller.
+   * It takes precedence over http4s' text-only decoder wherever the directives are in scope.
+   *
+   * @group marshalling
+   */
+  implicit val stringEntityDecoder: EntityDecoder[IO, String] =
+    EntityDecoder.decodeBy(MediaRange.`*/*`)(media => DecodeResult.success(EntityDecoder.decodeText(media)))
 
   /**
    * Returns the in-scope Marshaller for the given type.
@@ -49,4 +69,25 @@ trait MarshallingDirectives {
     entity(entityDecoder) { a => complete(f(a)) }
 }
 
-object MarshallingDirectives extends MarshallingDirectives
+object MarshallingDirectives extends MarshallingDirectives {
+
+  /**
+   * Decodes the request with the given decoder. The `Content-Type` is checked only when the request has one.
+   * A `DecodeFailure` (returned or raised) becomes a rejection; any other error is re-raised.
+   */
+  private[stir] def decodeEntity[T](request: Request[IO], decoder: EntityDecoder[IO, T]): IO[Either[Rejection, T]] =
+    decoder.decode(request, strict = request.contentType.isDefined).value.attempt.flatMap {
+      case Right(Right(value))          => IO.pure(Right(value))
+      case Right(Left(failure))         => IO.pure(Left(rejectionFor(failure)))
+      case Left(failure: DecodeFailure) => IO.pure(Left(rejectionFor(failure)))
+      case Left(error)                  => IO.raiseError(error)
+    }
+
+  private[stir] def rejectionFor(failure: DecodeFailure): Rejection = failure match {
+    case MediaTypeMismatch(actual, expected)                                 => UnsupportedRequestContentTypeRejection(expected, Some(actual))
+    case MediaTypeMissing(expected)                                          => UnsupportedRequestContentTypeRejection(expected, None)
+    case InvalidMessageBodyFailure(_, Some(cause: IllegalArgumentException)) =>
+      ValidationRejection(cause.getMessage.nullAsEmpty, Some(cause))
+    case other => MalformedRequestContentRejection(other.message, other)
+  }
+}

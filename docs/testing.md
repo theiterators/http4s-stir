@@ -114,6 +114,9 @@ Head("/path")
 
 Builders that accept an entity require an implicit `EntityEncoder[IO, T]` for the body type.
 
+A request built with a body (`Post("/", body)`) carries the `Content-Type` and `Content-Length` the body's
+`EntityEncoder` produces, as a real client would send; override with `addHeader`.
+
 ## Request Transformers
 
 Transform requests before sending them to a route:

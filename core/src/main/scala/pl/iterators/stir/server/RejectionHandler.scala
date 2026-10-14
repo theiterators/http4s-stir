@@ -1,10 +1,9 @@
 package pl.iterators.stir.server
 
 import cats.effect.IO
-import org.http4s.{ Headers, Response }
+import org.http4s.{ Headers, MediaRange, MediaType, Response }
 import org.http4s.Status._
 import org.http4s.headers.{ `WWW-Authenticate`, Allow }
-import pl.iterators.stir.impl.util._
 import pl.iterators.stir.marshalling.ToResponseMarshallable
 import pl.iterators.stir.server.directives.BasicDirectives
 
@@ -138,6 +137,11 @@ object RejectionHandler {
 
   private def rejectRequestEntityAndComplete(m: => ToResponseMarshallable) = complete(m)
 
+  private def renderMediaRange(range: MediaRange): String = range match {
+    case mediaType: MediaType => s"${mediaType.mainType}/${mediaType.subType}"
+    case _                    => s"${range.mainType}/*"
+  }
+
   /**
    * Default [[RejectionHandler]] instance.
    */
@@ -207,10 +211,6 @@ object RejectionHandler {
           rejectRequestEntityAndComplete((NotFound,
             s"Request is missing required value '$requiredValue' for query parameter '$paramName'"))
       }
-      .handle {
-        case EntityRejection(e) =>
-          rejectRequestEntityAndComplete((BadRequest, "Request entity malformed: " + e.getMessage.nullAsEmpty))
-      }
 //      .handle {
 //        case TooManyRangesRejection(_) =>
 //          rejectRequestEntityAndComplete((RangeNotSatisfiable, "Request contains too many ranges"))
@@ -249,15 +249,14 @@ object RejectionHandler {
 //        rejectRequestEntityAndComplete((NotAcceptable, "Resource representation is only available with these Content-Encodings:\n" +
 //          supported.map(_.value).mkString("\n")))
 //      }
-//      .handleAll[UnsupportedRequestContentTypeRejection] { rejections =>
-//        val unsupported = rejections.find(_.contentType.isDefined).flatMap(_.contentType).fold("")(" [" + _ + "]")
-//        val supported = rejections.flatMap(_.supported).mkString(" or ")
-//        val expected =
-//          if (supported.isEmpty) ""
-//          else " Expected:\n" + supported
-//
-//        rejectRequestEntityAndComplete((UnsupportedMediaType, s"The request's Content-Type$unsupported is not supported.$expected"))
-//      }
+      .handleAll[UnsupportedRequestContentTypeRejection] { rejections =>
+        val unsupported =
+          rejections.find(_.contentType.isDefined).flatMap(_.contentType).fold("")(" [" + renderMediaRange(_) + "]")
+        val supported = rejections.flatMap(_.supported).distinct.map(renderMediaRange).mkString(" or ")
+        val expected = if (supported.isEmpty) "" else " Expected:\n" + supported
+        rejectRequestEntityAndComplete((UnsupportedMediaType,
+          s"The request's Content-Type$unsupported is not supported.$expected"))
+      }
 //      .handleAll[UnsupportedRequestEncodingRejection] { rejections =>
 //        val supported = rejections.map(_.supported.value).mkString(" or ")
 //        rejectRequestEntityAndComplete((BadRequest, "The request's Content-Encoding is not supported. Expected:\n" + supported))

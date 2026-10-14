@@ -34,7 +34,7 @@ trait RequestBuilding {
     def apply[T](uri: Uri, content: Option[T])(implicit m: EntityEncoder[IO, T]): Request[IO] =
       content match {
         case None        => apply(uri, EmptyBody)
-        case Some(value) => apply(uri, m.toEntity(value).body)
+        case Some(value) => Request[IO](method, uri).withEntity(value)
       }
 
     def apply(uri: Uri, entity: EntityBody[IO]): Request[IO] =

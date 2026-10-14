@@ -2,7 +2,7 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.IO
 import cats.implicits._
-import org.http4s.{ EntityDecoder, UrlForm }
+import org.http4s.{ EntityDecoder, MediaTypeMismatch, MediaTypeMissing, UrlForm }
 import pl.iterators.stir.common._
 import pl.iterators.stir.impl.util._
 import pl.iterators.stir.server._
@@ -147,6 +147,8 @@ object FormFieldDirectives {
     protected def handleFieldResult[T](fieldName: String, result: IO[T]): Directive1[T] = onComplete(result).flatMap {
       case Success(x)                               => provide(x)
       case Failure(Unmarshaller.NoContentException) => reject(MissingFormFieldRejection(fieldName))
+      case Failure(x: MediaTypeMismatch)            => reject(MarshallingDirectives.rejectionFor(x))
+      case Failure(x: MediaTypeMissing)             => reject(MarshallingDirectives.rejectionFor(x))
       case Failure(x)                               => reject(MalformedFormFieldRejection(fieldName, x.getMessage.nullAsEmpty, Option(x.getCause)))
     }
 
@@ -156,7 +158,8 @@ object FormFieldDirectives {
     val stringFromStrictForm: FSFFU[String] = Unmarshaller.identityUnmarshaller
 
     def fieldOfForm[T](fieldName: String, fu: Unmarshaller[Option[String], T]): RequestContext => IO[T] = { ctx =>
-      strictFormUnmarshaller(ctx).decode(ctx.request, strict = false).foldF(x => IO.raiseError(x),
+      strictFormUnmarshaller(ctx).decode(ctx.request, strict = ctx.request.contentType.isDefined).foldF(
+        x => IO.raiseError(x),
         form => fu(form.getFirst(fieldName)))
     }
 
@@ -165,7 +168,8 @@ object FormFieldDirectives {
 
     def repeatedFilter[T](fieldName: String, fu: FSFFU[T]): Directive1[Iterable[T]] =
       extract { ctx =>
-        strictFormUnmarshaller(ctx).decode(ctx.request, strict = false).foldF(x => IO.raiseError(x),
+        strictFormUnmarshaller(ctx).decode(ctx.request, strict = ctx.request.contentType.isDefined).foldF(
+          x => IO.raiseError(x),
           form => form.get(fieldName).toList.map(fu.apply).parSequence)
       }.flatMap { result =>
         handleFieldResult(fieldName, result)

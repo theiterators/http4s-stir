@@ -1,6 +1,6 @@
 package pl.iterators.stir.server
 
-import org.http4s.{ Challenge, DecodeFailure, Method }
+import org.http4s.{ Challenge, MediaRange, MediaType, Method }
 
 trait Rejection
 
@@ -13,9 +13,11 @@ case class ValidationRejection(message: String, cause: Option[Throwable]) extend
 
 /**
  * Rejection created by unmarshallers.
- * Signals that the request was rejected because the requests content-type is unsupported.
+ * Signals that the request was rejected because the request's Content-Type is not supported by the decoder.
+ * `supported` lists the media ranges the decoder accepts, `contentType` the media type the request declared.
  */
-case class EntityRejection(e: DecodeFailure) extends Rejection
+final case class UnsupportedRequestContentTypeRejection(supported: Set[MediaRange],
+    contentType: Option[MediaType] = None) extends Rejection
 
 /**
  * Rejection created by unmarshallers.

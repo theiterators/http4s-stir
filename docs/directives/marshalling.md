@@ -10,7 +10,16 @@ Marshalling directives handle the conversion between HTTP request/response bodie
 
 ## entity
 
-Unmarshals the request body to the given type `T`. Requires an implicit `EntityDecoder[IO, T]` in scope. If unmarshalling fails, the request is rejected with an `EntityRejection`.
+Unmarshals the request body to the given type `T`. Requires an implicit `EntityDecoder[IO, T]` in scope.
+
+If the request carries a `Content-Type` the decoder does not accept, the request is rejected with an
+`UnsupportedRequestContentTypeRejection` (415 when sealed); a request without `Content-Type` is decoded anyway.
+A body the decoder cannot parse yields a `MalformedRequestContentRejection` (400), and a decoder failure caused
+by an `IllegalArgumentException` (for example a `require` in a constructor) yields a `ValidationRejection` (400).
+The 415 rejection is cancelled when a later route alternative accepts the content type.
+
+`as[String]` accepts every content type, as in Pekko HTTP; the directives provide their own
+`EntityDecoder[IO, String]` for that, which takes precedence over http4s' `text/*` decoder.
 
 ```scala
 import org.http4s.EntityDecoder

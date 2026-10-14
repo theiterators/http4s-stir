@@ -3,11 +3,10 @@ package pl.iterators.stir.server.directives
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import fs2.Stream
-import org.http4s.MediaType
+import org.http4s.{ MediaType, Status, UrlForm }
 import org.http4s.headers.`Content-Type`
 
 import scala.concurrent.duration._
-import org.http4s.{ Status, UrlForm }
 import pl.iterators.stir.unmarshalling.Unmarshaller._
 import pl.iterators.stir.server._
 import pl.iterators.stir.unmarshalling.Unmarshaller
@@ -351,6 +350,22 @@ class FormFieldDirectivesSpec extends RoutingSpec {
       Post("/", slowBody) ~> addHeader(`Content-Type`(MediaType.application.`x-www-form-urlencoded`)) ~!> {
         formFields("firstName", "age".as[Int]) { (firstName, age) => complete(firstName + age) }
       } ~> check { responseAs[String] shouldEqual "Mike42" }
+    }
+  }
+
+  "The 'formFields' directive with a non-form body" should {
+    "reject with UnsupportedRequestContentTypeRejection" in {
+      Post("/", """{"firstName":"Mike"}""") ~> addHeader(`Content-Type`(MediaType.application.json)) ~> {
+        formFields("firstName") { echoComplete }
+      } ~> check {
+        rejection shouldEqual UnsupportedRequestContentTypeRejection(
+          Set(MediaType.application.`x-www-form-urlencoded`), Some(MediaType.application.json))
+      }
+    }
+    "decode a form body without Content-Type" in {
+      Post("/", urlEncodedForm) ~> removeHeader("Content-Type") ~> {
+        formFields("firstName") { echoComplete }
+      } ~> check { responseAs[String] shouldEqual "Mike" }
     }
   }
 }
