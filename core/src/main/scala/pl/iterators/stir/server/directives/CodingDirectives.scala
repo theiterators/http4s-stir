@@ -1,155 +1,178 @@
 package pl.iterators.stir.server.directives
 
+import cats.effect.IO
+import fs2.Stream
+import fs2.compression.{ Compression, DeflateParams, InflateParams, ZLibParams }
+import org.http4s.{ ContentCoding, EntityBody, MalformedMessageBodyFailure, QValue, Request, Response }
+import org.http4s.headers.{ `Accept-Encoding`, `Content-Encoding`, `Content-Length` }
+import pl.iterators.stir.server._
+
+import scala.util.control.NonFatal
+
 /**
  * @groupname coding Coding directives
  * @groupprio coding 50
  */
 trait CodingDirectives {
-//  import BasicDirectives._
-//  import MiscDirectives._
-//  import RouteDirectives._
-//  import CodingDirectives._
-//
-//  // encoding
-//
-//  /**
-//   * Rejects the request with an UnacceptedResponseEncodingRejection
-//   * if the given response encoding is not accepted by the client.
-//   *
-//   * @group coding
-//   */
-//  def responseEncodingAccepted(encoding: HttpEncoding): Directive0 =
-//    extractRequest.flatMap { request =>
-//      if (EncodingNegotiator(request.headers).isAccepted(encoding)) pass
-//      else reject(UnacceptedResponseEncodingRejection(Set(encoding)))
-//    }
-//
-//  /**
-//   * Encodes the response with the encoding that is requested by the client via the `Accept-
-//   * Encoding` header. The response encoding is determined by the rules specified in
-//   * http://tools.ietf.org/html/rfc7231#section-5.3.4.
-//   *
-//   * If the `Accept-Encoding` header is missing or empty or specifies an encoding other than
-//   * identity, gzip or deflate then no encoding is used.
-//   *
-//   * @group coding
-//   */
-//  def encodeResponse: Directive0 =
-//    _encodeResponse(DefaultEncodeResponseEncoders)
-//
-//  /**
-//   * Encodes the response with the encoding that is requested by the client via the `Accept-
-//   * Encoding` header. The response encoding is determined by the rules specified in
-//   * http://tools.ietf.org/html/rfc7231#section-5.3.4.
-//   *
-//   * If the `Accept-Encoding` header is missing then the response is encoded using the `first`
-//   * encoder.
-//   *
-//   * If the `Accept-Encoding` header is empty and `NoCoding` is part of the encoders then no
-//   * response encoding is used. Otherwise the request is rejected.
-//   *
-//   * @group coding
-//   */
-//  def encodeResponseWith(first: Encoder, more: Encoder*): Directive0 =
-//    _encodeResponse(immutable.Seq(first +: more: _*))
-//
-//  // decoding
-//
-//  /**
-//   * Decodes the incoming request using the given Decoder.
-//   * If the request encoding doesn't match the request is rejected with an `UnsupportedRequestEncodingRejection`.
-//   *
-//   * @group coding
-//   */
-//  def decodeRequestWith(decoder: Decoder): Directive0 = {
-//    def applyDecoder: Directive0 =
-//      if (decoder == Coders.NoCoding) pass
-//      else
-//        extractSettings flatMap { settings =>
-//          val effectiveDecoder = decoder.withMaxBytesPerChunk(settings.decodeMaxBytesPerChunk)
-//          mapRequest { msg =>
-//            effectiveDecoder.decodeMessage(msg)
-//              .transformEntityDataBytes(Flow[ByteString].mapError {
-//                case NonFatal(e) =>
-//                  IllegalRequestException(
-//                    StatusCodes.BadRequest,
-//                    ErrorInfo("The request's encoding is corrupt", e.getMessage))
-//              })
-//          } & withSizeLimit(settings.decodeMaxSize)
-//        }
-//
-//    requestEntityEmpty | (
-//      requestEncodedWith(decoder.encoding) &
-//        applyDecoder &
-//        cancelRejections(classOf[UnsupportedRequestEncodingRejection]))
-//  }
-//
-//  /**
-//   * Rejects the request with an UnsupportedRequestEncodingRejection if its encoding doesn't match the given one.
-//   *
-//   * @group coding
-//   */
-//  def requestEncodedWith(encoding: HttpEncoding): Directive0 =
-//    extract(_.request.encoding).flatMap {
-//      case `encoding` => pass
-//      case _          => reject(UnsupportedRequestEncodingRejection(encoding))
-//    }
-//
-//  /**
-//   * Decodes the incoming request if it is encoded with one of the given
-//   * encoders. If the request encoding doesn't match one of the given encoders
-//   * the request is rejected with an `UnsupportedRequestEncodingRejection`.
-//   * If no decoders are given the default encoders (`Gzip`, `Deflate`, `NoCoding`) are used.
-//   *
-//   * @group coding
-//   */
-//  def decodeRequestWith(decoders: Decoder*): Directive0 =
-//    theseOrDefault(decoders).map(decodeRequestWith).reduce(_ | _)
-//
-//  /**
-//   * Decompresses the incoming request if it is `gzip` or `deflate` compressed.
-//   * Uncompressed requests are passed through untouched.
-//   * If the request encoded with another encoding the request is rejected with an `UnsupportedRequestEncodingRejection`.
-//   *
-//   * @group coding
-//   */
-//  def decodeRequest: Directive0 =
-//    decodeRequestWith(DefaultCoders: _*)
-//
-//  /**
-//   * Inspects the response entity and adds a `Content-Encoding: gzip` response header if
-//   * the entity's media-type is precompressed with gzip and no `Content-Encoding` header is present yet.
-//   *
-//   * @group coding
-//   */
-//  def withPrecompressedMediaTypeSupport: Directive0 =
-//    mapResponse { response =>
-//      if (response.entity.contentType.mediaType.comp != MediaType.Gzipped) response
-//      else response.withDefaultHeaders(headers.`Content-Encoding`(HttpEncodings.gzip))
-//    }
+  import BasicDirectives._
+  import CodingDirectives._
+  import MiscDirectives._
+  import RouteDirectives._
+
+  /**
+   * Rejects the request with an [[UnacceptedResponseEncodingRejection]] if the given response encoding is not
+   * accepted by the client.
+   *
+   * @group coding
+   */
+  def responseEncodingAccepted(encoding: ContentCoding): Directive0 =
+    extractRequest.flatMap { request =>
+      if (qValueFor(request, encoding).isAcceptable) pass
+      else reject(UnacceptedResponseEncodingRejection(Set(encoding)))
+    }
+
+  /**
+   * Encodes the response with the encoding that is requested by the client via the `Accept-Encoding` header,
+   * choosing between identity, gzip and deflate by the rules of http://tools.ietf.org/html/rfc7231#section-5.3.4.
+   * If the header is missing, or none of gzip and deflate is acceptable, no encoding is used. Responses that are
+   * already encoded, have no entity, or have a non-compressible media type are left alone.
+   *
+   * @group coding
+   */
+  def encodeResponse: Directive0 = _encodeResponse(DefaultEncodeResponseEncoders)
+
+  /**
+   * Encodes the response with the first of the given encoders the client accepts (all of them when the
+   * `Accept-Encoding` header is missing; the first one wins ties). Rejects with an
+   * [[UnacceptedResponseEncodingRejection]] when the client accepts none of them.
+   *
+   * @group coding
+   */
+  def encodeResponseWith(first: ContentCoding, more: ContentCoding*): Directive0 = _encodeResponse(first +: more)
+
+  /**
+   * Decodes the incoming request with the given coding (gzip, deflate or identity). Requests encoded differently
+   * are rejected with an [[UnsupportedRequestEncodingRejection]]; empty requests pass through untouched.
+   * A corrupt compressed body fails the entity with a decode failure, which `entity` turns into a
+   * [[MalformedRequestContentRejection]] (400).
+   *
+   * @group coding
+   */
+  def decodeRequestWith(decoder: ContentCoding): Directive0 = {
+    val applyDecoder: Directive0 =
+      if (isIdentity(decoder)) pass
+      else mapRequest { request =>
+        request.withBodyStream(decodeBody(decoder, request.body))
+          .removeHeader[`Content-Encoding`]
+          .removeHeader[`Content-Length`]
+      }
+
+    requestEntityEmpty |
+    (requestEncodedWith(decoder) & applyDecoder &
+    cancelRejections(classOf[UnsupportedRequestEncodingRejection]))
+  }
+
+  /**
+   * Rejects the request with an [[UnsupportedRequestEncodingRejection]] if its `Content-Encoding` (identity when
+   * absent) does not match the given one.
+   *
+   * @group coding
+   */
+  def requestEncodedWith(encoding: ContentCoding): Directive0 =
+    extract(ctx => requestEncoding(ctx.request)).flatMap { actual =>
+      if (sameCoding(actual, encoding)) pass else reject(UnsupportedRequestEncodingRejection(encoding))
+    }
+
+  /**
+   * Decodes the incoming request if it is encoded with one of the given codings (gzip, deflate and identity when
+   * none are given). A request encoded differently is rejected with one
+   * [[UnsupportedRequestEncodingRejection]] per coding.
+   *
+   * @group coding
+   */
+  def decodeRequestWith(decoders: ContentCoding*): Directive0 =
+    theseOrDefault(decoders).map(decodeRequestWith(_: ContentCoding)).reduce(_ | _)
+
+  /**
+   * Decompresses the incoming request if it is `gzip` or `deflate` compressed; uncompressed requests pass through.
+   *
+   * @group coding
+   */
+  def decodeRequest: Directive0 = decodeRequestWith(DefaultCoders: _*)
 }
 
 object CodingDirectives extends CodingDirectives {
-//  def DefaultCoders: immutable.Seq[Coder] = Coders.DefaultCoders
-//
-//  // same entries as DefaultCoders but in different order
-//  private[http] val DefaultEncodeResponseEncoders = immutable.Seq(Coders.NoCoding, Coders.Gzip, Coders.Deflate)
-//
-//  def theseOrDefault[T >: Coder](these: Seq[T]): Seq[T] = if (these.isEmpty) DefaultCoders else these
-//
-//  import BasicDirectives._
-//  import RouteDirectives._
-//
-//  private def _encodeResponse(encoders: immutable.Seq[Encoder]): Directive0 =
-//    BasicDirectives.extractRequest.flatMap { request =>
-//      val negotiator = EncodingNegotiator(request.headers)
-//      val encodings: List[HttpEncoding] = encoders.map(_.encoding).toList
-//      val bestEncoder = negotiator.pickEncoding(encodings).flatMap(be => encoders.find(_.encoding == be))
-//      bestEncoder match {
-//        case Some(encoder) => mapResponse(encoder.encodeMessage(_))
-//        case _ =>
-//          if (encoders.contains(Coders.NoCoding) && !negotiator.hasMatchingFor(HttpEncodings.identity)) pass
-//          else reject(UnacceptedResponseEncodingRejection(encodings.toSet))
-//      }
-//    }
+  import BasicDirectives._
+  import RouteDirectives._
+
+  /** The codings `decodeRequest` understands, in order. */
+  val DefaultCoders: Seq[ContentCoding] = Seq(ContentCoding.gzip, ContentCoding.deflate, ContentCoding.identity)
+
+  // same entries as DefaultCoders but in different order
+  private val DefaultEncodeResponseEncoders =
+    Seq(ContentCoding.identity, ContentCoding.gzip, ContentCoding.deflate)
+
+  private val compression: Compression[IO] = fs2.io.compression.fs2ioCompressionForIO
+
+  private val GzipParams = DeflateParams(header = ZLibParams.Header.GZIP)
+  private val DeflateZlibParams = DeflateParams(header = ZLibParams.Header.ZLIB)
+  private val InflateZlibParams = InflateParams(header = ZLibParams.Header.ZLIB)
+
+  private def theseOrDefault(these: Seq[ContentCoding]): Seq[ContentCoding] =
+    if (these.isEmpty) DefaultCoders else these
+
+  private def sameCoding(a: ContentCoding, b: ContentCoding): Boolean = a.coding.equalsIgnoreCase(b.coding)
+  private def isIdentity(coding: ContentCoding): Boolean = sameCoding(coding, ContentCoding.identity)
+  private def isGzip(coding: ContentCoding): Boolean = sameCoding(coding, ContentCoding.gzip)
+
+  private def requestEncoding(request: Request[IO]): ContentCoding =
+    request.headers.get[`Content-Encoding`].map(_.contentCoding).getOrElse(ContentCoding.identity)
+
+  /** Without an `Accept-Encoding` header every coding is acceptable; otherwise the header's q-value (`*` included). */
+  private def qValueFor(request: Request[IO], coding: ContentCoding): QValue =
+    request.headers.get[`Accept-Encoding`].fold(QValue.One)(_.qValue(coding))
+
+  private def hasMatchingFor(request: Request[IO], coding: ContentCoding): Boolean =
+    request.headers.get[`Accept-Encoding`].exists(_.values.exists(v => sameCoding(v, coding) || v.coding == "*"))
+
+  private def _encodeResponse(encoders: Seq[ContentCoding]): Directive0 =
+    extractRequest.flatMap { request =>
+      val acceptable = encoders.map(encoder => encoder -> qValueFor(request, encoder)).filter(_._2.isAcceptable)
+      acceptable.maxByOption(_._2.thousandths) match {
+        case Some((encoder, _)) => mapResponse(encodeResponse(encoder))
+        case None               =>
+          // identity is acceptable unless the client explicitly refused it (RFC 7231 5.3.4)
+          if (encoders.exists(isIdentity) && !hasMatchingFor(request, ContentCoding.identity)) pass
+          else reject(UnacceptedResponseEncodingRejection(encoders.toSet))
+      }
+    }
+
+  private def encodeResponse(coding: ContentCoding)(response: Response[IO]): Response[IO] =
+    if (isIdentity(coding) || !isCompressible(response)) response
+    else
+      response.withBodyStream(encodeBody(coding, response.body))
+        .removeHeader[`Content-Length`]
+        .putHeaders(`Content-Encoding`(coding))
+
+  private def isCompressible(response: Response[IO]): Boolean =
+    response.status.isEntityAllowed &&
+    response.headers.get[`Content-Encoding`].isEmpty &&
+    response.contentType.forall(_.mediaType.compressible)
+
+  private def encodeBody(coding: ContentCoding, body: EntityBody[IO]): EntityBody[IO] =
+    if (isGzip(coding))
+      body.through(compression.gzip(fileName = None, modificationTime = None, comment = None,
+        deflateParams = GzipParams))
+    else body.through(compression.deflate(DeflateZlibParams))
+
+  private def decodeBody(coding: ContentCoding, body: EntityBody[IO]): EntityBody[IO] = {
+    val decoded =
+      if (isGzip(coding)) body.through(compression.gunzip()).flatMap(_.content)
+      else body.through(compression.inflate(InflateZlibParams))
+    decoded.handleErrorWith {
+      case e: EntityStreamSizeException => Stream.raiseError[IO](e)
+      case NonFatal(e)                  =>
+        Stream.raiseError[IO](MalformedMessageBodyFailure("The request's encoding is corrupt", Some(e)))
+    }
+  }
 }

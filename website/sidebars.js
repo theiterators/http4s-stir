@@ -28,6 +28,8 @@ const sidebars = {
         'directives/directives-basic',
         'directives/directives-misc',
         'directives/directives-websocket',
+        'directives/directives-cache-condition',
+        'directives/directives-coding',
       ],
     },
     'rejection-handling',
