@@ -10,6 +10,10 @@ Form field directives extract values from URL-encoded form request bodies (`appl
 
 Note: only URL-encoded forms are supported. Multipart form data is not handled by these directives.
 
+Every field directive buffers the form body in memory first (one second timeout, 8 MiB limit, as `toStrictEntity`
+does), so several `formField`/`formFields` directives can read the same request. A body that does not arrive in
+time fails the request with `408 Request Timeout`; a larger one with `413 Payload Too Large`.
+
 ## formField (required String)
 
 Extracts a required form field as a `String`.

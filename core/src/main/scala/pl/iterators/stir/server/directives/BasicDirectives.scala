@@ -2,12 +2,24 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.IO
 import org.http4s.Uri.Path
-import org.http4s.{ EntityBody, Headers, Request, Response, Uri }
-import pl.iterators.stir.server.{ Directive, Directive0, Directive1, Rejection, RequestContext, Route, RouteResult }
+import org.http4s.{ EntityBody, Headers, Message, Request, Response, Status, Uri }
+import pl.iterators.stir.server.{
+  Directive,
+  Directive0,
+  Directive1,
+  EntityStreamSizeException,
+  IllegalRequestException,
+  Rejection,
+  RequestContext,
+  Route,
+  RouteResult
+}
 import pl.iterators.stir.util.Tuple
 import pl.iterators.stir.server.TransformationRejection
-import fs2.Stream
+import fs2.{ Chunk, Stream }
 
+import java.util.concurrent.TimeoutException
+import scala.concurrent.duration.FiniteDuration
 import scala.util.control.NonFatal
 
 trait BasicDirectives {
@@ -239,6 +251,55 @@ trait BasicDirectives {
    * @group basic
    */
   def extractDataBytes: Directive1[Stream[IO, Byte]] = extract(_.request.body)
+
+  /**
+   * Buffers the whole request entity in memory and replaces the request body with the buffered bytes, so the inner
+   * route can consume the entity more than once. Fails the request with `408 Request Timeout` when the entity does
+   * not arrive within `timeout` and with `413 Payload Too Large` when it exceeds `maxBytes`
+   * ([[BasicDirectives.DefaultMaxToStrictBytes]] for the single-argument overload).
+   *
+   * @group basic
+   */
+  def toStrictEntity(timeout: FiniteDuration): Directive0 =
+    toStrictEntity(timeout, BasicDirectives.DefaultMaxToStrictBytes)
+
+  /**
+   * @group basic
+   */
+  def toStrictEntity(timeout: FiniteDuration, maxBytes: Long): Directive0 =
+    Directive { inner => ctx =>
+      BasicDirectives.strictRequest(ctx, timeout, maxBytes).flatMap(strict => inner(())(ctx.copy(request = strict)))
+    }
+
+  /**
+   * Buffers the request entity like [[toStrictEntity]] and additionally extracts the buffered bytes.
+   *
+   * @group basic
+   */
+  def extractStrictEntity(timeout: FiniteDuration): Directive1[Chunk[Byte]] =
+    extractStrictEntity(timeout, BasicDirectives.DefaultMaxToStrictBytes)
+
+  /**
+   * @group basic
+   */
+  def extractStrictEntity(timeout: FiniteDuration, maxBytes: Long): Directive1[Chunk[Byte]] =
+    Directive[Tuple1[Chunk[Byte]]] { inner => ctx =>
+      BasicDirectives.strictRequest(ctx, timeout, maxBytes).flatMap { strict =>
+        strict.body.compile.to(Chunk).flatMap(bytes => inner(Tuple1(bytes))(ctx.copy(request = strict)))
+      }
+    }
 }
 
-object BasicDirectives extends BasicDirectives
+object BasicDirectives extends BasicDirectives {
+
+  /** Upper bound on the entity size buffered by the single-argument `toStrictEntity` / `extractStrictEntity`. */
+  val DefaultMaxToStrictBytes: Long = 8L * 1024 * 1024
+
+  private[stir] def strictRequest(ctx: RequestContext, timeout: FiniteDuration, maxBytes: Long): IO[Request[IO]] =
+    ctx.request.toStrict(Some(maxBytes)).timeout(timeout).adaptError {
+      case _: TimeoutException =>
+        IllegalRequestException(Status.RequestTimeout,
+          s"Request timed out after $timeout while waiting for entity data")
+      case _: Message.EntityStreamException => EntityStreamSizeException(maxBytes, ctx.request.contentLength)
+    }
+}

@@ -2,7 +2,7 @@ package pl.iterators.stir.server
 
 import cats.effect.IO
 import cats.effect.std.Console
-import org.http4s.Status.InternalServerError
+import org.http4s.Status.{ InternalServerError, PayloadTooLarge }
 
 import scala.util.control.NonFatal
 
@@ -46,6 +46,14 @@ object ExceptionHandler {
       Console[IO].errorln(s) *> Console[IO].printStackTrace(t)
     }
     apply(knownToBeSealed = true) {
+      case e @ IllegalRequestException(status, message) => ctx => {
+          log(e, errorMessageTemplate(message, status.toString())) *>
+          ctx.complete((status, message))
+        }
+      case e: EntityStreamSizeException => ctx => {
+          log(e, errorMessageTemplate(e.getMessage, PayloadTooLarge.toString())) *>
+          ctx.complete((PayloadTooLarge, e.getMessage))
+        }
       case NonFatal(e) => ctx => {
           val message = Option(e.getMessage).getOrElse(s"${e.getClass.getName} (No error message supplied)")
           log(e, errorMessageTemplate(message, InternalServerError.toString())) *>

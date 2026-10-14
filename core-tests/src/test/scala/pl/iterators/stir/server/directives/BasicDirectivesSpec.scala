@@ -4,7 +4,9 @@ import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import org.http4s.{ Response, Status }
 import fs2.{ text, Stream }
-import pl.iterators.stir.server.RouteResult
+import pl.iterators.stir.server.{ Route, RouteResult }
+
+import scala.concurrent.duration._
 
 class BasicDirectivesSpec extends RoutingSpec {
   override implicit def runtime: IORuntime = IORuntime.global
@@ -232,4 +234,35 @@ class BasicDirectivesSpec extends RoutingSpec {
 //      }
 //    }
 //  }
+
+  "The `toStrictEntity` directive" should {
+    "let the inner route consume the entity more than once" in {
+      Post("/", "abc") ~!> {
+        toStrictEntity(1.second) {
+          entity(as[String]) { first =>
+            entity(as[String]) { second => complete(first + second) }
+          }
+        }
+      } ~> check { responseAs[String] shouldEqual "abcabc" }
+    }
+    "complete with 413 when the entity exceeds maxBytes" in {
+      Post("/", "0123456789") ~> Route.seal(toStrictEntity(1.second, maxBytes = 5) { completeOk }) ~> check {
+        status shouldEqual Status.PayloadTooLarge
+        responseAs[String] should include("exceeded size limit")
+      }
+    }
+    "complete with 408 when the entity does not arrive in time" in {
+      Post("/", Stream.never[IO]) ~> Route.seal(toStrictEntity(100.millis) { completeOk }) ~> check {
+        status shouldEqual Status.RequestTimeout
+      }
+    }
+  }
+
+  "The `extractStrictEntity` directive" should {
+    "provide the buffered bytes and keep the body readable" in {
+      Post("/", "abc") ~> extractStrictEntity(1.second) { bytes =>
+        entity(as[String]) { body => complete(new String(bytes.toArray, "UTF-8") + body) }
+      } ~> check { responseAs[String] shouldEqual "abcabc" }
+    }
+  }
 }

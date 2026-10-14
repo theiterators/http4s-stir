@@ -61,8 +61,12 @@ val sealed = myExceptionHandler.seal(
 
 The default `ExceptionHandler` (returned by `ExceptionHandler.default()`) handles all non-fatal exceptions by:
 
-1. Logging the error message and stack trace to stderr.
-2. Completing the request with `500 Internal Server Error`.
+1. `IllegalRequestException(status, message)` (raised for example by `toStrictEntity` when the entity does not
+   arrive in time) completes with the given status and message.
+2. `EntityStreamSizeException` (raised by `toStrictEntity` and `withSizeLimit` when the entity is too large)
+   completes with `413 Payload Too Large`.
+3. Any other non-fatal exception is logged with its stack trace to stderr and completes with
+   `500 Internal Server Error`.
 
 ## The `handleExceptions` Directive
 
