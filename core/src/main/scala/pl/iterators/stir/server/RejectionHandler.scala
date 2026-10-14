@@ -177,8 +177,8 @@ object RejectionHandler {
         case MalformedRequestContentRejection(msg, throwable) => {
           val rejectionMessage = "The request content was malformed:\n" + msg
           throwable match {
-//            case _: EntityStreamSizeException => rejectRequestEntityAndComplete((PayloadTooLarge, rejectionMessage))
-            case _ => rejectRequestEntityAndComplete((BadRequest, rejectionMessage))
+            case _: EntityStreamSizeException => rejectRequestEntityAndComplete((PayloadTooLarge, rejectionMessage))
+            case _                            => rejectRequestEntityAndComplete((BadRequest, rejectionMessage))
           }
         }
       }
@@ -198,10 +198,15 @@ object RejectionHandler {
 //        case MissingAttributeRejection(_) =>
 //          rejectRequestEntityAndComplete((InternalServerError, InternalServerError.defaultMessage))
 //      }
-//      .handle {
-//        case InvalidOriginRejection(allowedOrigins) =>
-//          rejectRequestEntityAndComplete((Forbidden, s"Allowed `Origin` header values: ${allowedOrigins.mkString(", ")}"))
-//      }
+      .handle {
+        case InvalidOriginRejection(allowedOrigins) =>
+          rejectRequestEntityAndComplete((Forbidden,
+            s"Allowed `Origin` header values: ${allowedOrigins.mkString(", ")}"))
+      }
+      .handle {
+        case RequestEntityExpectedRejection =>
+          rejectRequestEntityAndComplete((BadRequest, "Request entity expected but not supplied"))
+      }
       .handle {
         case MissingQueryParamRejection(paramName) =>
           rejectRequestEntityAndComplete((NotFound, "Request is missing required query parameter '" + paramName + '\''))

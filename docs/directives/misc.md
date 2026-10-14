@@ -37,6 +37,58 @@ val route: Route = extractClientIP { maybeIp =>
 }
 ```
 
+## extractDirectClientIP
+
+Extracts the remote address of the TCP connection the request arrived on, ignoring `X-Forwarded-For` and
+friends. `None` when the server did not record the connection (the in-memory testkit does not).
+
+```scala
+val route: Route = extractDirectClientIP { maybeIp =>
+  complete(s"Connected from: ${maybeIp.map(_.toString).getOrElse("unknown")}")
+}
+```
+
+## requestEntityEmpty / requestEntityPresent
+
+`requestEntityEmpty` passes only requests without a body and rejects the others with an empty rejection set.
+`requestEntityPresent` does the opposite and rejects with a `RequestEntityExpectedRejection` (400 when sealed).
+A request counts as empty when it declares `Content-Length: 0` or declares neither `Content-Length` nor
+`Transfer-Encoding`; an in-memory test request built from a raw stream carries no `Content-Length`, so build it
+with `withEntity` or add the header.
+
+```scala
+val route: Route = post {
+  requestEntityPresent {
+    entity(as[String]) { body => complete(s"Got $body") }
+  }
+}
+```
+
+## rejectEmptyResponse
+
+Turns a response without a body (`Content-Length: 0` or no entity) into an empty rejection, so the next route
+alternative is tried.
+
+```scala
+val route: Route =
+  rejectEmptyResponse { complete(Status.Ok) } ~
+  complete("fallback")
+```
+
+## withSizeLimit / withoutSizeLimit
+
+`withSizeLimit(maxBytes)` fails the request entity with an `EntityStreamSizeException` when more than
+`maxBytes` are consumed, or immediately when the declared `Content-Length` exceeds the limit. The default
+handlers complete it with `413 Payload Too Large` (through a `MalformedRequestContentRejection` from `entity`,
+or through the exception handler elsewhere). The check runs only when the entity is consumed. Nested limits
+apply the innermost one to the original entity; `withoutSizeLimit` restores the original, unlimited entity.
+
+```scala
+val route: Route = withSizeLimit(1024 * 1024) {
+  entity(as[String]) { body => complete(s"${body.length} chars") }
+}
+```
+
 ## selectPreferredLanguage
 
 Inspects the request's `Accept-Language` header and determines which of the given language alternatives is preferred by the client, following RFC 7231 Section 5.3.5 negotiation logic. If the client has equal preference for multiple alternatives, the argument order serves as a tiebreaker. If no `Accept-Language` header is present, the first language is returned.

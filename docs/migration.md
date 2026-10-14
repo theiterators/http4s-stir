@@ -49,9 +49,6 @@ The following directive categories and individual directives are **not available
 
 - **FormFieldDirectives**: multipart form handling is not supported
 - **FileAndResourceDirectives**: directory listing is not supported
-- `withSizeLimit` / `withoutSizeLimit`
-- `requestEntityEmpty` / `requestEntityPresent`
-- `rejectEmptyResponse`
 - `extractRequestTimeout` / `withRequestTimeoutResponse`
 
 ## Testkit differences

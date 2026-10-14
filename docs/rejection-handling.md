@@ -41,7 +41,9 @@ A `PUT /order` request would be rejected by both the `get` and `post` directives
 | `MissingFormFieldRejection(fieldName)` | A required form field was not found. |
 | `MalformedFormFieldRejection(fieldName, errorMsg, cause)` | A form field could not be interpreted. |
 | `UnsupportedRequestContentTypeRejection(supported, contentType)` | The request's `Content-Type` is not accepted by the entity decoder. Produces 415. |
-| `MalformedRequestContentRejection(message, cause)` | Unmarshalling the request content failed with a non-`IllegalArgumentException` error. |
+| `MalformedRequestContentRejection(message, cause)` | Unmarshalling the request content failed with a non-`IllegalArgumentException` error. Produces 400, or 413 when the cause is an `EntityStreamSizeException`. |
+| `RequestEntityExpectedRejection` | An entity was expected but the request has none. Produced by `requestEntityPresent`. Produces 400. |
+| `InvalidOriginRejection(allowedOrigins)` | The `Origin` header is not in the allowed list. Produced by `checkSameOrigin`. Produces 403. |
 | `ValidationRejection(message, cause)` | An expected value was semantically invalid. Produced by the `validate` directive and by `IllegalArgumentException` from domain constructors. |
 | `AuthenticationFailedRejection(cause, challenge)` | Authentication failed. The `cause` is either `CredentialsMissing` or `CredentialsRejected`. |
 | `AuthorizationFailedRejection` | The authenticated user is not authorized to access the resource. |

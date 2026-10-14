@@ -22,6 +22,8 @@ val route: Route = path("download") {
 }
 ```
 
+Both overloads accept a second `Content-Type` argument that replaces the content type derived from the file name, for example `getFromFile("logo.svgz", `Content-Type`(MediaType.image.`svg+xml`))`.
+
 The directive also accepts a `java.io.File` instance:
 
 ```scala

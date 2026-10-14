@@ -1,10 +1,12 @@
 package pl.iterators.stir.server.directives
 
+import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import com.comcast.ip4s.IpAddress
-import org.http4s.Header
+import com.comcast.ip4s._
+import org.http4s.{ Header, Request, Status, UrlForm }
 import org.http4s.headers.`X-Forwarded-For`
 import org.typelevel.ci.CIString
+import pl.iterators.stir.server._
 
 class MiscDirectivesSpec extends RoutingSpec {
   override implicit def runtime: IORuntime = IORuntime.global
@@ -39,173 +41,118 @@ class MiscDirectivesSpec extends RoutingSpec {
     }
   }
 
-//  "the selectPreferredLanguage directive" should {
-//    "Accept-Language: de, en".test { selectFrom =>
-//      selectFrom("de", "en") shouldEqual "de"
-//      selectFrom("en", "de") shouldEqual "en"
-//    }
-//    "Accept-Language: en, de;q=.5".test { selectFrom =>
-//      selectFrom("de", "en") shouldEqual "en"
-//      selectFrom("en", "de") shouldEqual "en"
-//    }
-//    "Accept-Language: en;q=.5, de".test { selectFrom =>
-//      selectFrom("de", "en") shouldEqual "de"
-//      selectFrom("en", "de") shouldEqual "de"
-//    }
-//    "Accept-Language: en-US, en;q=.7, *;q=.1, de;q=.5".test { selectFrom =>
-//      selectFrom("en", "en-US") shouldEqual "en-US"
-//      selectFrom("de", "en") shouldEqual "en"
-//      selectFrom("de", "hu") shouldEqual "de"
-//      selectFrom("de-DE", "hu") shouldEqual "de-DE"
-//      selectFrom("hu", "es") shouldEqual "hu"
-//      selectFrom("es", "hu") shouldEqual "es"
-//    }
-//    "Accept-Language: en, *;q=.5, de;q=0".test { selectFrom =>
-//      selectFrom("es", "de") shouldEqual "es"
-//      selectFrom("de", "es") shouldEqual "es"
-//      selectFrom("es", "en") shouldEqual "en"
-//    }
-//    "Accept-Language: en, *;q=0".test { selectFrom =>
-//      selectFrom("es", "de") shouldEqual "es"
-//      selectFrom("de", "es") shouldEqual "de"
-//      selectFrom("es", "en") shouldEqual "en"
-//    }
-//  }
-//
-//  "the withSizeLimit directive" should {
-//    "not apply if entity is not consumed" in {
-//      val route = withSizeLimit(500) { completeOk }
-//
-//      Post("/abc", entityOfSize(500)) ~> route ~> check {
-//        status shouldEqual StatusCodes.OK
-//      }
-//
-//      Post("/abc", entityOfSize(501)) ~> route ~> check {
-//        status shouldEqual StatusCodes.OK
-//      }
-//    }
-//
-//    "apply if entity is consumed" in {
-//      val route = withSizeLimit(500) {
-//        entity(as[String]) { _ =>
-//          completeOk
-//        }
-//      }
-//
-//      Post("/abc", entityOfSize(500)) ~> route ~> check {
-//        status shouldEqual StatusCodes.OK
-//      }
-//
-//      Post("/abc", entityOfSize(501)) ~> Route.seal(route) ~> check {
-//        status shouldEqual StatusCodes.PayloadTooLarge
-//        entityAs[String] should include("exceeded size limit")
-//      }
-//    }
-//
-//    "apply if form data is fully consumed into a map" in {
-//      val route =
-//        withSizeLimit(64) {
-//          formFieldMap { _ =>
-//            completeOk
-//          }
-//        }
-//
-//      Post("/abc", formDataOfSize(32)) ~> route ~> check {
-//        status shouldEqual StatusCodes.OK
-//      }
-//
-//      Post("/abc", formDataOfSize(128)) ~> Route.seal(route) ~> check {
-//        status shouldEqual StatusCodes.PayloadTooLarge
-//        responseAs[String] shouldEqual "The request content was malformed:\n" +
-//          "EntityStreamSizeException: incoming entity size (134) " +
-//          "exceeded size limit (64 bytes)! " +
-//          "This may have been a parser limit (set via `pekko.http.[server|client].parsing.max-content-length`), " +
-//          "a decoder limit (set via `pekko.http.routing.decode-max-size`), " +
-//          "or a custom limit set with `withSizeLimit`."
-//      }
-//    }
-//
-//    "properly handle nested directives by applying innermost `withSizeLimit` directive" in {
-//      val route =
-//        withSizeLimit(500) {
-//          withSizeLimit(800) {
-//            entity(as[String]) { _ =>
-//              completeOk
-//            }
-//          }
-//        }
-//
-//      Post("/abc", entityOfSize(800)) ~> route ~> check {
-//        status shouldEqual StatusCodes.OK
-//      }
-//
-//      Post("/abc", entityOfSize(801)) ~> Route.seal(route) ~> check {
-//        status shouldEqual StatusCodes.PayloadTooLarge
-//        entityAs[String] should include("exceeded size limit")
-//      }
-//
-//      val route2 =
-//        withSizeLimit(500) {
-//          withSizeLimit(400) {
-//            entity(as[String]) { _ =>
-//              completeOk
-//            }
-//          }
-//        }
-//
-//      Post("/abc", entityOfSize(400)) ~> route2 ~> check {
-//        status shouldEqual StatusCodes.OK
-//      }
-//
-//      Post("/abc", entityOfSize(401)) ~> Route.seal(route2) ~> check {
-//        status shouldEqual StatusCodes.PayloadTooLarge
-//        entityAs[String] should include("exceeded size limit")
-//      }
-//    }
-//  }
-//
-//  "the withoutSizeLimit directive" should {
-//    "skip request entity size verification" in {
-//      val route =
-//        withSizeLimit(500) {
-//          withoutSizeLimit {
-//            entity(as[String]) { _ =>
-//              completeOk
-//            }
-//          }
-//        }
-//
-//      Post("/abc", entityOfSize(501)) ~> route ~> check {
-//        status shouldEqual StatusCodes.OK
-//      }
-//    }
-//  }
-//
-//  implicit class AddStringToIn(acceptLanguageHeaderString: String) {
-//    def test(body: VarArgsFunction1[String, String] => Unit): Unit =
-//      s"properly handle `$acceptLanguageHeaderString`" in {
-//        val Array(name, value) = acceptLanguageHeaderString.split(':')
-//        val acceptLanguageHeader = HttpHeader.parse(name.trim, value) match {
-//          case HttpHeader.ParsingResult.Ok(h: `Accept-Language`, Nil) => h
-//          case result                                                 => fail(result.toString)
-//        }
-//        body { availableLangs =>
-//          val selected = Promise[String]()
-//          val first = Language(availableLangs.head)
-//          val more = availableLangs.tail.map(Language(_))
-//          Get() ~> addHeader(acceptLanguageHeader) ~> {
-//            selectPreferredLanguage(first, more: _*) { lang =>
-//              complete(lang.toString)
-//            }
-//          } ~> check(selected.complete(Try(responseAs[String])))
-//          Await.result(selected.future, 1.second.dilated)
-//        }
-//      }
-//  }
-
   def remoteAddress(ip: String) = IpAddress.fromString(ip)
 
-//  private def entityOfSize(size: Int) = HttpEntity(ContentTypes.`text/plain(UTF-8)`, "0" * size)
+  def withConnection(ip: String): Request[IO] => Request[IO] = request =>
+    request.withAttributes(request.attributes.insert(Request.Keys.ConnectionInfo,
+      Request.Connection(SocketAddress(ipv4"127.0.0.1", port"8080"),
+        SocketAddress(IpAddress.fromString(ip).get, port"40000"), secure = false)))
 
-//  private def formDataOfSize(size: Int) = FormData(Map("field" -> ("0" * size)))
+  private def entityOfSize(size: Int) = "0" * size
+  private def formDataOfSize(size: Int) = UrlForm("field" -> ("0" * size))
+
+  "the extractDirectClientIP directive" should {
+    "extract the remote address of the connection and ignore headers" in {
+      Get() ~> addHeader(`X-Forwarded-For`(remoteAddress("2.3.4.5"))) ~> withConnection("1.2.3.4") ~> {
+        extractDirectClientIP { echoComplete }
+      } ~> check { responseAs[String] shouldEqual "Some(1.2.3.4)" }
+    }
+    "extract None when the connection is unknown" in {
+      Get() ~> addHeader(`X-Forwarded-For`(remoteAddress("2.3.4.5"))) ~> {
+        extractDirectClientIP { echoComplete }
+      } ~> check { responseAs[String] shouldEqual "None" }
+    }
+    "extract the loopback address over a real server" in {
+      Get() ~!> extractDirectClientIP { echoComplete } ~> check { responseAs[String] shouldEqual "Some(127.0.0.1)" }
+    }
+  }
+
+  "the requestEntityEmpty and requestEntityPresent directives" should {
+    "treat a request without body as empty" in {
+      Get() ~> requestEntityEmpty { completeOk }   ~> check { status shouldEqual Status.Ok }
+      Get() ~> requestEntityPresent { completeOk } ~> check { rejection shouldEqual RequestEntityExpectedRejection }
+    }
+    "treat a request with Content-Length: 0 as empty" in {
+      Post("/", "") ~> requestEntityEmpty { completeOk } ~> check { status shouldEqual Status.Ok }
+    }
+    "treat a request with a body as present" in {
+      Post("/", "abc") ~> requestEntityPresent { completeOk } ~> check { status shouldEqual Status.Ok }
+      Post("/", "abc") ~> requestEntityEmpty { completeOk }   ~> check { rejections shouldEqual Nil }
+    }
+    "treat a GET without body as empty over a real server" in {
+      Get() ~!> (requestEntityEmpty { complete("empty") } ~ complete("present")) ~> check {
+        responseAs[String] shouldEqual "empty"
+      }
+    }
+    "complete with 400 when an entity is expected but missing" in {
+      Get() ~> Route.seal(requestEntityPresent { completeOk }) ~> check {
+        status shouldEqual Status.BadRequest
+        responseAs[String] shouldEqual "Request entity expected but not supplied"
+      }
+    }
+  }
+
+  "the rejectEmptyResponse directive" should {
+    "turn a response without body into a rejection" in {
+      Get() ~> (rejectEmptyResponse { complete(Status.Ok) } ~ complete("fallback")) ~> check {
+        responseAs[String] shouldEqual "fallback"
+      }
+    }
+    "turn a response with an empty string body into a rejection" in {
+      Get() ~> (rejectEmptyResponse { complete("") } ~ complete("fallback")) ~> check {
+        responseAs[String] shouldEqual "fallback"
+      }
+    }
+    "leave a response with a body alone" in {
+      Get() ~> (rejectEmptyResponse { complete("body") } ~ complete("fallback")) ~> check {
+        responseAs[String] shouldEqual "body"
+      }
+    }
+  }
+
+  "the withSizeLimit directive" should {
+    "not apply if entity is not consumed" in {
+      val route = withSizeLimit(500) { completeOk }
+      Post("/abc", entityOfSize(500)) ~> route ~> check { status shouldEqual Status.Ok }
+      Post("/abc", entityOfSize(501)) ~> route ~> check { status shouldEqual Status.Ok }
+    }
+    "apply if entity is consumed" in {
+      val route = withSizeLimit(500) { entity(as[String]) { _ => completeOk } }
+      Post("/abc", entityOfSize(500)) ~> route             ~> check { status shouldEqual Status.Ok }
+      Post("/abc", entityOfSize(501)) ~> Route.seal(route) ~> check {
+        status shouldEqual Status.PayloadTooLarge
+        responseAs[String] should include("exceeded size limit")
+      }
+    }
+    "apply to a chunked body consumed over a real server" in {
+      val route = withSizeLimit(500) { entity(as[String]) { _ => completeOk } }
+      Post("/abc", entityOfSize(501)) ~> removeHeader("Content-Length") ~!> route ~> check {
+        status shouldEqual Status.PayloadTooLarge
+      }
+    }
+    "apply if form data is fully consumed into a map" in {
+      val route = withSizeLimit(64) { formFieldMap { _ => completeOk } }
+      Post("/abc", formDataOfSize(32))  ~> route             ~> check { status shouldEqual Status.Ok }
+      Post("/abc", formDataOfSize(128)) ~> Route.seal(route) ~> check {
+        status shouldEqual Status.PayloadTooLarge
+        responseAs[String] should include("exceeded size limit")
+      }
+    }
+    "properly handle nested directives by applying innermost `withSizeLimit` directive" in {
+      val route = withSizeLimit(500) { withSizeLimit(800) { entity(as[String]) { _ => completeOk } } }
+      Post("/abc", entityOfSize(800)) ~> route             ~> check { status shouldEqual Status.Ok }
+      Post("/abc", entityOfSize(801)) ~> Route.seal(route) ~> check { status shouldEqual Status.PayloadTooLarge }
+
+      val route2 = withSizeLimit(500) { withSizeLimit(400) { entity(as[String]) { _ => completeOk } } }
+      Post("/abc", entityOfSize(400)) ~> route2             ~> check { status shouldEqual Status.Ok }
+      Post("/abc", entityOfSize(401)) ~> Route.seal(route2) ~> check { status shouldEqual Status.PayloadTooLarge }
+    }
+  }
+
+  "the withoutSizeLimit directive" should {
+    "skip request entity size verification" in {
+      val route = withSizeLimit(500) { withoutSizeLimit { entity(as[String]) { _ => completeOk } } }
+      Post("/abc", entityOfSize(501)) ~> route ~> check { status shouldEqual Status.Ok }
+    }
+  }
 }

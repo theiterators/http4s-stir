@@ -1,11 +1,15 @@
 package pl.iterators.stir.server.directives
 
+import cats.effect.{ IO, SyncIO }
 import com.comcast.ip4s.IpAddress
-import org.http4s.LanguageTag
+import fs2.{ Pull, Stream }
+import org.http4s.{ EmptyBody, EntityBody, LanguageTag, Request, Response }
 import org.http4s.headers._
+import org.typelevel.vault.Key
 import pl.iterators.stir.server._
 
 trait MiscDirectives {
+  import BasicDirectives._
   import RouteDirectives._
 
   /**
@@ -26,29 +30,38 @@ trait MiscDirectives {
    */
   def extractClientIP: Directive1[Option[IpAddress]] = MiscDirectives._extractClientIP
 
-//  /**
-//   * Rejects if the request entity is non-empty.
-//   *
-//   * @group misc
-//   */
-//  def requestEntityEmpty: Directive0 = MiscDirectives._requestEntityEmpty
-//
-//  /**
-//   * Rejects with a [[RequestEntityExpectedRejection]] if the request entity is empty.
-//   * Non-empty requests are passed on unchanged to the inner route.
-//   *
-//   * @group misc
-//   */
-//  def requestEntityPresent: Directive0 = MiscDirectives._requestEntityPresent
-//
-//  /**
-//   * Converts responses with an empty entity into (empty) rejections.
-//   * This way you can, for example, have the marshalling of a ''None'' option
-//   * be treated as if the request could not be matched.
-//   *
-//   * @group misc
-//   */
-//  def rejectEmptyResponse: Directive0 = MiscDirectives._rejectEmptyResponse
+  /**
+   * Extracts the client's IP from the TCP connection the request was received from, ignoring any headers.
+   * `None` when the server did not record the connection (for example in the in-memory testkit).
+   *
+   * @group misc
+   */
+  def extractDirectClientIP: Directive1[Option[IpAddress]] = MiscDirectives._extractDirectClientIP
+
+  /**
+   * Rejects if the request entity is non-empty. A request is empty when it declares `Content-Length: 0` or
+   * declares neither `Content-Length` nor `Transfer-Encoding`.
+   *
+   * @group misc
+   */
+  def requestEntityEmpty: Directive0 = MiscDirectives._requestEntityEmpty
+
+  /**
+   * Rejects with a [[RequestEntityExpectedRejection]] if the request entity is empty.
+   * Non-empty requests are passed on unchanged to the inner route.
+   *
+   * @group misc
+   */
+  def requestEntityPresent: Directive0 = MiscDirectives._requestEntityPresent
+
+  /**
+   * Converts responses with an empty entity into (empty) rejections.
+   * This way you can, for example, have the marshalling of an empty result be treated as if the request could not
+   * be matched.
+   *
+   * @group misc
+   */
+  def rejectEmptyResponse: Directive0 = MiscDirectives._rejectEmptyResponse
 
   /**
    * Inspects the request's `Accept-Language` header and determines,
@@ -63,7 +76,6 @@ trait MiscDirectives {
    */
   def selectPreferredLanguage(first: LanguageTag, more: LanguageTag*): Directive1[LanguageTag] = {
     import HeaderDirectives._
-    import BasicDirectives._
     optionalHeaderValueByType[`Accept-Language`].flatMap {
       case Some(acceptLanguage) =>
         val availableLanguages = first +: more
@@ -74,35 +86,44 @@ trait MiscDirectives {
     }
   }
 
-//  /**
-//   * Fails the stream with [[akka.http.scaladsl.model.EntityStreamSizeException]] if its request entity size exceeds
-//   * given limit. Limit given as parameter overrides limit configured with `akka.http.parsing.max-content-length`.
-//   *
-//   * Beware that request entity size check is executed when entity is consumed.
-//   *
-//   * @group misc
-//   */
-//  def withSizeLimit(maxBytes: Long): Directive0 =
-//    mapRequestContext(_.mapRequest(_.mapEntity(_.withSizeLimit(maxBytes))))
-//
-//  /**
-//   *
-//   * Disables the size limit (configured by `akka.http.parsing.max-content-length` by default) checking on the incoming
-//   * [[HttpRequest]] entity.
-//   * Can be useful when handling arbitrarily large data uploads in specific parts of your routes.
-//   *
-//   * @note  Usage of `withoutSizeLimit` is not recommended as it turns off the too large payload protection. Therefore,
-//   *        we highly encourage using `withSizeLimit` instead, providing it with a value high enough to successfully
-//   *        handle the route in need of big entities.
-//   *
-//   * @group misc
-//   */
-//  def withoutSizeLimit: Directive0 = MiscDirectives._withoutSizeLimit
+  /**
+   * Fails the request entity stream with an [[EntityStreamSizeException]] (completed as `413 Payload Too Large`
+   * by the default handlers) if its size exceeds the given limit. A request whose `Content-Length` already exceeds
+   * the limit fails as soon as the entity is consumed. Nested `withSizeLimit` directives apply the innermost limit
+   * to the original entity.
+   *
+   * Beware that the request entity size check is executed when the entity is consumed.
+   *
+   * @group misc
+   */
+  def withSizeLimit(maxBytes: Long): Directive0 = mapRequest { request =>
+    val original = request.attributes.lookup(MiscDirectives.OriginalBodyKey).getOrElse(request.body)
+    val limited = request.contentLength match {
+      case Some(length) if length > maxBytes =>
+        Stream.raiseError[IO](EntityStreamSizeException(maxBytes, Some(length)))
+      case _ => MiscDirectives.limitBytes(original, maxBytes)
+    }
+    request.withAttributes(request.attributes.insert(MiscDirectives.OriginalBodyKey, original)).withBodyStream(limited)
+  }
+
+  /**
+   * Disables the size limit set by an enclosing `withSizeLimit` directive on the incoming request entity.
+   * Can be useful when handling arbitrarily large data uploads in specific parts of your routes.
+   *
+   * @note  Usage of `withoutSizeLimit` is not recommended as it turns off the too large payload protection.
+   *        Prefer `withSizeLimit` with a value high enough for the route in need of big entities.
+   *
+   * @group misc
+   */
+  def withoutSizeLimit: Directive0 = MiscDirectives._withoutSizeLimit
 }
 
 object MiscDirectives extends MiscDirectives {
   import BasicDirectives._
   import HeaderDirectives._
+  import RouteDirectives._
+
+  private[stir] val OriginalBodyKey: Key[EntityBody[IO]] = Key.newKey[SyncIO, EntityBody[IO]].unsafeRunSync()
 
   private val _extractClientIP: Directive1[Option[IpAddress]] =
     optionalHeaderValueByType[`X-Forwarded-For`].flatMap { xForwardedFor =>
@@ -118,18 +139,39 @@ object MiscDirectives extends MiscDirectives {
       }
     }
 
-//  private val _requestEntityEmpty: Directive0 =
-//    extract(_.request.entity.isKnownEmpty).flatMap(if (_) pass else reject)
-//
-//  private val _requestEntityPresent: Directive0 =
-//    extract(_.request.entity.isKnownEmpty).flatMap(if (_) reject(RequestEntityExpectedRejection) else pass)
-//
-//  private val _rejectEmptyResponse: Directive0 =
-//    mapRouteResult {
-//      case Complete(response) if response.entity.isKnownEmpty => Rejected(Nil)
-//      case x => x
-//    }
-//
-//  private val _withoutSizeLimit: Directive0 =
-//    mapRequestContext(_.mapRequest(_.mapEntity(_.withoutSizeLimit)))
+  private val _extractDirectClientIP: Directive1[Option[IpAddress]] = extract(_.request.remote.map(_.host))
+
+  private val _requestEntityEmpty: Directive0 =
+    extract(ctx => isKnownEmpty(ctx.request)).flatMap(if (_) pass else reject)
+
+  private val _requestEntityPresent: Directive0 =
+    extract(ctx => isKnownEmpty(ctx.request)).flatMap(if (_) reject(RequestEntityExpectedRejection) else pass)
+
+  private val _rejectEmptyResponse: Directive0 =
+    mapRouteResultPF {
+      case RouteResult.Complete(response) if isKnownEmpty(response) => RouteResult.Rejected(Nil)
+    }
+
+  private val _withoutSizeLimit: Directive0 =
+    mapRequest(request => request.attributes.lookup(OriginalBodyKey).fold(request)(request.withBodyStream))
+
+  /** A request is known to be empty when it declares `Content-Length: 0` or has neither a length nor chunking. */
+  private[stir] def isKnownEmpty(request: Request[IO]): Boolean =
+    request.contentLength.contains(0L) || (request.contentLength.isEmpty && !request.isChunked)
+
+  /** A response is known to be empty when it declares `Content-Length: 0` or still carries the empty body. */
+  private[stir] def isKnownEmpty(response: Response[IO]): Boolean =
+    response.contentLength.contains(0L) || (response.body eq EmptyBody)
+
+  private[stir] def limitBytes(body: EntityBody[IO], maxBytes: Long): EntityBody[IO] = {
+    def go(stream: Stream[IO, Byte], seen: Long): Pull[IO, Byte, Unit] =
+      stream.pull.uncons.flatMap {
+        case None                => Pull.done
+        case Some((chunk, rest)) =>
+          val total = seen + chunk.size
+          if (total > maxBytes) Pull.raiseError[IO](EntityStreamSizeException(maxBytes, None))
+          else Pull.output(chunk) >> go(rest, total)
+      }
+    go(body, 0L).stream
+  }
 }

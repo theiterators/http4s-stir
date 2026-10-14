@@ -2,7 +2,7 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.unsafe.IORuntime
 import org.http4s.{ HttpDate, MediaType, Uri }
-import org.http4s.headers.`Last-Modified`
+import org.http4s.headers.{ `Content-Type`, `Last-Modified` }
 import org.scalatest.{ Inside, Inspectors }
 import pl.iterators.stir.impl.util._
 
@@ -98,6 +98,19 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
 //      } finally file.delete
 //    }
 //
+    "use the given content type instead of the one derived from the file name" in {
+      val file = File.createTempFile("stirHttpTest", ".svgz")
+      try {
+        writeAllText("<svg/>", file)
+        Get() ~> getFromFile(file, `Content-Type`(MediaType.application.xml)) ~> check {
+          mediaType shouldEqual MediaType.application.xml
+          responseAs[String] shouldEqual "<svg/>"
+        }
+      } finally {
+        file.delete
+        ()
+      }
+    }
     "properly handle zero-byte files" in {
       val file = File.createTempFile("pekkoHttpTest", null)
       try {
