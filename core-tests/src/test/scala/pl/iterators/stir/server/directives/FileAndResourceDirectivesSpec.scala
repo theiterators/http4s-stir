@@ -1,7 +1,7 @@
 package pl.iterators.stir.server.directives
 
 import cats.effect.unsafe.IORuntime
-import org.http4s.{ HttpDate, MediaType, Status, Uri }
+import org.http4s.{ HttpDate, MediaType, Uri }
 import org.http4s.headers.`Last-Modified`
 import org.scalatest.{ Inside, Inspectors }
 import pl.iterators.stir.impl.util._
@@ -227,16 +227,21 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
       Put() ~> getFromResource("some") ~> check { handled shouldEqual false }
     }
     "reject requests to non-existing resources" in {
-      Get() ~> getFromResource("nonExistingResource") ~> check { status shouldEqual Status.NotFound }
+      Get() ~> getFromResource("nonExistingResource") ~> check { handled shouldEqual false }
     }
     "reject requests to directory resources" in {
-      Get() ~> getFromResource("someDir") ~> check { status shouldEqual Status.NotFound }
+      Get() ~> getFromResource("someDir") ~> check { handled shouldEqual false }
     }
     "reject requests to directory resources with trailing slash" in {
       Get() ~> getFromResource("someDir/") ~> check { handled shouldEqual false }
     }
+    "let the next alternative handle the request when the resource is missing" in {
+      Get() ~> (getFromResource("nonExistingResource") ~ complete("fallback")) ~> check {
+        responseAs[String] shouldEqual "fallback"
+      }
+    }
     "reject requests to directory resources from an archive " in {
-      Get() ~> getFromResource("com/typesafe/config") ~> check { status shouldEqual Status.NotFound }
+      Get() ~> getFromResource("com/typesafe/config") ~> check { handled shouldEqual false }
     }
     "reject requests to directory resources from an archive with trailing slash" in {
       Get() ~> getFromResource("com/typesafe/config/") ~> check { handled shouldEqual false }
@@ -291,7 +296,7 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
 
   "getFromResourceDirectory" should {
     "reject requests to non-existing resources" in {
-      Get("not/found") ~> getFromResourceDirectory("subDirectory") ~> check { status shouldEqual Status.NotFound }
+      Get("not/found") ~> getFromResourceDirectory("subDirectory") ~> check { handled shouldEqual false }
     }
     val verify = check {
       mediaType shouldEqual MediaType.parse("application/pdf").getOrElse(fail("Media type could not be parsed"))
@@ -320,10 +325,10 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
       Get() ~> getFromResourceDirectory("subDirectory/") ~> check { handled shouldEqual false }
     }
     "reject requests to sub directory resources" in {
-      Get("sub") ~> getFromResourceDirectory("someDir") ~> check { status shouldEqual Status.NotFound }
+      Get("sub") ~> getFromResourceDirectory("someDir") ~> check { handled shouldEqual false }
     }
     "reject requests to sub directory resources with trailing slash" in {
-      Get("sub/") ~> getFromResourceDirectory("someDir") ~> check { status shouldEqual Status.NotFound }
+      Get("sub/") ~> getFromResourceDirectory("someDir") ~> check { handled shouldEqual false }
     }
     "reject requests to directory resources from an archive" in {
       Get() ~> getFromResourceDirectory("com/typesafe/config") ~> check { handled shouldEqual false }
