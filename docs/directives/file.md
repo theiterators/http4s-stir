@@ -109,12 +109,26 @@ File upload directives process multipart form data. They use `FileInfo` to carry
 
 ### fileUpload
 
-Extracts a single multipart file part as a tuple of `FileInfo` and `Stream[IO, Byte]`. The request is rejected with `MissingFormFieldRejection` if no part with the given field name exists, or if the matched part lacks a `filename`. A part without `Content-Type` is reported as `application/octet-stream`. If multiple parts share the same name, only the first is used. The whole multipart body is buffered in memory, because the part's stream outlives the decoder; prefer `storeUploadedFile` or `fileUploadAll` for large uploads.
+Extracts a single multipart file part as a tuple of `FileInfo` and `Stream[IO, Byte]`. The request is rejected with `MissingFormFieldRejection` if no part with the given field name exists, or if the matched part lacks a `filename`. A part without `Content-Type` is reported as `application/octet-stream`. If multiple parts share the same name, only the first is used. The whole multipart body is buffered in memory, because the part's stream outlives the decoder; prefer `fileUploadSpooled`, `storeUploadedFile` or `fileUploadAll` for large uploads.
 
 ```scala
 val route: Route = (post & path("upload")) {
   fileUpload("document") { case (metadata, byteStream) =>
     complete(s"Received file: ${metadata.fileName}")
+  }
+}
+```
+
+### fileUploadSpooled
+
+Like `fileUpload`, but decodes the body with http4s' mixed multipart decoder, which spools parts above 50 MiB to a temporary file, and keeps that decoder open while the inner route runs. Consume the part's stream inside the inner route (write it to disk, fold it, forward it and await the result); a response whose body still reads from the stream would find the spooled file gone.
+
+```scala
+val route: Route = (post & path("upload")) {
+  fileUploadSpooled("document") { case (metadata, byteStream) =>
+    onSuccess(byteStream.through(fs2.io.file.Files[IO].writeAll(fs2.io.file.Path(s"/tmp/${metadata.fileName}"))).compile.drain) {
+      complete(s"Stored ${metadata.fileName}")
+    }
   }
 }
 ```

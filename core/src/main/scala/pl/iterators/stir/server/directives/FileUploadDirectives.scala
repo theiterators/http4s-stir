@@ -64,6 +64,29 @@ trait FileUploadDirectives {
     }
 
   /**
+   * Like [[fileUpload]], but decodes the multipart body with http4s' mixed decoder, which spools parts above
+   * 50 MiB to a temporary file, and keeps that decoder open while the inner route runs. The part's stream must
+   * therefore be consumed inside the inner route (written to disk, folded, forwarded and awaited); a response
+   * whose body still reads from it would find the spooled file gone. If there is no such field the request is
+   * rejected; if several parts share the name the first one is used.
+   *
+   * @group fileupload
+   */
+  def fileUploadSpooled(fieldName: String): Directive1[(FileInfo, Stream[IO, Byte])] =
+    Directive[Tuple1[(FileInfo, Stream[IO, Byte])]] { inner => ctx =>
+      EntityDecoder.mixedMultipartResource[IO]().use { decoder =>
+        MarshallingDirectives.decodeEntity(ctx.request, decoder).flatMap {
+          case Left(rejection) => IO.pure(RouteResult.Rejected(rejection :: Nil))
+          case Right(formData) =>
+            formData.parts.find(part => part.name.contains(fieldName) && part.filename.isDefined) match {
+              case Some(part) => inner(Tuple1((fileInfo(part), part.body)))(ctx)
+              case None       => IO.pure(RouteResult.Rejected(MissingFormFieldRejection(fieldName) :: Nil))
+            }
+        }
+      }
+    } & cancelRejections(classOf[UnsupportedRequestContentTypeRejection])
+
+  /**
    * Collects each body part that is a multipart file with the given field name as a tuple containing metadata and
    * a stream of the file contents. Files are stored in temporary files on disk so in-memory buffers don't overflow;
    * each temporary file is deleted once its stream is consumed, or on exit if it is not.
