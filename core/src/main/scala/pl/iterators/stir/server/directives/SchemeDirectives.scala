@@ -28,5 +28,10 @@ trait SchemeDirectives {
 object SchemeDirectives extends SchemeDirectives {
   import BasicDirectives._
 
-  private val _extractScheme: Directive1[String] = extract(_.request.uri.scheme.fold("")(_.value))
+  private val _extractScheme: Directive1[String] = extract { ctx =>
+    val request = ctx.request
+    request.isSecure.map(secure => if (secure) "https" else "http")
+      .orElse(request.uri.scheme.map(_.value))
+      .getOrElse("")
+  }
 }

@@ -56,7 +56,10 @@ val route: Route = host("""(\w+)\.example\.com""".r) { subdomain =>
 
 ### extractScheme
 
-Extracts the URI scheme from the request as a `String`.
+Extracts the URI scheme of the request as a `String`. On a server the request line usually carries no scheme, so
+the directive first looks at the connection the request arrived on (`https` for a TLS connection, `http`
+otherwise) and only then at the request line; it yields an empty string when neither is known. Behind a proxy that
+terminates TLS the connection is plain `http`; read `X-Forwarded-Proto` yourself in that case.
 
 ```scala
 val route: Route = extractScheme { scheme =>
