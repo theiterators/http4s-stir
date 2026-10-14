@@ -4,7 +4,7 @@ import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import org.http4s.{ Response, Status }
 import fs2.{ text, Stream }
-import pl.iterators.stir.server.{ Route, RouteResult }
+import pl.iterators.stir.server.{ ExceptionHandler, Route, RouteResult }
 
 import scala.concurrent.duration._
 
@@ -249,6 +249,16 @@ class BasicDirectivesSpec extends RoutingSpec {
       Post("/", "0123456789") ~> Route.seal(toStrictEntity(1.second, maxBytes = 5) { completeOk }) ~> check {
         status shouldEqual Status.PayloadTooLarge
         responseAs[String] should include("exceeded size limit")
+      }
+    }
+    "log the size exception as a message without a stack trace" in {
+      val lines = scala.collection.mutable.ListBuffer.empty[String]
+      val handler = ExceptionHandler.default(Some((_, message) => IO(lines += message).void))
+      Post("/", "0123456789") ~> handleExceptions(handler)(toStrictEntity(1.second, maxBytes = 5) { completeOk }) ~>
+      check {
+        status shouldEqual Status.PayloadTooLarge
+        lines.toList should have size 1
+        lines.head should include("413 Payload Too Large")
       }
     }
     "complete with 408 when the entity does not arrive in time" in {

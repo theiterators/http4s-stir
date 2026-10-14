@@ -40,8 +40,12 @@ trait FormFieldDirectives extends FormFieldDirectivesInstances with ToNameRecept
 }
 
 object FormFieldDirectives {
+
+  /** How long a field directive waits for the form body before failing the request with 408 (10 s, as Pekko). */
+  private[stir] val StrictFormTimeout: FiniteDuration = 10.seconds
+
   private val _formFieldSeq: Directive1[Seq[(String, String)]] = {
-    entity(formDecoder).map { form =>
+    BasicDirectives.toStrictEntity(StrictFormTimeout).tflatMap(_ => entity(formDecoder)).map { form =>
       form.values.toSeq.flatMap { case (k, vs) => vs.map(v => k -> v).toList }
     }
   }
@@ -65,9 +69,6 @@ object FormFieldDirectives {
   }
 
   private def toMap(seq: Seq[(String, String)]): Map[String, String] = immutable.TreeMap(seq: _*)
-
-  /** How long a field directive waits for the form body before failing the request with 408 (10 s, as Pekko). */
-  private[stir] val StrictFormTimeout: FiniteDuration = 10.seconds
 
   /**
    * Decodes a form from either an `application/x-www-form-urlencoded` body or the text parts of a

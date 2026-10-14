@@ -76,7 +76,8 @@ val route: Route = path("ws") {
 
 In the in-memory testkit (`~>`) an accepted upgrade completes with `101 Switching Protocols` and, for the protocol
 variants, the selected `Sec-WebSocket-Protocol` header; the real handshake and the frames are handled by the
-server and are not exercised. Send `Connection: Upgrade`, `Upgrade: websocket`, `Sec-WebSocket-Version: 13` and a
+server and are not exercised. That placeholder response is what http4s hands to the server as the carrier of the
+WebSocket context; ember replaces it with its own handshake. The directives are verified with ember only. Send `Connection: Upgrade`, `Upgrade: websocket`, `Sec-WebSocket-Version: 13` and a
 `Sec-WebSocket-Key` header to simulate a client.
 
 ## Integration with http4s

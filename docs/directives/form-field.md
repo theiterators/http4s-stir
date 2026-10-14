@@ -8,8 +8,9 @@ sidebar_position: 9
 
 Form field directives extract values from form request bodies, either `application/x-www-form-urlencoded` or the text parts of `multipart/form-data` (parts with a `filename` are files and belong to the [upload directives](file.md)). The API mirrors the [parameter directives](parameter.md), with the same support for required, optional, typed, default-valued, and repeated fields. If a required field is missing, the request is rejected with a `MissingFormFieldRejection`. If a field value cannot be converted to the target type, a `MalformedFormFieldRejection` is produced.
 
-Every field directive buffers the form body in memory first (ten seconds timeout and 8 MiB limit, through
-`toStrictEntity`), so several `formField`/`formFields` directives can read the same request. A body that does not arrive in
+Every form directive (fields as well as `formFieldMap`, `formFieldSeq` and `formFieldMultiMap`) buffers the form
+body in memory first (ten seconds timeout and 8 MiB limit, through `toStrictEntity`), so several of them can
+read the same request. A body that does not arrive in
 time fails the request with `408 Request Timeout`; a larger one with `413 Payload Too Large`.
 A body whose `Content-Type` is neither `application/x-www-form-urlencoded` nor `multipart/form-data` is rejected
 with an `UnsupportedRequestContentTypeRejection`; a body without `Content-Type` is parsed as a URL-encoded form.

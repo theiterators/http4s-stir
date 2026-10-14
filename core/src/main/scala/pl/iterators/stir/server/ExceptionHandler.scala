@@ -45,13 +45,15 @@ object ExceptionHandler {
     val log = logAction.getOrElse { (t: Throwable, s: String) =>
       Console[IO].errorln(s) *> Console[IO].printStackTrace(t)
     }
+    // expected client errors: the message says it all, a stack trace would only be noise
+    val warn = logAction.getOrElse { (_: Throwable, s: String) => Console[IO].errorln(s) }
     apply(knownToBeSealed = true) {
       case e @ IllegalRequestException(status, message) => ctx => {
-          log(e, errorMessageTemplate(message, status.toString())) *>
+          warn(e, errorMessageTemplate(message, status.toString())) *>
           ctx.complete((status, message))
         }
       case e: EntityStreamSizeException => ctx => {
-          log(e, errorMessageTemplate(e.getMessage, PayloadTooLarge.toString())) *>
+          warn(e, errorMessageTemplate(e.getMessage, PayloadTooLarge.toString())) *>
           ctx.complete((PayloadTooLarge, e.getMessage))
         }
       case NonFatal(e) => ctx => {

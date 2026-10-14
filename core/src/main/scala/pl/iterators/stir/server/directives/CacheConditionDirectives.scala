@@ -47,7 +47,7 @@ trait CacheConditionDirectives {
       mapInnerRoute { route =>
         val headers = request.headers
         def isGetOrHead = request.method == Method.GET || request.method == Method.HEAD
-        def unmodified(since: HttpDate): Boolean = lastModified.exists(lm => lm <= since && since < now())
+        def unmodified(since: HttpDate): Boolean = lastModified.exists(lm => lm <= since && since <= now())
         def innerRouteWithRangeHeaderFilteredOut: Route = (mapRequest(_.removeHeader[Range]) & addResponseHeaders)(
           route)
 

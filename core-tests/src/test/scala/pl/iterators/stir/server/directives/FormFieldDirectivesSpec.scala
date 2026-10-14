@@ -345,6 +345,11 @@ class FormFieldDirectivesSpec extends RoutingSpec {
         }
       } ~> check { responseAs[String] shouldEqual "Mike42" }
     }
+    "let formFieldMap and a field directive read the same streamed body" in {
+      Post("/", urlEncodedForm) ~> removeHeader("Content-Length") ~!> {
+        formFieldMap { fields => formFields("age".as[Int]) { age => complete(fields.size.toString + age) } }
+      } ~> check { responseAs[String] shouldEqual "242" }
+    }
     "wait more than a second for a slow form body, as Pekko does" in {
       val slowBody: Stream[IO, Byte] =
         Stream.sleep_[IO](2.seconds) ++ Stream.emits("firstName=Mike&age=42".getBytes("UTF-8"))

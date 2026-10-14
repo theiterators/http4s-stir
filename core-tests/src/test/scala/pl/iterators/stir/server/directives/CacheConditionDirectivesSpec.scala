@@ -54,6 +54,12 @@ class CacheConditionDirectivesSpec extends RoutingSpec {
       val earlier = HttpDate.unsafeFromEpochSecond(timestamp.epochSecond - 60)
       Get() ~> addHeader(`If-Modified-Since`(earlier)) ~> taggedAndTimestamped ~> check { status shouldEqual Status.Ok }
     }
+    "treat an If-Modified-Since of the current second as valid" in {
+      val now = HttpDate.unsafeFromEpochSecond(System.currentTimeMillis() / 1000)
+      Get() ~> addHeader(`If-Modified-Since`(now)) ~> taggedAndTimestamped ~> check {
+        status shouldEqual Status.NotModified
+      }
+    }
     "ignore If-Modified-Since on a PUT" in {
       Put() ~> addHeader(ifModifiedSince) ~> taggedAndTimestamped ~> check { status shouldEqual Status.Ok }
     }
