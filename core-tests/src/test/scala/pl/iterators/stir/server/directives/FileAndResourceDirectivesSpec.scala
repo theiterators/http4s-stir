@@ -313,6 +313,12 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
 //          1.second.dilated).data.asByteBuffer.getInt shouldEqual 0xCAFEBABE
 //      }
 //    }
+    "use the given content type instead of the one derived from the resource name" in {
+      Get() ~> getFromResource("sample.xyz", `Content-Type`(MediaType.text.plain)) ~> check {
+        mediaType shouldEqual MediaType.text.plain
+        responseAs[String] shouldEqual "XyZ"
+      }
+    }
     "return the file content with MediaType 'application/octet-stream' on unknown file extensions" in {
       Get() ~> getFromResource("sample.xyz") ~> check {
 //        mediaType shouldEqual `application/octet-stream`
