@@ -38,7 +38,7 @@ val route: Route = extractCredentials {
 
 ## authenticateBasic
 
-Wraps the inner route with HTTP Basic authentication. The authenticator function receives `CredentialsHelper` and returns `Option[T]`. If authentication fails, the request is rejected with an `AuthenticationFailedRejection` containing a `Basic` challenge for the given realm.
+Wraps the inner route with HTTP Basic authentication. The authenticator function receives `CredentialsHelper` and returns `Option[T]`. If authentication fails, the request is rejected with an `AuthenticationFailedRejection` containing a `Basic` challenge for the given realm. Only credentials with the `Basic` scheme are considered. An `Authorization` header with another scheme (for example a Bearer token) counts as *missing* credentials, so `.optional` yields `None` and `withAnonymousUser` applies.
 
 ```scala
 def check(credentials: CredentialsHelper): Option[String] = credentials match {
@@ -96,7 +96,7 @@ val route: Route = authenticateBasicPFAsync("my-realm", {
 
 ## authenticateOAuth2
 
-Wraps the inner route with OAuth 2.0 Bearer Token authentication. The API is identical to `authenticateBasic` but issues a `Bearer` challenge on failure. Credentials are extracted from the `Authorization: Bearer <token>` header or from an `access_token` query parameter.
+Wraps the inner route with OAuth 2.0 Bearer Token authentication. The API is identical to `authenticateBasic` but issues a `Bearer` challenge on failure. Credentials are extracted from the `Authorization: Bearer <token>` header or from an `access_token` query parameter. Only `Bearer` credentials (or the `access_token` query parameter) are considered; Basic credentials count as missing.
 
 ```scala
 def validateToken(credentials: CredentialsHelper): Option[User] = credentials match {

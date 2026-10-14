@@ -56,9 +56,24 @@ class SecurityDirectivesSpec extends RoutingSpec {
         dontBasicAuth { echoComplete }
       } ~> check {
         status shouldEqual Status.Unauthorized
-        responseAs[String] shouldEqual "The supplied authentication is invalid"
+        responseAs[String] shouldEqual "The resource requires authentication, which was not supplied with the request"
         header[`WWW-Authenticate`] shouldEqual Some(`WWW-Authenticate`(basicChallenge))
       }
+    }
+    "treat an OAuth2 Bearer token as missing Basic credentials" in {
+      Get() ~> addHeader(Authorization(OAuth2BearerToken("myToken"))) ~> {
+        dontBasicAuth { echoComplete }
+      } ~> check { rejection shouldEqual AuthenticationFailedRejection(CredentialsMissing, basicChallenge) }
+    }
+    "provide None from `optional` when only an OAuth2 Bearer token is supplied" in {
+      Get() ~> addHeader(Authorization(OAuth2BearerToken("myToken"))) ~> {
+        doBasicAuth.optional { echoComplete }
+      } ~> check { responseAs[String] shouldEqual "None" }
+    }
+    "fall back to the anonymous user when only an OAuth2 Bearer token is supplied" in {
+      Get() ~> addHeader(Authorization(OAuth2BearerToken("myToken"))) ~> {
+        authWithAnonymous { echoComplete }
+      } ~> check { responseAs[String] shouldEqual "We are Legion" }
     }
     "extract the object representing the user identity created by successful authentication" in {
       Get() ~> addHeader(Authorization(BasicCredentials("Alice", ""))) ~> {
@@ -126,9 +141,19 @@ class SecurityDirectivesSpec extends RoutingSpec {
         dontOAuth2Auth { echoComplete }
       } ~> check {
         status shouldEqual Status.Unauthorized
-        responseAs[String] shouldEqual "The supplied authentication is invalid"
+        responseAs[String] shouldEqual "The resource requires authentication, which was not supplied with the request"
         header[`WWW-Authenticate`] shouldEqual Some(`WWW-Authenticate`(oAuth2Challenge))
       }
+    }
+    "treat Basic credentials as missing Bearer credentials" in {
+      Get() ~> addHeader(Authorization(BasicCredentials("Alice", ""))) ~> {
+        dontOAuth2Auth { echoComplete }
+      } ~> check { rejection shouldEqual AuthenticationFailedRejection(CredentialsMissing, oAuth2Challenge) }
+    }
+    "provide None from `optional` when only Basic credentials are supplied" in {
+      Get() ~> addHeader(Authorization(BasicCredentials("Alice", ""))) ~> {
+        doOAuth2Auth.optional { echoComplete }
+      } ~> check { responseAs[String] shouldEqual "None" }
     }
     "extract the object representing the user identity created by successful authentication with Authorization header" in {
       Get() ~> addHeader(Authorization(OAuth2BearerToken("myToken"))) ~> {
