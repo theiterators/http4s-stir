@@ -44,7 +44,10 @@ val route: Route = path("static" / "logo") {
 
 ### getFromDirectory
 
-Completes GET requests with the content of a file underneath the given directory. The unmatched path from the request URI is appended to the directory path. Path traversal attacks are prevented by validating that the resolved path is a descendant of the base directory.
+Completes GET requests with the content of a file underneath the given directory. The unmatched path from the request URI is appended to the directory path. Path traversal is prevented twice: a request whose path has a segment containing `/`, `\` or a NUL byte, or a
+`..` segment, is rejected outright; and the canonical path of the resolved file (symbolic links followed) must
+lie inside the canonical base directory, compared segment by segment, so a link to a sibling directory such as
+`static-private` next to `static` is rejected as well.
 
 ```scala
 val route: Route = pathPrefix("files") {

@@ -7,6 +7,7 @@ import org.scalatest.{ Inside, Inspectors }
 import pl.iterators.stir.impl.util._
 
 import java.io.File
+import java.nio.file.{ Files => NioFiles }
 import java.time.{ LocalDate, ZoneOffset }
 import scala.annotation.unused
 import scala.util.Properties
@@ -189,6 +190,25 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
       shouldReject("..%255c", warnings = 0)
       shouldReject("..%c0%af", warnings = 0)
       shouldReject("..%c1%9c", warnings = 0)
+    }
+    "reject the whole request when a segment is suspicious instead of dropping the segment" in {
+      // "..\\" is dropped today, leaving someDir/sub/file.html, which exists and is served
+      Get("..%5C/file.html") ~> _getFromDirectory("someDir/sub") ~> check { handled shouldEqual false }
+    }
+    "reject a path containing a NUL byte" in {
+      Get("na%00ive.txt") ~> _getFromDirectory("someDir") ~> check { handled shouldEqual false }
+    }
+    "not serve files from a sibling directory whose name starts with the base directory's name" in {
+      val root = NioFiles.createTempDirectory("stir-traversal")
+      val base = NioFiles.createDirectory(root.resolve("base"))
+      val sibling = NioFiles.createDirectory(root.resolve("base-private"))
+      val secret = NioFiles.write(sibling.resolve("secret.txt"), "secret".getBytes("UTF-8"))
+      val link = NioFiles.createSymbolicLink(base.resolve("link"), sibling)
+      try {
+        Get("link/secret.txt") ~> getFromDirectory(base.toString) ~> check { handled shouldEqual false }
+      } finally {
+        List(link, secret, sibling, base, root).foreach(p => NioFiles.deleteIfExists(p))
+      }
     }
     "return the file content with the MediaType matching the file extension" in {
       Get("fileA.txt") ~> _getFromDirectory("someDir") ~> check {

@@ -6,7 +6,7 @@ import fs2.io.file.Path
 import org.http4s.{ Response, StaticFile, Uri }
 import pl.iterators.stir.server.{ Route, RouteResult }
 
-import java.io.File
+import java.io.{ File, IOException }
 
 /**
  * @groupname fileandresource File and resource directives
@@ -113,24 +113,35 @@ object FileAndResourceDirectives extends FileAndResourceDirectives {
       case path => checkIsSafeDescendant(basePath, path)
     }
 
+  /**
+   * Joins the base path and the (Uri) path segments. Returns "" when any segment could change the meaning of the
+   * file-system path: a `/` or `\\` inside a segment, a NUL byte, or a `..` segment.
+   */
   private def safeJoinPaths(base: String, path: Uri.Path, separator: Char): String = {
-    base + path.segments.map(_.decoded()).filterNot(s => s.contains('/') || s.contains('\\') || s == "..").mkString(
-      separator.toString)
+    val segments = path.segments.map(_.decoded())
+    if (segments.exists(isSuspicious)) "" else base + segments.mkString(separator.toString)
   }
+
+  private def isSuspicious(segment: String): Boolean =
+    segment.contains('/') || segment.contains('\\') || segment.contains('\u0000') || segment == ".."
 
   /**
-   * Check against directory traversal attempts by making sure that the final is a "true child"
-   * of the given base directory.
+   * Check against directory traversal attempts by making sure that the final path is a "true child" of the given
+   * base directory: the canonical path of the file must start with the canonical path of the base directory
+   * segment by segment (so `/srv/base-private` is not inside `/srv/base`). Symbolic links are resolved by
+   * `File.getCanonicalPath`, so a link pointing outside the base is rejected.
    *
-   * Returns "" if the finalPath is suspicious and the canonical path otherwise.
+   * Returns "" if the finalPath is suspicious or cannot be canonicalised and the canonical path otherwise.
    */
-  private def checkIsSafeDescendant(basePath: String, finalPath: String): String = {
-    val baseFile = new File(basePath)
-    val finalFile = new File(finalPath)
-    val canonicalFinalPath = finalFile.getCanonicalPath
+  private def checkIsSafeDescendant(basePath: String, finalPath: String): String =
+    try {
+      val base = canonicalSegments(new File(basePath))
+      val canonicalFinalPath = new File(finalPath).getCanonicalPath
+      if (canonicalSegments(new File(canonicalFinalPath)).startsWith(base)) canonicalFinalPath else ""
+    } catch {
+      case _: IOException => ""
+    }
 
-    if (!canonicalFinalPath.startsWith(baseFile.getCanonicalPath)) {
-      ""
-    } else canonicalFinalPath
-  }
+  private def canonicalSegments(file: File): Seq[String] =
+    file.getCanonicalPath.split(File.separatorChar).toSeq.filter(_.nonEmpty)
 }
