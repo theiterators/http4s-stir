@@ -3,8 +3,8 @@ package pl.iterators.stir.server.directives
 import cats.effect.IO
 import fs2.Stream
 import fs2.compression.{ Compression, DeflateParams, InflateParams, ZLibParams }
-import org.http4s.{ ContentCoding, EntityBody, MalformedMessageBodyFailure, QValue, Request, Response }
-import org.http4s.headers.{ `Accept-Encoding`, `Content-Encoding`, `Content-Length` }
+import org.http4s.{ ContentCoding, EntityBody, MalformedMessageBodyFailure, QValue, Request, Response, TransferCoding }
+import org.http4s.headers.{ `Accept-Encoding`, `Content-Encoding`, `Content-Length`, `Transfer-Encoding` }
 import pl.iterators.stir.server._
 
 import scala.util.control.NonFatal
@@ -16,7 +16,6 @@ import scala.util.control.NonFatal
 trait CodingDirectives {
   import BasicDirectives._
   import CodingDirectives._
-  import MiscDirectives._
   import RouteDirectives._
 
   /**
@@ -52,9 +51,10 @@ trait CodingDirectives {
 
   /**
    * Decodes the incoming request with the given coding (gzip, deflate or identity). Requests encoded differently
-   * are rejected with an [[UnsupportedRequestEncodingRejection]]; empty requests pass through untouched.
-   * A corrupt compressed body fails the entity with a decode failure, which `entity` turns into a
-   * [[MalformedRequestContentRejection]] (400).
+   * are rejected with an [[UnsupportedRequestEncodingRejection]]; requests that declare `Content-Length: 0` pass
+   * through untouched. The decoded request carries `Transfer-Encoding: chunked` instead of its `Content-Length`,
+   * since the decoded size is unknown. A corrupt compressed body fails the entity with a decode failure, which
+   * `entity` turns into a [[MalformedRequestContentRejection]] (400).
    *
    * @group coding
    */
@@ -65,9 +65,10 @@ trait CodingDirectives {
         request.withBodyStream(decodeBody(decoder, request.body))
           .removeHeader[`Content-Encoding`]
           .removeHeader[`Content-Length`]
+          .putHeaders(`Transfer-Encoding`(TransferCoding.chunked))
       }
 
-    requestEntityEmpty |
+    contentLengthZero |
     (requestEncodedWith(decoder) & applyDecoder &
     cancelRejections(classOf[UnsupportedRequestEncodingRejection]))
   }
@@ -124,6 +125,10 @@ object CodingDirectives extends CodingDirectives {
   private def sameCoding(a: ContentCoding, b: ContentCoding): Boolean = a.coding.equalsIgnoreCase(b.coding)
   private def isIdentity(coding: ContentCoding): Boolean = sameCoding(coding, ContentCoding.identity)
   private def isGzip(coding: ContentCoding): Boolean = sameCoding(coding, ContentCoding.gzip)
+
+  /** Passes only requests that declare `Content-Length: 0`; a bodiless request without that header has no encoding. */
+  private val contentLengthZero: Directive0 =
+    extract(_.request.contentLength.contains(0L)).flatMap(if (_) pass else reject)
 
   private def requestEncoding(request: Request[IO]): ContentCoding =
     request.headers.get[`Content-Encoding`].map(_.contentCoding).getOrElse(ContentCoding.identity)

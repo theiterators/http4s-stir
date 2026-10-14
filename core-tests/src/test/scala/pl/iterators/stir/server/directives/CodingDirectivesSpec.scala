@@ -87,18 +87,21 @@ class CodingDirectivesSpec extends RoutingSpec {
       }
     }
     "reject when the client does not accept any of the given encoders" in {
-      Get() ~> addHeader(`Accept-Encoding`(ContentCoding.identity)) ~> encodeResponseWith(ContentCoding.gzip)(textRoute) ~>
+      Get()                                             ~> addHeader(`Accept-Encoding`(ContentCoding.identity)) ~>
+      encodeResponseWith(ContentCoding.gzip)(textRoute) ~>
       check { rejection shouldEqual UnacceptedResponseEncodingRejection(Set(ContentCoding.gzip)) }
     }
   }
 
   "the responseEncodingAccepted directive" should {
     "pass when the encoding is accepted" in {
-      Get() ~> addHeader(`Accept-Encoding`(ContentCoding.gzip)) ~> responseEncodingAccepted(ContentCoding.gzip)(completeOk) ~>
+      Get()                                                    ~> addHeader(`Accept-Encoding`(ContentCoding.gzip)) ~>
+      responseEncodingAccepted(ContentCoding.gzip)(completeOk) ~>
       check { status shouldEqual Status.Ok }
     }
     "reject when the encoding is not accepted" in {
-      Get() ~> addHeader(`Accept-Encoding`(ContentCoding.identity)) ~> responseEncodingAccepted(ContentCoding.gzip)(completeOk) ~>
+      Get()                                                    ~> addHeader(`Accept-Encoding`(ContentCoding.identity)) ~>
+      responseEncodingAccepted(ContentCoding.gzip)(completeOk) ~>
       check { rejection shouldEqual UnacceptedResponseEncodingRejection(Set(ContentCoding.gzip)) }
     }
   }
@@ -110,7 +113,8 @@ class CodingDirectivesSpec extends RoutingSpec {
       }
     }
     "inflate a deflate-encoded request" in {
-      Post("/", deflated(text)) ~> addHeader(`Content-Encoding`(ContentCoding.deflate)) ~> decodeRequest(echo) ~> check {
+      Post("/", deflated(text)) ~> addHeader(`Content-Encoding`(ContentCoding.deflate)) ~> decodeRequest(echo) ~>
+      check {
         responseAs[String] shouldEqual text
       }
     }
@@ -118,7 +122,8 @@ class CodingDirectivesSpec extends RoutingSpec {
       Post("/", "plain") ~> decodeRequest(echo) ~> check { responseAs[String] shouldEqual "plain" }
     }
     "pass an empty request through whatever its Content-Encoding" in {
-      Post("/", "") ~> addHeader(`Content-Encoding`(ContentCoding.unsafeFromString("br"))) ~> decodeRequest(completeOk) ~>
+      Post("/", "")             ~> addHeader(`Content-Encoding`(ContentCoding.unsafeFromString("br"))) ~>
+      decodeRequest(completeOk) ~>
       check { status shouldEqual Status.Ok }
     }
     "reject with UnsupportedRequestEncodingRejection for an unknown encoding" in {
@@ -130,18 +135,31 @@ class CodingDirectivesSpec extends RoutingSpec {
       }
     }
     "complete with 400 when sealed and the encoding is unknown" in {
-      Post("/", "body") ~> addHeader(`Content-Encoding`(ContentCoding.unsafeFromString("br"))) ~> Route.seal(decodeRequest(echo)) ~>
+      Post("/", "body")               ~> addHeader(`Content-Encoding`(ContentCoding.unsafeFromString("br"))) ~>
+      Route.seal(decodeRequest(echo)) ~>
       check {
         status shouldEqual Status.BadRequest
-        responseAs[String] shouldEqual "The request's Content-Encoding is not supported. Expected:\ngzip or deflate or identity"
+        responseAs[String] shouldEqual
+        "The request's Content-Encoding is not supported. Expected:\ngzip or deflate or identity"
       }
     }
     "complete with 400 when the compressed body is corrupt" in {
-      Post("/", "not gzip at all") ~> addHeader(`Content-Encoding`(ContentCoding.gzip)) ~> Route.seal(decodeRequest(echo)) ~>
+      Post("/", "not gzip at all")    ~> addHeader(`Content-Encoding`(ContentCoding.gzip)) ~>
+      Route.seal(decodeRequest(echo)) ~>
       check {
         status shouldEqual Status.BadRequest
         responseAs[String] should include("The request's encoding is corrupt")
       }
+    }
+    "leave a decoded request visible to requestEntityPresent" in {
+      Post("/", gzipped(text)) ~> addHeader(`Content-Encoding`(ContentCoding.gzip)) ~> {
+        decodeRequest { requestEntityPresent { echo } }
+      } ~> check { responseAs[String] shouldEqual text }
+    }
+    "let a nested withSizeLimit limit the decoded body instead of the compressed one" in {
+      Post("/", gzipped(text)) ~> addHeader(`Content-Encoding`(ContentCoding.gzip)) ~> {
+        withSizeLimit(100000) { decodeRequest { withSizeLimit(50000) { echo } } }
+      } ~> check { responseAs[String] shouldEqual text }
     }
     "gunzip over a real server" in {
       Post("/", gzipped(text)) ~> addHeader(`Content-Encoding`(ContentCoding.gzip)) ~!> decodeRequest(echo) ~> check {
@@ -152,7 +170,8 @@ class CodingDirectivesSpec extends RoutingSpec {
 
   "the decodeRequestWith directive" should {
     "reject a request encoded differently" in {
-      Post("/", deflated(text)) ~> addHeader(`Content-Encoding`(ContentCoding.deflate)) ~> decodeRequestWith(ContentCoding.gzip)(echo) ~>
+      Post("/", deflated(text))                   ~> addHeader(`Content-Encoding`(ContentCoding.deflate)) ~>
+      decodeRequestWith(ContentCoding.gzip)(echo) ~>
       check { rejection shouldEqual UnsupportedRequestEncodingRejection(ContentCoding.gzip) }
     }
   }

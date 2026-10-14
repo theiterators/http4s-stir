@@ -45,9 +45,12 @@ Passes when the client lists the given coding (or `*`) with a positive q-value i
 
 ## decodeRequest
 
-Decompresses a `gzip` or `deflate` encoded request body before the inner route reads it; unencoded and empty
-requests pass through. Any other `Content-Encoding` is rejected with `UnsupportedRequestEncodingRejection`s
-(400 when sealed). A corrupt compressed body is reported as a `MalformedRequestContentRejection` by `entity`.
+Decompresses a `gzip` or `deflate` encoded request body before the inner route reads it; unencoded requests and
+requests with `Content-Length: 0` pass through. Any other `Content-Encoding` is rejected with
+`UnsupportedRequestEncodingRejection`s (400 when sealed). A corrupt compressed body is reported as a
+`MalformedRequestContentRejection` by `entity`. The decoded request carries `Transfer-Encoding: chunked` in place
+of its `Content-Length`, so `requestEntityPresent` still sees a body. Put `withSizeLimit` *inside* `decodeRequest`
+to bound the decompressed size; outside it only bounds the compressed bytes.
 
 ```scala
 val route: Route = decodeRequest {
