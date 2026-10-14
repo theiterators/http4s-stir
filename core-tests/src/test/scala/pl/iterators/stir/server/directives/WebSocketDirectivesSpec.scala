@@ -73,23 +73,27 @@ class WebSocketDirectivesSpec extends RoutingSpec {
 
   "handleWebSocketMessagesForProtocol" should {
     "accept the upgrade and select the protocol when it is offered" in {
-      Get("/ws") ~> upgradeHeaders ~> offeringProtocols ~> handleWebSocketMessagesForProtocol(ws, echo, "bar") ~> check {
+      Get("/ws") ~> upgradeHeaders ~> offeringProtocols ~> handleWebSocketMessagesForProtocol(ws, echo, "bar") ~>
+      check {
         status shouldEqual Status.SwitchingProtocols
         header("Sec-WebSocket-Protocol").map(_.value) shouldEqual Some("bar")
       }
     }
     "match the protocol case-insensitively" in {
-      Get("/ws") ~> upgradeHeaders ~> offeringProtocols ~> handleWebSocketMessagesForProtocol(ws, echo, "BAR") ~> check {
+      Get("/ws") ~> upgradeHeaders ~> offeringProtocols ~> handleWebSocketMessagesForProtocol(ws, echo, "BAR") ~>
+      check {
         status shouldEqual Status.SwitchingProtocols
       }
     }
     "reject with UnsupportedWebSocketSubprotocolRejection when the protocol is not offered" in {
-      Get("/ws") ~> upgradeHeaders ~> offeringProtocols ~> handleWebSocketMessagesForProtocol(ws, echo, "baz") ~> check {
+      Get("/ws") ~> upgradeHeaders ~> offeringProtocols ~> handleWebSocketMessagesForProtocol(ws, echo, "baz") ~>
+      check {
         rejection shouldEqual UnsupportedWebSocketSubprotocolRejection("baz")
       }
     }
     "complete with 400 listing the supported protocols when sealed" in {
-      val route = handleWebSocketMessagesForProtocol(ws, echo, "baz") ~ handleWebSocketMessagesForProtocol(ws, echo, "qux")
+      val route = handleWebSocketMessagesForProtocol(ws, echo, "baz") ~
+        handleWebSocketMessagesForProtocol(ws, echo, "qux")
       Get("/ws") ~> upgradeHeaders ~> offeringProtocols ~> Route.seal(route) ~> check {
         status shouldEqual Status.BadRequest
         header("Sec-WebSocket-Protocol").map(_.value) shouldEqual Some("baz, qux")
