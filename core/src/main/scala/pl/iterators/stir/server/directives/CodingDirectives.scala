@@ -100,6 +100,22 @@ trait CodingDirectives {
    * @group coding
    */
   def decodeRequest: Directive0 = decodeRequestWith(DefaultCoders: _*)
+
+  /**
+   * Inspects the response and adds a `Content-Encoding: gzip` header if it was served by `getFromFile`,
+   * `getFromDirectory`, `getFromResource` or `getFromResourceDirectory` from a `.svgz` file (the only precompressed
+   * media type Pekko knows) and no `Content-Encoding` is present yet.
+   *
+   * @group coding
+   */
+  def withPrecompressedMediaTypeSupport: Directive0 =
+    mapResponse { response =>
+      val precompressed = response.attributes.lookup(FileAndResourceDirectives.ServedNameKey)
+        .exists(_.toLowerCase.endsWith(".svgz"))
+      if (precompressed && response.headers.get[`Content-Encoding`].isEmpty)
+        response.putHeaders(`Content-Encoding`(ContentCoding.gzip))
+      else response
+    }
 }
 
 object CodingDirectives extends CodingDirectives {

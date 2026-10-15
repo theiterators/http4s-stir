@@ -1,8 +1,9 @@
 package pl.iterators.stir.server.directives
 
 import cats.effect.unsafe.IORuntime
-import org.http4s.{ HttpDate, MediaType, Uri }
-import org.http4s.headers.{ `Content-Type`, `Last-Modified` }
+import org.http4s.{ ContentCoding, Header, HttpDate, MediaType, Uri }
+import org.http4s.headers.{ `Content-Encoding`, `Content-Type`, `Last-Modified` }
+import org.typelevel.ci._
 import org.scalatest.{ Inside, Inspectors }
 import pl.iterators.stir.impl.util._
 
@@ -127,10 +128,35 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
       val file = File.createTempFile("pekkoHttpTest", ".svgz")
       try {
         writeAllText("123", file)
-        Get() ~> getFromFile(file) ~> check {
+        Get() ~> withPrecompressedMediaTypeSupport(getFromFile(file)) ~> check {
           mediaType shouldEqual MediaType.parse("image/svg+xml").getOrElse(fail("Media type could not be parsed"))
-//          header[`Content-Encoding`].get shouldEqual Some(`Content-Encoding`(ContentCoding.gzip))
+          header[`Content-Encoding`] shouldEqual Some(`Content-Encoding`(ContentCoding.gzip))
           responseAs[String] shouldEqual "123"
+        }
+      } finally {
+        file.delete
+        ()
+      }
+    }
+    "not mark a plain svg as gzip-encoded" in {
+      val file = File.createTempFile("pekkoHttpTest", ".svg")
+      try {
+        writeAllText("<svg/>", file)
+        Get() ~> withPrecompressedMediaTypeSupport(getFromFile(file)) ~> check {
+          header[`Content-Encoding`] shouldEqual None
+        }
+      } finally {
+        file.delete
+        ()
+      }
+    }
+    "keep an existing Content-Encoding on a precompressed file" in {
+      val file = File.createTempFile("pekkoHttpTest", ".svgz")
+      try {
+        writeAllText("123", file)
+        val route = respondWithHeader(Header.Raw(ci"Content-Encoding", "br")) { getFromFile(file) }
+        Get() ~> withPrecompressedMediaTypeSupport(route) ~> check {
+          header[`Content-Encoding`].map(_.contentCoding.coding) shouldEqual Some("br")
         }
       } finally {
         file.delete
