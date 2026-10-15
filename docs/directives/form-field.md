@@ -13,6 +13,8 @@ Note: only URL-encoded forms are supported. Multipart form data is not handled b
 Every field directive buffers the form body in memory first (ten seconds timeout and 8 MiB limit, through
 `toStrictEntity`), so several `formField`/`formFields` directives can read the same request. A body that does not arrive in
 time fails the request with `408 Request Timeout`; a larger one with `413 Payload Too Large`.
+A body whose `Content-Type` is not `application/x-www-form-urlencoded` is rejected with an
+`UnsupportedRequestContentTypeRejection`; a body without `Content-Type` is parsed as a form.
 
 ## formField (required String)
 

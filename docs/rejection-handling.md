@@ -40,7 +40,7 @@ A `PUT /order` request would be rejected by both the `get` and `post` directives
 | `MissingCookieRejection(cookieName)` | A required cookie was not found. |
 | `MissingFormFieldRejection(fieldName)` | A required form field was not found. |
 | `MalformedFormFieldRejection(fieldName, errorMsg, cause)` | A form field could not be interpreted. |
-| `EntityRejection(decodeFailure)` | The request content type is unsupported or the entity could not be decoded. |
+| `UnsupportedRequestContentTypeRejection(supported, contentType)` | The request's `Content-Type` is not accepted by the entity decoder. Produces 415. |
 | `MalformedRequestContentRejection(message, cause)` | Unmarshalling the request content failed with a non-`IllegalArgumentException` error. |
 | `ValidationRejection(message, cause)` | An expected value was semantically invalid. Produced by the `validate` directive and by `IllegalArgumentException` from domain constructors. |
 | `AuthenticationFailedRejection(cause, challenge)` | Authentication failed. The `cause` is either `CredentialsMissing` or `CredentialsRejected`. |
