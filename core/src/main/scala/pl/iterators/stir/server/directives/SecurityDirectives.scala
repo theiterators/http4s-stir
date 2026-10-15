@@ -2,7 +2,7 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.IO
 import org.http4s.headers._
-import org.http4s.{ BasicCredentials, Challenge, Credentials }
+import org.http4s.{ AuthScheme, BasicCredentials, Challenge, Credentials }
 import org.typelevel.ci.CIString
 import pl.iterators.stir.server.{
   AuthenticationFailedRejection,
@@ -96,16 +96,14 @@ trait SecurityDirectives {
    * @group security
    */
   def authenticateBasicAsync[T](realm: String, authenticator: AsyncAuthenticator[T]): AuthenticationDirective[T] =
-    authenticateOrRejectWithChallenge[Credentials, T] { credAll =>
-      val cred = credAll match {
-        case b @ Some(BasicCredentials(_, _)) => b
-        case _                                => None
-      }
-      authenticator(CredentialsHelper(cred)).map {
-        case Some(t) => AuthenticationResult.success(t)
-        case None    => AuthenticationResult.failWithChallenge(Challenge("Basic", realm, Map("charset" -> "UTF-8")))
-      }
-    }
+    extractCredentialsAndAuthenticateOrRejectWithChallenge[Credentials, T](
+      extractCredentials.map(_.filter(_.authScheme == AuthScheme.Basic)),
+      { cred =>
+        authenticator(CredentialsHelper(cred)).map {
+          case Some(t) => AuthenticationResult.success(t)
+          case None    => AuthenticationResult.failWithChallenge(Challenge("Basic", realm, Map("charset" -> "UTF-8")))
+        }
+      })
 
   /**
    * A directive that wraps the inner route with Http Basic authentication support.
@@ -153,13 +151,13 @@ trait SecurityDirectives {
       import ParameterDirectives._
       parameter("access_token".optional).map(_.map(t => Credentials.Token(CIString("Bearer"), t)))
     }
-    val extractCreds: Directive1[Option[Credentials.Token]] =
-      extractCredentials.flatMap {
-        case Some(c: Credentials.Token) => provide(Some(c))
-        case _                          => extractAccessTokenParameterAsBearerToken
+    val extractCreds: Directive1[Option[Credentials]] =
+      extractCredentials.map(_.filter(_.authScheme == AuthScheme.Bearer)).flatMap {
+        case Some(c) => provide(Some(c): Option[Credentials])
+        case None    => extractAccessTokenParameterAsBearerToken.map(_.map(c => c: Credentials))
       }
 
-    extractCredentialsAndAuthenticateOrRejectWithChallenge[Credentials.Token, T](extractCreds,
+    extractCredentialsAndAuthenticateOrRejectWithChallenge[Credentials, T](extractCreds,
       { cred =>
         authenticator(CredentialsHelper(cred)).map {
           case Some(t) => AuthenticationResult.success(t)
