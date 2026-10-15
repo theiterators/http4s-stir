@@ -173,3 +173,15 @@ final case class UnacceptedResponseEncodingRejection(supported: Set[ContentCodin
  * Signals that the request was rejected because the request's Content-Encoding is not supported.
  */
 final case class UnsupportedRequestEncodingRejection(supported: ContentCoding) extends Rejection
+
+/**
+ * Rejection created by the WebSocket directives.
+ * Signals that the request was rejected because it was not a WebSocket upgrade request.
+ */
+case object ExpectedWebSocketRequestRejection extends Rejection
+
+/**
+ * Rejection created by the WebSocket directives.
+ * Signals that the request was rejected because none of the offered subprotocols is supported.
+ */
+final case class UnsupportedWebSocketSubprotocolRejection(supportedProtocol: String) extends Rejection
