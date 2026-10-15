@@ -36,7 +36,7 @@ val route: Route = path("download") {
 
 ### getFromResource
 
-Completes GET requests with the content of the given classpath resource. If the resource cannot be found or read, the request is rejected, so a later route alternative can handle it. Requests for resource "directories" (paths ending with `/`) are rejected.
+Completes GET requests with the content of the given classpath resource. If the resource cannot be found or read, the request is rejected, so a later route alternative can handle it. A second `Content-Type` argument replaces the content type derived from the resource name, as for `getFromFile`. Requests for resource "directories" (paths ending with `/`) are rejected.
 
 ```scala
 val route: Route = path("static" / "logo") {

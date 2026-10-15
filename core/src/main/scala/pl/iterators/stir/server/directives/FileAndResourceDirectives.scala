@@ -67,10 +67,25 @@ trait FileAndResourceDirectives {
    *
    * @group fileandresource
    */
-  def getFromResource(resourceName: String): Route =
+  def getFromResource(resourceName: String): Route = serveResource(resourceName, None)
+
+  /**
+   * Completes GET requests with the content of the given class-path resource, served with the given content type
+   * instead of the one derived from the resource name. If the resource cannot be found or read the Route rejects
+   * the request.
+   *
+   * @group fileandresource
+   */
+  def getFromResource(resourceName: String, contentType: `Content-Type`): Route =
+    serveResource(resourceName, Some(contentType))
+
+  private def serveResource(resourceName: String, contentType: Option[`Content-Type`]): Route =
     if (!resourceName.endsWith("/"))
       get {
-        extractRequest { request => serve(StaticFile.fromResource(resourceName, Some(request))) }
+        extractRequest { request =>
+          serve(StaticFile.fromResource(resourceName, Some(request)).map(response =>
+            contentType.fold(response)(response.withContentType)))
+        }
       }
     else reject // don't serve the content of resource "directories"
 
