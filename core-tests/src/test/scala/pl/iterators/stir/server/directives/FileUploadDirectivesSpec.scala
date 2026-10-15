@@ -38,7 +38,8 @@ class FileUploadDirectivesSpec extends RoutingSpec {
 
   def read(file: File): String = new String(NioFiles.readAllBytes(file.toPath), "UTF-8")
 
-  def mediaType(info: FileInfo): String = s"${info.contentType.mediaType.mainType}/${info.contentType.mediaType.subType}"
+  def mediaType(info: FileInfo): String =
+    s"${info.contentType.mediaType.mainType}/${info.contentType.mediaType.subType}"
 
   "fileUpload" should {
     "provide the declared content type" in {
@@ -62,7 +63,7 @@ class FileUploadDirectivesSpec extends RoutingSpec {
 
   "storeUploadedFile" should {
     "write the first matching part to the destination" in {
-      upload(textPart("file", "a.txt", "first"), textPart("file", "b.txt", "second")) ~>
+      upload(textPart("file", "a.txt", "first"), textPart("file", "b.txt", "second"))                         ~>
       storeUploadedFile("file", tempDest) { case (info, file) => complete(info.fileName + ":" + read(file)) } ~>
       check { responseAs[String] shouldEqual "a.txt:first" }
     }

@@ -1,6 +1,6 @@
 package pl.iterators.stir.server
 
-import org.http4s.{ Challenge, MediaRange, MediaType, Method }
+import org.http4s.{ Challenge, ContentCoding, MediaRange, MediaType, Method }
 import org.http4s.headers.Origin
 
 trait Rejection
@@ -160,3 +160,16 @@ final case class InvalidOriginRejection(allowedOrigins: Seq[Origin.Host]) extend
  * Signals that the request was rejected because an entity was expected but not supplied.
  */
 case object RequestEntityExpectedRejection extends Rejection
+
+/**
+ * Rejection created by encoding filters.
+ * Signals that the request was rejected because the client does not accept any of the response encodings the
+ * route can produce.
+ */
+final case class UnacceptedResponseEncodingRejection(supported: Set[ContentCoding]) extends Rejection
+
+/**
+ * Rejection created by decoding filters.
+ * Signals that the request was rejected because the request's Content-Encoding is not supported.
+ */
+final case class UnsupportedRequestEncodingRejection(supported: ContentCoding) extends Rejection

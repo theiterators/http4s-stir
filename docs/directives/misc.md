@@ -54,7 +54,8 @@ val route: Route = extractDirectClientIP { maybeIp =>
 `requestEntityPresent` does the opposite and rejects with a `RequestEntityExpectedRejection` (400 when sealed).
 A request counts as empty when it declares `Content-Length: 0` or declares neither `Content-Length` nor
 `Transfer-Encoding`; an in-memory test request built from a raw stream carries no `Content-Length`, so build it
-with `withEntity` or add the header.
+with `withEntity` or add the header. Over HTTP/2 a request body carries neither header, so these directives
+only recognise `Content-Length: 0` there; a length-less HTTP/2 body counts as empty.
 
 ```scala
 val route: Route = post {

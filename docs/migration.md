@@ -40,8 +40,6 @@ The following directive categories and individual directives are **not available
 | Category | Status |
 |---|---|
 | `AttributeDirectives` | Not implemented (trait is empty) |
-| `CacheConditionDirectives` | Not implemented (trait is empty) |
-| `CodingDirectives` | Not implemented (trait is empty) |
 | `RangeDirectives` | Not implemented (trait is empty) |
 | `FramedEntityStreamingDirectives` | Not implemented (trait is empty) |
 
@@ -49,6 +47,7 @@ The following directive categories and individual directives are **not available
 
 - **FormFieldDirectives**: multipart form handling is not supported
 - **FileAndResourceDirectives**: directory listing is not supported
+- `withPrecompressedMediaTypeSupport`
 - `extractRequestTimeout` / `withRequestTimeoutResponse`
 
 ## Testkit differences

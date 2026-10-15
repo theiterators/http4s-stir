@@ -249,11 +249,12 @@ object RejectionHandler {
 //        val msg = supported.map(_.format).mkString("Resource representation is only available with these types:\n", "\n", "")
 //        rejectRequestEntityAndComplete((NotAcceptable, msg))
 //      }
-//      .handleAll[UnacceptedResponseEncodingRejection] { rejections =>
-//        val supported = rejections.flatMap(_.supported)
-//        rejectRequestEntityAndComplete((NotAcceptable, "Resource representation is only available with these Content-Encodings:\n" +
-//          supported.map(_.value).mkString("\n")))
-//      }
+      .handleAll[UnacceptedResponseEncodingRejection] { rejections =>
+        val supported = rejections.flatMap(_.supported).distinct
+        rejectRequestEntityAndComplete((NotAcceptable,
+          "Resource representation is only available with these Content-Encodings:\n" +
+          supported.map(_.coding).mkString("\n")))
+      }
       .handleAll[UnsupportedRequestContentTypeRejection] { rejections =>
         val unsupported =
           rejections.find(_.contentType.isDefined).flatMap(_.contentType).fold("")(" [" + renderMediaRange(_) + "]")
@@ -262,10 +263,11 @@ object RejectionHandler {
         rejectRequestEntityAndComplete((UnsupportedMediaType,
           s"The request's Content-Type$unsupported is not supported.$expected"))
       }
-//      .handleAll[UnsupportedRequestEncodingRejection] { rejections =>
-//        val supported = rejections.map(_.supported.value).mkString(" or ")
-//        rejectRequestEntityAndComplete((BadRequest, "The request's Content-Encoding is not supported. Expected:\n" + supported))
-//      }
+      .handleAll[UnsupportedRequestEncodingRejection] { rejections =>
+        val supported = rejections.map(_.supported.coding).mkString(" or ")
+        rejectRequestEntityAndComplete((BadRequest,
+          "The request's Content-Encoding is not supported. Expected:\n" + supported))
+      }
 //      .handle { case ExpectedWebSocketRequestRejection => rejectRequestEntityAndComplete((BadRequest, "Expected WebSocket Upgrade request")) }
 //      .handleAll[UnsupportedWebSocketSubprotocolRejection] { rejections =>
 //        val supported = rejections.map(_.supportedProtocol)
