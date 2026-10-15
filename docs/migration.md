@@ -45,7 +45,6 @@ The following directive categories and individual directives are **not available
 
 ### Unimplemented individual directives
 
-- **FormFieldDirectives**: multipart form handling is not supported
 - **FileAndResourceDirectives**: directory listing is not supported
 - `withPrecompressedMediaTypeSupport`
 - `extractRequestTimeout` / `withRequestTimeoutResponse`

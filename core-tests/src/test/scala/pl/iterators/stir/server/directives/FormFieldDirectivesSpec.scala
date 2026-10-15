@@ -3,8 +3,9 @@ package pl.iterators.stir.server.directives
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import fs2.Stream
-import org.http4s.{ MediaType, Status, UrlForm }
+import org.http4s.{ MediaRange, MediaType, Request, Status, UrlForm }
 import org.http4s.headers.`Content-Type`
+import org.http4s.multipart.{ Multipart, Multiparts, Part }
 
 import scala.concurrent.duration._
 import pl.iterators.stir.unmarshalling.Unmarshaller._
@@ -359,13 +360,52 @@ class FormFieldDirectivesSpec extends RoutingSpec {
         formFields("firstName") { echoComplete }
       } ~> check {
         rejection shouldEqual UnsupportedRequestContentTypeRejection(
-          Set(MediaType.application.`x-www-form-urlencoded`), Some(MediaType.application.json))
+          Set(MediaType.application.`x-www-form-urlencoded`, MediaRange.`multipart/*`),
+          Some(MediaType.application.json))
       }
     }
     "decode a form body without Content-Type" in {
       Post("/", urlEncodedForm) ~> removeHeader("Content-Type") ~> {
         formFields("firstName") { echoComplete }
       } ~> check { responseAs[String] shouldEqual "Mike" }
+    }
+  }
+
+  def multipartForm(fields: (String, String)*): Request[IO] = {
+    val parts = fields.map { case (name, value) => Part.formData[IO](name, value) } :+
+      Part.fileData[IO]("file", "age.xml", Stream.emits("<int>42</int>".getBytes("UTF-8")).covary[IO],
+        `Content-Type`(MediaType.text.xml))
+    val multipart: Multipart[IO] = Multiparts.forSync[IO].flatMap(_.multipart(parts.toVector)).unsafeRunSync()
+    Post("/", multipart).transformHeaders(_ ++ multipart.headers)
+  }
+
+  "The 'formFields' extraction directive with a multipart form" should {
+    "properly extract the value of multipart form fields" in {
+      multipartForm("firstName" -> "Mike", "age" -> "42") ~> {
+        formFields("firstName", "age".as[Int], "sex".optional, "VIP".withDefault(false)) { (firstName, age, sex, vip) =>
+          complete(firstName + age + sex + vip)
+        }
+      } ~> check { responseAs[String] shouldEqual "Mike42Nonefalse" }
+    }
+    "reject with MissingFormFieldRejection when a required field is only present as a file part" in {
+      multipartForm("firstName" -> "Mike") ~> {
+        formFields("file") { echoComplete }
+      } ~> check { rejection shouldEqual MissingFormFieldRejection("file") }
+    }
+    "extract all text fields with formFieldMap" in {
+      multipartForm("firstName" -> "Mike", "age" -> "42") ~> {
+        formFieldMap { echoComplete }
+      } ~> check { responseAs[String] shouldEqual "TreeMap(age -> 42, firstName -> Mike)" }
+    }
+    "extract repeated multipart fields" in {
+      multipartForm("hobby" -> "cooking", "hobby" -> "reading") ~> {
+        formField("hobby".repeated) { echoComplete }
+      } ~> check { responseAs[String] shouldEqual "List(cooking, reading)" }
+    }
+    "extract several multipart fields over a real server" in {
+      multipartForm("firstName" -> "Mike", "age" -> "42") ~!> {
+        formFields("firstName", "age".as[Int]) { (firstName, age) => complete(firstName + age) }
+      } ~> check { responseAs[String] shouldEqual "Mike42" }
     }
   }
 }

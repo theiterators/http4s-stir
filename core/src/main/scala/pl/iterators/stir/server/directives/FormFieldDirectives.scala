@@ -2,7 +2,7 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.IO
 import cats.implicits._
-import org.http4s.{ EntityDecoder, MediaTypeMismatch, MediaTypeMissing, UrlForm }
+import org.http4s.{ DecodeResult, EntityDecoder, Media, MediaRange, MediaTypeMismatch, MediaTypeMissing, UrlForm }
 import pl.iterators.stir.common._
 import pl.iterators.stir.impl.util._
 import pl.iterators.stir.server._
@@ -41,7 +41,7 @@ trait FormFieldDirectives extends FormFieldDirectivesInstances with ToNameRecept
 
 object FormFieldDirectives {
   private val _formFieldSeq: Directive1[Seq[(String, String)]] = {
-    entity(as[UrlForm]).map { form =>
+    entity(formDecoder).map { form =>
       form.values.toSeq.flatMap { case (k, vs) => vs.map(v => k -> v).toList }
     }
   }
@@ -68,6 +68,34 @@ object FormFieldDirectives {
 
   /** How long a field directive waits for the form body before failing the request with 408 (10 s, as Pekko). */
   private[stir] val StrictFormTimeout: FiniteDuration = 10.seconds
+
+  /**
+   * Decodes a form from either an `application/x-www-form-urlencoded` body or the text parts of a
+   * `multipart/form-data` body (parts with a `filename` are files, not fields; see the upload directives).
+   */
+  private[stir] lazy val formDecoder: EntityDecoder[IO, UrlForm] = new EntityDecoder[IO, UrlForm] {
+    private val urlEncoded = UrlForm.entityDecoder[IO]
+    private val multipart = multipartFormDecoder
+
+    val consumes: Set[MediaRange] = urlEncoded.consumes ++ multipart.consumes
+
+    def decode(media: Media[IO], strict: Boolean): DecodeResult[IO, UrlForm] =
+      if (media.contentType.exists(ct => multipart.matchesMediaType(ct.mediaType))) multipart.decode(media, strict)
+      else
+        urlEncoded.decode(media, strict).leftMap {
+          case MediaTypeMismatch(actual, _) => MediaTypeMismatch(actual, consumes)
+          case MediaTypeMissing(_)          => MediaTypeMissing(consumes)
+          case other                        => other
+        }
+  }
+
+  private def multipartFormDecoder: EntityDecoder[IO, UrlForm] =
+    EntityDecoder.multipart[IO].flatMapR { multipart =>
+      val fields = multipart.parts.filter(_.filename.isEmpty).toList.traverse { part =>
+        part.bodyText.compile.string.map(value => part.name.getOrElse("") -> value)
+      }
+      DecodeResult.success(fields.map(values => UrlForm(values: _*)))
+    }
 
   trait FieldSpec {
     type Out
@@ -152,8 +180,7 @@ object FormFieldDirectives {
       case Failure(x)                               => reject(MalformedFormFieldRejection(fieldName, x.getMessage.nullAsEmpty, Option(x.getCause)))
     }
 
-    private def strictFormUnmarshaller(@unused ctx: RequestContext): SFU =
-      UrlForm.entityDecoder
+    private def strictFormUnmarshaller(@unused ctx: RequestContext): SFU = formDecoder
 
     val stringFromStrictForm: FSFFU[String] = Unmarshaller.identityUnmarshaller
 
