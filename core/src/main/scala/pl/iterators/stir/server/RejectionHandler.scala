@@ -195,10 +195,10 @@ object RejectionHandler {
         case MissingHeaderRejection(headerName) =>
           rejectRequestEntityAndComplete((BadRequest, "Request is missing required HTTP header '" + headerName + '\''))
       }
-//      .handle {
-//        case MissingAttributeRejection(_) =>
-//          rejectRequestEntityAndComplete((InternalServerError, InternalServerError.defaultMessage))
-//      }
+      .handle {
+        case MissingAttributeRejection(_) =>
+          rejectRequestEntityAndComplete((InternalServerError, "Internal Server Error"))
+      }
       .handle {
         case InvalidOriginRejection(allowedOrigins) =>
           rejectRequestEntityAndComplete((Forbidden,

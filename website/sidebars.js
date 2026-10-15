@@ -30,6 +30,7 @@ const sidebars = {
         'directives/directives-websocket',
         'directives/directives-cache-condition',
         'directives/directives-coding',
+        'directives/directives-attribute',
       ],
     },
     'rejection-handling',
