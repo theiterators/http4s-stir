@@ -75,6 +75,20 @@ val route: Route = extractDataBytes { bytes =>
 }
 ```
 
+### extractStrictEntity
+
+Buffers the whole request entity in memory, provides it as a `fs2.Chunk[Byte]` and leaves the request body
+replayable for the inner route. Fails the request with `408 Request Timeout` if the entity does not arrive within
+the timeout, and with `413 Payload Too Large` if it exceeds `maxBytes` (8 MiB when omitted).
+
+```scala
+import scala.concurrent.duration._
+
+val route: Route = extractStrictEntity(1.second) { bytes =>
+  complete(s"Received ${bytes.size} bytes")
+}
+```
+
 ### extractUnmatchedPath
 
 Extracts the yet-unmatched portion of the request path.
@@ -165,6 +179,26 @@ Transforms the `RequestContext` before passing it to the inner route.
 ```scala
 val route: Route = mapRequestContext(ctx => ctx.copy(unmatchedPath = ctx.unmatchedPath)) {
   complete("OK")
+}
+```
+
+### toStrictEntity
+
+Buffers the whole request entity in memory and replaces the request body with the buffered bytes, so directives
+inside it can read the body more than once (for example several `entity(as[T])` calls or `formFields` followed by
+`entity`). Over a real server a request body can be read only once; this directive is the escape hatch. Fails the
+request with `408 Request Timeout` if the entity does not arrive within the timeout, and with `413 Payload Too
+Large` if it exceeds `maxBytes` (8 MiB when omitted).
+
+```scala
+import scala.concurrent.duration._
+
+val route: Route = toStrictEntity(1.second) {
+  entity(as[String]) { first =>
+    entity(as[String]) { second =>
+      complete(s"$first == $second")
+    }
+  }
 }
 ```
 

@@ -11,6 +11,7 @@ import pl.iterators.stir.unmarshalling.Unmarshaller
 
 import scala.annotation.{ tailrec, unused }
 import scala.collection.immutable
+import scala.concurrent.duration._
 import scala.util.{ Failure, Success }
 
 trait FormFieldDirectives extends FormFieldDirectivesInstances with ToNameReceptacleEnhancements {
@@ -65,6 +66,9 @@ object FormFieldDirectives {
 
   private def toMap(seq: Seq[(String, String)]): Map[String, String] = immutable.TreeMap(seq: _*)
 
+  /** How long a field directive waits for the form body before failing the request with 408 (10 s, as Pekko). */
+  private[stir] val StrictFormTimeout: FiniteDuration = 10.seconds
+
   trait FieldSpec {
     type Out
 
@@ -77,7 +81,7 @@ object FormFieldDirectives {
     def apply[T](directive: Directive1[T]): FieldSpec.Aux[T] = new FieldSpec {
       type Out = T
 
-      def get: Directive1[T] = directive
+      def get: Directive1[T] = BasicDirectives.toStrictEntity(StrictFormTimeout).tflatMap(_ => directive)
     }
 
     import Impl._
@@ -152,7 +156,7 @@ object FormFieldDirectives {
     val stringFromStrictForm: FSFFU[String] = Unmarshaller.identityUnmarshaller
 
     def fieldOfForm[T](fieldName: String, fu: Unmarshaller[Option[String], T]): RequestContext => IO[T] = { ctx =>
-      strictFormUnmarshaller(ctx).decode(ctx.request, strict = false).foldF(x => IO.raiseError(x.getCause()),
+      strictFormUnmarshaller(ctx).decode(ctx.request, strict = false).foldF(x => IO.raiseError(x),
         form => fu(form.getFirst(fieldName)))
     }
 
@@ -161,7 +165,7 @@ object FormFieldDirectives {
 
     def repeatedFilter[T](fieldName: String, fu: FSFFU[T]): Directive1[Iterable[T]] =
       extract { ctx =>
-        strictFormUnmarshaller(ctx).decode(ctx.request, strict = false).foldF(x => IO.raiseError(x.getCause()),
+        strictFormUnmarshaller(ctx).decode(ctx.request, strict = false).foldF(x => IO.raiseError(x),
           form => form.get(fieldName).toList.map(fu.apply).parSequence)
       }.flatMap { result =>
         handleFieldResult(fieldName, result)

@@ -1,6 +1,12 @@
 package pl.iterators.stir.server.directives
 
+import cats.effect.IO
 import cats.effect.unsafe.IORuntime
+import fs2.Stream
+import org.http4s.MediaType
+import org.http4s.headers.`Content-Type`
+
+import scala.concurrent.duration._
 import org.http4s.{ Status, UrlForm }
 import pl.iterators.stir.unmarshalling.Unmarshaller._
 import pl.iterators.stir.server._
@@ -324,5 +330,27 @@ class FormFieldDirectivesSpec extends RoutingSpec {
 //
 //      BenchUtils.nanoRace(colliding(), regular()) should be < 3.0 // speed must be in same order of magnitude
 //    }
+  }
+
+  "The 'formFields' extraction directive over a real server" should {
+    "extract several fields from a body that is streamed from the socket" in {
+      Post("/", urlEncodedForm) ~!> {
+        formFields("firstName", "age".as[Int]) { (firstName, age) => complete(firstName + age) }
+      } ~> check { responseAs[String] shouldEqual "Mike42" }
+    }
+    "extract fields from nested formFields directives" in {
+      Post("/", urlEncodedForm) ~!> {
+        formFields("firstName") { firstName =>
+          formFields("age".as[Int]) { age => complete(firstName + age) }
+        }
+      } ~> check { responseAs[String] shouldEqual "Mike42" }
+    }
+    "wait more than a second for a slow form body, as Pekko does" in {
+      val slowBody: Stream[IO, Byte] =
+        Stream.sleep_[IO](2.seconds) ++ Stream.emits("firstName=Mike&age=42".getBytes("UTF-8"))
+      Post("/", slowBody) ~> addHeader(`Content-Type`(MediaType.application.`x-www-form-urlencoded`)) ~!> {
+        formFields("firstName", "age".as[Int]) { (firstName, age) => complete(firstName + age) }
+      } ~> check { responseAs[String] shouldEqual "Mike42" }
+    }
   }
 }
