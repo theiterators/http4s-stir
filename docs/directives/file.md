@@ -77,7 +77,7 @@ File upload directives process multipart form data. They use `FileInfo` to carry
 
 ### fileUpload
 
-Extracts a single multipart file part as a tuple of `FileInfo` and `Stream[IO, Byte]`. The request is rejected with `MissingFormFieldRejection` if no part with the given field name exists, or if the matched part lacks a `filename` or `content-type`. If multiple parts share the same name, only the first is used.
+Extracts a single multipart file part as a tuple of `FileInfo` and `Stream[IO, Byte]`. The request is rejected with `MissingFormFieldRejection` if no part with the given field name exists, or if the matched part lacks a `filename`. A part without `Content-Type` is reported as `application/octet-stream`. If multiple parts share the same name, only the first is used. The whole multipart body is buffered in memory, because the part's stream outlives the decoder; prefer `storeUploadedFile` or `fileUploadAll` for large uploads.
 
 ```scala
 val route: Route = (post & path("upload")) {
@@ -89,7 +89,7 @@ val route: Route = (post & path("upload")) {
 
 ### fileUploadAll
 
-Extracts all multipart file parts with the given field name as a sequence of `(FileInfo, Stream[IO, Byte])` tuples. Files are buffered to temporary files on disk and cleaned up after the stream is consumed.
+Extracts all multipart file parts with the given field name as a sequence of `(FileInfo, Stream[IO, Byte])` tuples. Files are buffered to temporary files on disk and cleaned up after the stream is consumed. Parts above 50 MiB are spooled to a temporary file while the multipart body is decoded, so memory use stays bounded; parts without `Content-Type` are stored as `application/octet-stream`.
 
 ```scala
 val route: Route = (post & path("upload-many")) {
@@ -101,7 +101,7 @@ val route: Route = (post & path("upload-many")) {
 
 ### storeUploadedFile
 
-Streams the bytes of a single multipart file part to disk. The destination file is determined by the provided function. Returns a tuple of `FileInfo` and the destination `File`. If multiple parts share the same name, only the first is used. On write failure, the destination file is deleted.
+Streams the bytes of a single multipart file part to disk. The destination file is determined by the provided function. Returns a tuple of `FileInfo` and the destination `File`. If multiple parts share the same name, only the first is used. On write failure, the destination file is deleted. Parts above 50 MiB are spooled to a temporary file while the multipart body is decoded, so memory use stays bounded; parts without `Content-Type` are stored as `application/octet-stream`.
 
 ```scala
 import java.io.File
@@ -116,7 +116,7 @@ val route: Route = (post & path("upload")) {
 
 ### storeUploadedFiles
 
-Streams all multipart file parts with the given field name to disk. Returns a sequence of `(FileInfo, File)` tuples.
+Streams all multipart file parts with the given field name to disk. Returns a sequence of `(FileInfo, File)` tuples. Parts above 50 MiB are spooled to a temporary file while the multipart body is decoded, so memory use stays bounded; parts without `Content-Type` are stored as `application/octet-stream`.
 
 ```scala
 import java.io.File
