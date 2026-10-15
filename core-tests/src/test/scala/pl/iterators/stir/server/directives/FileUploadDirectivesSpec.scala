@@ -3,7 +3,7 @@ package pl.iterators.stir.server.directives
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import cats.syntax.all._
-import fs2.Stream
+import fs2.{ text, Stream }
 import org.http4s.{ Headers, MediaType, Request, Response }
 import org.http4s.headers.{ `Content-Disposition`, `Content-Type` }
 import org.http4s.multipart.{ Multipart, Multiparts, Part }
@@ -49,7 +49,7 @@ class FileUploadDirectivesSpec extends RoutingSpec {
     }
     "default the content type to application/octet-stream when the part has none" in {
       upload(untypedPart("file", "a.bin", "abc")) ~> fileUpload("file") { case (info, data) =>
-        onSuccess(data.through(fs2.text.utf8.decode).compile.string) { content =>
+        onSuccess(data.through(text.utf8.decode).compile.string) { content =>
           complete(mediaType(info) + ":" + content)
         }
       } ~> check { responseAs[String] shouldEqual "application/octet-stream:abc" }
@@ -65,7 +65,7 @@ class FileUploadDirectivesSpec extends RoutingSpec {
     "stream the first matching part while the inner route runs" in {
       upload(textPart("file", "a.txt", "first"), textPart("file", "b.txt", "second")) ~> fileUploadSpooled("file") {
         case (info, data) =>
-          onSuccess(data.through(fs2.text.utf8.decode).compile.string) { content =>
+          onSuccess(data.through(text.utf8.decode).compile.string) { content =>
             complete(info.fileName + ":" + content)
           }
       } ~> check { responseAs[String] shouldEqual "a.txt:first" }
@@ -87,7 +87,7 @@ class FileUploadDirectivesSpec extends RoutingSpec {
     }
     "stream a part over a real server" in {
       upload(textPart("file", "a.txt", "streamed")) ~!> fileUploadSpooled("file") { case (_, data) =>
-        onSuccess(data.through(fs2.text.utf8.decode).compile.string) { content => complete(content) }
+        onSuccess(data.through(text.utf8.decode).compile.string) { content => complete(content) }
       } ~> check { responseAs[String] shouldEqual "streamed" }
     }
   }
@@ -119,7 +119,7 @@ class FileUploadDirectivesSpec extends RoutingSpec {
       upload(textPart("file", "a.txt", "first"), untypedPart("file", "b.bin", "second")) ~>
       fileUploadAll("file") { files =>
         onSuccess(files.toList.traverse { case (info, data) =>
-          data.through(fs2.text.utf8.decode).compile.string.map(info.fileName + "=" + _)
+          data.through(text.utf8.decode).compile.string.map(info.fileName + "=" + _)
         }) { rendered => complete(rendered.mkString(",")) }
       } ~> check { responseAs[String] shouldEqual "a.txt=first,b.bin=second" }
     }

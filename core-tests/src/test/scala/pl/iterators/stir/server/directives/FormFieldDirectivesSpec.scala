@@ -3,7 +3,7 @@ package pl.iterators.stir.server.directives
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import fs2.Stream
-import org.http4s.{ MediaRange, MediaType, Request, Status, UrlForm }
+import org.http4s.{ Headers, MediaRange, MediaType, Request, Status, UrlForm }
 import org.http4s.headers.`Content-Type`
 import org.http4s.multipart.{ Multipart, Multiparts, Part }
 
@@ -403,7 +403,7 @@ class FormFieldDirectivesSpec extends RoutingSpec {
       } ~> check { responseAs[String] shouldEqual "TreeMap(age -> 42, firstName -> Mike)" }
     }
     "ignore a part without a name" in {
-      val nameless = Part[IO](org.http4s.Headers(`Content-Type`(MediaType.text.plain)),
+      val nameless = Part[IO](Headers(`Content-Type`(MediaType.text.plain)),
         Stream.emits("x".getBytes("UTF-8")).covary[IO])
       val multipart: Multipart[IO] =
         Multiparts.forSync[IO].flatMap(_.multipart(Vector(nameless,

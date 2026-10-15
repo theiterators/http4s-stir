@@ -8,7 +8,7 @@ import org.scalatest.{ Inside, Inspectors }
 import pl.iterators.stir.impl.util._
 
 import java.io.File
-import java.nio.file.{ Files => NioFiles }
+import java.nio.file.{ Files => NioFiles, Paths }
 import java.time.{ LocalDate, ZoneOffset }
 import scala.annotation.unused
 import scala.util.Properties
@@ -29,7 +29,7 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
 //  """
 
   def writeAllText(text: String, file: File) =
-    java.nio.file.Files.write(file.toPath, text.getBytes("UTF-8"))
+    NioFiles.write(file.toPath, text.getBytes("UTF-8"))
 
   "getFromFile" should {
     "reject non-GET requests" in {
@@ -430,7 +430,7 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
 
   "listDirectoryContents" should {
     val base = testRoot.getCanonicalPath
-    NioFiles.createDirectories(java.nio.file.Paths.get(base, "subDirectory", "emptySub"))
+    NioFiles.createDirectories(Paths.get(base, "subDirectory", "emptySub"))
     def eraseDateTime(s: String) = s.replaceAll("""\d\d\d\d-\d\d-\d\d \d\d:\d\d:\d\d""", "xxxx-xx-xx xx:xx:xx")
 
     "properly render a simple directory" in {

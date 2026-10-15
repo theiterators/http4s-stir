@@ -53,7 +53,7 @@ object DirectoryRenderer {
       |""".stripMargin.split('$')
 
   private def escapeHtml(s: String): String = {
-    val sb = new java.lang.StringBuilder(s.length + 16)
+    val sb = new StringBuilder(s.length + 16)
     s.foreach {
       case '&'  => sb.append("&amp;")
       case '<'  => sb.append("&lt;")
@@ -74,14 +74,14 @@ object DirectoryRenderer {
     val (directories, regularFiles) = deduped.partition(_.isDirectory)
     def maxNameLength(entries: Seq[DirectoryListing.Entry]) = if (entries.isEmpty) 0 else entries.map(_.name.length).max
     val maxNameLen = math.max(maxNameLength(directories) + 1, maxNameLength(regularFiles))
-    val sb = new java.lang.StringBuilder
+    val sb = new StringBuilder
     val escapedPath = escapeHtml(path)
     sb.append(template(0)).append(escapedPath).append(template(1)).append(escapedPath).append(template(2))
     if (!isRoot) {
       val secondToLastSlash = path.lastIndexOf('/', path.lastIndexOf('/', path.length - 1) - 1)
       sb.append("<a href=\"").append(escapeHtml(path.substring(0, secondToLastSlash))).append("/\">../</a>\n")
     }
-    def start(name: String): java.lang.StringBuilder = {
+    def start(name: String): StringBuilder = {
       val escapedName = escapeHtml(name)
       sb.append("<a href=\"").append(escapedPath).append(escapedName).append("\">").append(escapedName).append("</a>")
       var padding = maxNameLen - name.length

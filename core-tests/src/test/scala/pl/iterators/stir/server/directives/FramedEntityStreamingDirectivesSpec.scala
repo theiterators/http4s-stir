@@ -3,18 +3,21 @@ package pl.iterators.stir.server.directives
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import fs2.Stream
+import io.circe.parser.parse
 import org.http4s.{ MediaType, Status }
 import org.http4s.headers.`Content-Type`
 import pl.iterators.stir.common.EntityStreamingSupport
 import pl.iterators.stir.server._
 import pl.iterators.stir.unmarshalling.Unmarshaller
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 class FramedEntityStreamingDirectivesSpec extends RoutingSpec {
   override implicit def runtime: IORuntime = IORuntime.global
 
   /** Reads the `a` field of a JSON object such as `{"a":1}`. */
   implicit val aField: Unmarshaller[String, Int] = Unmarshaller.strict[String, Int] { s =>
-    io.circe.parser.parse(s).flatMap(_.hcursor.get[Int]("a")).fold(throw _, identity)
+    parse(s).flatMap(_.hcursor.get[Int]("a")).fold(throw _, identity)
   }
 
   val json = `Content-Type`(MediaType.application.json)
@@ -89,7 +92,7 @@ class FramedEntityStreamingDirectivesSpec extends RoutingSpec {
     }
     "fail a line over the limit before the line ends" in {
       val small = EntityStreamingSupport.csv(maxLineLength = 4)
-      val readPastTheLimit = new java.util.concurrent.atomic.AtomicBoolean(false)
+      val readPastTheLimit = new AtomicBoolean(false)
       val body: Stream[IO, Byte] =
         Stream.emits("abcdefgh".getBytes("UTF-8")).covary[IO] ++
         Stream.exec(IO(readPastTheLimit.set(true))) ++

@@ -5,6 +5,7 @@ import org.http4s.Method._
 import org.http4s.headers.Authorization
 import org.http4s.{ Credentials, EmptyBody, EntityBody, EntityEncoder, Header, Headers, Method, Request, Uri }
 import org.typelevel.ci.CIString
+import pl.iterators.stir.server.directives.MethodDirectives.QUERY
 
 trait RequestBuilding {
   type RequestTransformer = Request[IO] => Request[IO]
@@ -48,7 +49,7 @@ trait RequestBuilding {
   val Delete = new RequestBuilder(DELETE)
   val Options = new RequestBuilder(OPTIONS)
   val Head = new RequestBuilder(HEAD)
-  val Query = new RequestBuilder(pl.iterators.stir.server.directives.MethodDirectives.QUERY)
+  val Query = new RequestBuilder(QUERY)
 
   def addHeader(header: Header.ToRaw): RequestTransformer = _.putHeaders(header)
 
