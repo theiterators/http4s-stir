@@ -431,4 +431,20 @@ class ParameterDirectivesSpec extends AnyFreeSpec with GenericRoutingSpec with I
       }
     }
   }
+
+  "when an unmarshaller fails without a message" - {
+    val silent: Unmarshaller[String, Int] = Unmarshaller.strict[String, Int](_ => throw new RuntimeException())
+
+    "reject with an empty error message instead of null" in {
+      Get("/?x=1") ~> parameter("x".as(silent)) { echoComplete } ~> check {
+        inside(rejection) { case MalformedQueryParamRejection("x", "", None) => }
+      }
+    }
+    "complete with a 400 whose body does not say null" in {
+      Get("/?x=1") ~> Route.seal(parameter("x".as(silent)) { echoComplete }) ~> check {
+        status shouldEqual Status.BadRequest
+        responseAs[String] shouldEqual "The query parameter 'x' was malformed:\n"
+      }
+    }
+  }
 }
