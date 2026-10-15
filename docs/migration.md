@@ -69,4 +69,4 @@ The http4s-stir testkit differs from the Pekko HTTP testkit in the following way
 - **Synchronous execution**: all test assertions run synchronously; there is no async test support.
 - **No chunk/streaming support**: streamed or chunked responses cannot be tested incrementally.
 - **Limited request building**: some minor header convenience methods available in the Pekko HTTP testkit are missing.
-- **WebSocket testing**: the testkit can assert that a route accepts or rejects an upgrade and which subprotocol it selected; it cannot exchange frames.
+- **WebSocket testing**: `isWebSocketUpgrade` and `expectWebSocketUpgradeWithProtocol` work as in Pekko for the handshake decision; the testkit cannot exchange frames.

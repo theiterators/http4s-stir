@@ -6,7 +6,7 @@ import com.comcast.ip4s._
 import org.http4s._
 import org.http4s.ember.client.EmberClientBuilder
 import org.http4s.ember.server._
-import org.http4s.headers.`Content-Type`
+import org.http4s.headers.{ `Content-Type`, Upgrade }
 import org.typelevel.ci.CIString
 import pl.iterators.stir.server._
 
@@ -78,20 +78,22 @@ trait RouteTest extends RequestBuilding with RouteTestResultComponent
     if (r.size == 1) r.head else failTest("Expected a single rejection but got %s (%s)".format(r.size, r))
   }
 
-//  def isWebSocketUpgrade: Boolean =
-//    status == StatusCodes.SwitchingProtocols && header[Upgrade].exists(_.hasWebSocket)
+  /** True when the route answered with a WebSocket upgrade (`101 Switching Protocols` and `Upgrade: websocket`). */
+  def isWebSocketUpgrade: Boolean =
+    status == Status.SwitchingProtocols &&
+    rawResponse.headers.get[Upgrade].exists(_.values.exists(_.name == CIString("websocket")))
 
-//  /**
-//   * Asserts that the received response is a WebSocket upgrade response and the extracts
-//   * the chosen subprotocol and passes it to the handler.
-//   */
-//  def expectWebSocketUpgradeWithProtocol(body: String => Unit): Unit = {
-//    if (!isWebSocketUpgrade) failTest("Response was no WebSocket Upgrade response")
-//    header[`Sec-WebSocket-Protocol`] match {
-//      case Some(`Sec-WebSocket-Protocol`(Seq(protocol))) => body(protocol)
-//      case _                                             => failTest("No WebSocket protocol found in response.")
-//    }
-//  }
+  /**
+   * Asserts that the received response is a WebSocket upgrade response and the extracts
+   * the chosen subprotocol and passes it to the handler.
+   */
+  def expectWebSocketUpgradeWithProtocol(body: String => Unit): Unit = {
+    if (!isWebSocketUpgrade) failTest("Response was no WebSocket Upgrade response")
+    header("Sec-WebSocket-Protocol").map(_.value.trim).filter(_.nonEmpty) match {
+      case Some(protocol) => body(protocol)
+      case None           => failTest("No WebSocket protocol found in response.")
+    }
+  }
 
   /**
    * A dummy that can be used as `~> runRoute` to run the route but without blocking for the result.

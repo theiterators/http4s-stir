@@ -2,7 +2,7 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.IO
 import fs2.{ Pipe, Stream }
-import org.http4s.{ Header, Headers, Request, Response, Status }
+import org.http4s.{ Header, Headers, Protocol, Request, Response, Status }
 import org.http4s.headers.{ Connection, Upgrade }
 import org.http4s.server.websocket.WebSocketBuilder2
 import org.http4s.websocket.WebSocketFrame
@@ -109,7 +109,9 @@ object WebSocketDirectives extends WebSocketDirectives {
    * The response http4s returns from `build` when the server does not perform the handshake itself; with the
    * upgrade already verified it only ever reaches the in-memory testkit, which checks for a 101.
    */
-  private def switchingProtocols(subprotocol: Option[String]): Response[IO] =
-    subprotocol.fold(Response[IO](Status.SwitchingProtocols))(p =>
-      Response[IO](Status.SwitchingProtocols).putHeaders(Header.Raw(SecWebSocketProtocol, p)))
+  private def switchingProtocols(subprotocol: Option[String]): Response[IO] = {
+    val upgrade = Response[IO](Status.SwitchingProtocols)
+      .putHeaders(Upgrade(Protocol(WebSocketProtocolName, None)), Connection(ci"Upgrade"))
+    subprotocol.fold(upgrade)(p => upgrade.putHeaders(Header.Raw(SecWebSocketProtocol, p)))
+  }
 }

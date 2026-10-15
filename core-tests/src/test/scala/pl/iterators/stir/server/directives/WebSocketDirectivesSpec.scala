@@ -108,6 +108,32 @@ class WebSocketDirectivesSpec extends RoutingSpec {
     }
   }
 
+  "the testkit WebSocket helpers" should {
+    "report an accepted upgrade with isWebSocketUpgrade" in {
+      Get("/ws") ~> upgradeHeaders ~> handleWebSocketMessages(ws, echo) ~> check {
+        isWebSocketUpgrade shouldEqual true
+      }
+    }
+    "report a plain response as no upgrade" in {
+      Get("/ws") ~> complete("plain") ~> check { isWebSocketUpgrade shouldEqual false }
+    }
+    "pass the selected protocol to expectWebSocketUpgradeWithProtocol" in {
+      Get("/ws") ~> upgradeHeaders ~> offeringProtocols ~> handleWebSocketMessagesForProtocol(ws, echo, "bar") ~>
+      check {
+        expectWebSocketUpgradeWithProtocol { protocol =>
+          protocol shouldEqual "bar"
+          ()
+        }
+      }
+    }
+    "fail expectWebSocketUpgradeWithProtocol when no protocol was selected" in {
+      Get("/ws") ~> upgradeHeaders ~> handleWebSocketMessages(ws, echo) ~> check {
+        an[org.scalatest.exceptions.TestFailedException] should be thrownBy
+        expectWebSocketUpgradeWithProtocol { _ => () }
+      }
+    }
+  }
+
   "handleWebSocketMessagesForOptionalProtocol" should {
     "accept any upgrade when no protocol is required" in {
       Get("/ws") ~> upgradeHeaders ~> handleWebSocketMessagesForOptionalProtocol(ws, echo, None) ~> check {
