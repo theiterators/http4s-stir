@@ -114,6 +114,8 @@ Head("/path")
 
 Builders that accept an entity require an implicit `EntityEncoder[IO, T]` for the body type.
 
+`Query` builds a request with the `QUERY` method (`MethodDirectives.QUERY`).
+
 A request built with a body (`Post("/", body)`) carries the `Content-Type` and `Content-Length` the body's
 `EntityEncoder` produces, as a real client would send; override with `addHeader`.
 
