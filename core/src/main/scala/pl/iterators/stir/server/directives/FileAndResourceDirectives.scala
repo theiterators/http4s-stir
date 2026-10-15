@@ -1,10 +1,10 @@
 package pl.iterators.stir.server.directives
 
+import cats.data.OptionT
 import cats.effect.IO
 import fs2.io.file.Path
-import org.http4s.Status.{ InternalServerError, NotFound }
 import org.http4s.{ Response, StaticFile, Uri }
-import pl.iterators.stir.server.Route
+import pl.iterators.stir.server.{ Route, RouteResult }
 
 import java.io.File
 
@@ -34,30 +34,21 @@ trait FileAndResourceDirectives {
    */
   def getFromFile(file: File): Route =
     get {
-      if (file.isFile && file.canRead) {
-        extractRequest { request =>
-          complete {
-            StaticFile.fromPath(Path(file.getAbsolutePath), Some(request)).getOrElse(
-              Response[IO](InternalServerError))
-          }
-        }
-      } else reject
+      if (file.isFile && file.canRead)
+        extractRequest { request => serve(StaticFile.fromPath(Path(file.getAbsolutePath), Some(request))) }
+      else reject
     }
 
   /**
    * Completes GET requests with the content of the given class-path resource.
-   * If the resource cannot be found or read the Route rejects the request.
+   * If the resource cannot be found or read the Route rejects the request, so a later alternative can handle it.
    *
    * @group fileandresource
    */
   def getFromResource(resourceName: String): Route =
     if (!resourceName.endsWith("/"))
       get {
-        extractRequest { request =>
-          complete {
-            StaticFile.fromResource(resourceName, Some(request)).getOrElse(Response[IO](NotFound))
-          }
-        }
+        extractRequest { request => serve(StaticFile.fromResource(resourceName, Some(request))) }
       }
     else reject // don't serve the content of resource "directories"
 
@@ -96,6 +87,13 @@ trait FileAndResourceDirectives {
 
 object FileAndResourceDirectives extends FileAndResourceDirectives {
   private def withTrailingSlash(path: String): String = if (path.endsWith("/")) path else path + '/'
+
+  /** Completes with the static content when http4s found it and rejects (with no rejections) otherwise. */
+  private def serve(content: OptionT[IO, Response[IO]]): Route = _ =>
+    content.value.map {
+      case Some(response) => RouteResult.Complete(response)
+      case None           => RouteResult.Rejected(Nil)
+    }
 
   /**
    * Given a base directory and a (Uri) path, returns a path to a location contained in the base directory,
