@@ -1,6 +1,7 @@
 package pl.iterators.stir.server
 
 import org.http4s.{ Challenge, MediaRange, MediaType, Method }
+import org.http4s.headers.Origin
 
 trait Rejection
 
@@ -147,3 +148,15 @@ final case class MalformedFormFieldRejection(fieldName: String, errorMsg: String
  * Signals that the request was rejected because the Uri scheme is unsupported.
  */
 final case class SchemeRejection(supported: String) extends Rejection
+
+/**
+ * Rejection created by the `checkSameOrigin` directive.
+ * Signals that the request was rejected because `Origin` header value is not in the allowed list.
+ */
+final case class InvalidOriginRejection(allowedOrigins: Seq[Origin.Host]) extends Rejection
+
+/**
+ * Rejection created by unmarshallers and the `requestEntityPresent` directive.
+ * Signals that the request was rejected because an entity was expected but not supplied.
+ */
+case object RequestEntityExpectedRejection extends Rejection

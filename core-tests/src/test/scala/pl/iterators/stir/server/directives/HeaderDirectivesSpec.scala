@@ -2,7 +2,7 @@ package pl.iterators.stir.server.directives
 
 import cats.data.NonEmptyList
 import cats.effect.unsafe.IORuntime
-import org.http4s.{ Header, Uri }
+import org.http4s.{ Header, Status, Uri }
 import org.http4s.headers.Origin.HostList
 import org.http4s.headers.{ `User-Agent`, Connection, Origin }
 import org.scalatest.Inside
@@ -231,6 +231,33 @@ class HeaderDirectivesSpec extends RoutingSpec with Inside {
 //      classTagMagnet.headerName shouldEqual "X-Custom-Header"
 //    }
 //  }
+
+  "The checkSameOrigin directive" should {
+    val correctOrigin = Origin.Host(Uri.Scheme.http, Uri.RegName("localhost"), Some(8080))
+    val route = checkSameOrigin(correctOrigin) { complete("Result") }
+
+    "pass if the Origin header is in the allowed list" in {
+      Get("abc") ~> addHeader(Origin.HostList(NonEmptyList.one(correctOrigin)): Origin) ~> route ~> check {
+        responseAs[String] shouldEqual "Result"
+      }
+    }
+    "reject with MissingHeaderRejection if the Origin header is absent" in {
+      Get("abc") ~> route ~> check { rejection shouldEqual MissingHeaderRejection("Origin") }
+    }
+    "reject with InvalidOriginRejection if the Origin header is not allowed" in {
+      val other = Origin.Host(Uri.Scheme.http, Uri.RegName("invalid.com"), None)
+      Get("abc") ~> addHeader(Origin.HostList(NonEmptyList.one(other)): Origin) ~> route ~> check {
+        rejection shouldEqual InvalidOriginRejection(Seq(correctOrigin))
+      }
+    }
+    "complete with 403 when sealed and the origin is not allowed" in {
+      val other = Origin.Host(Uri.Scheme.http, Uri.RegName("invalid.com"), None)
+      Get("abc") ~> addHeader(Origin.HostList(NonEmptyList.one(other)): Origin) ~> Route.seal(route) ~> check {
+        status shouldEqual Status.Forbidden
+        responseAs[String] shouldEqual "Allowed `Origin` header values: http://localhost:8080"
+      }
+    }
+  }
 }
 
 //object HeaderDirectivesSpec {

@@ -4,6 +4,7 @@ import cats.data.OptionT
 import cats.effect.IO
 import fs2.io.file.Path
 import org.http4s.{ Response, StaticFile, Uri }
+import org.http4s.headers.`Content-Type`
 import pl.iterators.stir.server.{ Route, RouteResult }
 
 import java.io.{ File, IOException }
@@ -27,15 +28,36 @@ trait FileAndResourceDirectives {
   def getFromFile(fileName: String): Route = getFromFile(new File(fileName))
 
   /**
+   * Completes GET requests with the content of the given file, served with the given content type instead of the
+   * one derived from the file name. If the file cannot be found or read the request is rejected.
+   *
+   * @group fileandresource
+   */
+  def getFromFile(fileName: String, contentType: `Content-Type`): Route = getFromFile(new File(fileName), contentType)
+
+  /**
    * Completes GET requests with the content of the given file.
    * If the file cannot be found or read the request is rejected.
    *
    * @group fileandresource
    */
-  def getFromFile(file: File): Route =
+  def getFromFile(file: File): Route = serveFile(file, None)
+
+  /**
+   * Completes GET requests with the content of the given file, served with the given content type instead of the
+   * one derived from the file name. If the file cannot be found or read the request is rejected.
+   *
+   * @group fileandresource
+   */
+  def getFromFile(file: File, contentType: `Content-Type`): Route = serveFile(file, Some(contentType))
+
+  private def serveFile(file: File, contentType: Option[`Content-Type`]): Route =
     get {
       if (file.isFile && file.canRead)
-        extractRequest { request => serve(StaticFile.fromPath(Path(file.getAbsolutePath), Some(request))) }
+        extractRequest { request =>
+          serve(StaticFile.fromPath(Path(file.getAbsolutePath), Some(request)).map(response =>
+            contentType.fold(response)(response.withContentType)))
+        }
       else reject
     }
 

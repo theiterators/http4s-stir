@@ -1,6 +1,7 @@
 package pl.iterators.stir.server.directives
 
 import org.http4s.Header
+import org.http4s.headers.Origin
 import org.typelevel.ci.CIString
 import pl.iterators.stir.impl.util._
 import pl.iterators.stir.server._
@@ -12,20 +13,20 @@ trait HeaderDirectives {
   import BasicDirectives._
   import RouteDirectives._
 
-//  /**
-//   * Checks that request comes from the same origin. Extracts the [[Origin]] header value and verifies that
-//   * allowed range contains the obtained value. In the case of absent of the [[Origin]] header rejects
-//   * with [[MissingHeaderRejection]]. If the origin value is not in the allowed range
-//   * rejects with an [[InvalidOriginRejection]] and [[StatusCodes.Forbidden]] status.
-//   *
-//   * @group header
-//   */
-//  def checkSameOrigin(allowed: HttpOriginRange.Default): Directive0 = {
-//    headerValueByType(Origin).flatMap { origin =>
-//      if (origin.origins.exists(allowed.matches)) pass
-//      else reject(InvalidOriginRejection(allowed.origins))
-//    }
-//  }
+  /**
+   * Checks that the request comes from one of the given origins. Extracts the [[Origin]] header value and verifies
+   * that it is in the allowed list. If the header is absent rejects with a [[MissingHeaderRejection]]; if the
+   * origin is not allowed rejects with an [[InvalidOriginRejection]] (`403 Forbidden` when sealed).
+   *
+   * @group header
+   */
+  def checkSameOrigin(first: Origin.Host, more: Origin.Host*): Directive0 = {
+    val allowed = first +: more
+    headerValueByType[Origin].flatMap {
+      case Origin.HostList(hosts) if hosts.exists(allowed.contains) => pass
+      case _                                                        => reject(InvalidOriginRejection(allowed))
+    }
+  }
 
   /**
    * Extracts an HTTP header value using the given function. If the function result is undefined for all headers the

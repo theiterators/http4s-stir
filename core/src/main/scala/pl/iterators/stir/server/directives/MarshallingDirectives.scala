@@ -77,10 +77,11 @@ object MarshallingDirectives extends MarshallingDirectives {
    */
   private[stir] def decodeEntity[T](request: Request[IO], decoder: EntityDecoder[IO, T]): IO[Either[Rejection, T]] =
     decoder.decode(request, strict = request.contentType.isDefined).value.attempt.flatMap {
-      case Right(Right(value))          => IO.pure(Right(value))
-      case Right(Left(failure))         => IO.pure(Left(rejectionFor(failure)))
-      case Left(failure: DecodeFailure) => IO.pure(Left(rejectionFor(failure)))
-      case Left(error)                  => IO.raiseError(error)
+      case Right(Right(value))                => IO.pure(Right(value))
+      case Right(Left(failure))               => IO.pure(Left(rejectionFor(failure)))
+      case Left(failure: DecodeFailure)       => IO.pure(Left(rejectionFor(failure)))
+      case Left(e: EntityStreamSizeException) => IO.pure(Left(MalformedRequestContentRejection(e.getMessage, e)))
+      case Left(error)                        => IO.raiseError(error)
     }
 
   private[stir] def rejectionFor(failure: DecodeFailure): Rejection = failure match {

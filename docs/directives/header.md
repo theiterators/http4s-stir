@@ -134,3 +134,20 @@ val route: Route = path("info") {
   }
 }
 ```
+
+## checkSameOrigin
+
+Checks that the request's `Origin` header names one of the given origins. Rejects with a
+`MissingHeaderRejection` when the header is absent and with an `InvalidOriginRejection` (403 when sealed) when
+the origin is not allowed.
+
+```scala
+import org.http4s.Uri
+import org.http4s.headers.Origin
+
+val allowed = Origin.Host(Uri.Scheme.https, Uri.RegName("example.com"), None)
+
+val route: Route = checkSameOrigin(allowed) {
+  complete("same origin")
+}
+```
