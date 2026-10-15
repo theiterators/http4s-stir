@@ -49,6 +49,20 @@ The following directive categories and individual directives are **not available
 - `withPrecompressedMediaTypeSupport`
 - `extractRequestTimeout` / `withRequestTimeoutResponse`
 
+## Behaviour changes in 0.7
+
+- `EntityRejection` is gone. `entity(as[T])` rejects an unsupported `Content-Type` with
+  `UnsupportedRequestContentTypeRejection` (415), an unparseable body with `MalformedRequestContentRejection`
+  (400) and an `IllegalArgumentException` from the decoder with `ValidationRejection` (400).
+- `as[String]` accepts every content type, through an `EntityDecoder[IO, String]` the directives bring into
+  scope. A spec that mixes in `Directives` decodes `responseAs[String]` with it too; code that defines its own
+  `EntityDecoder[IO, String]` next to the directives must hide one of the two.
+- `getFromResource` and `getFromFile` reject when nothing is found instead of completing 404 or 500.
+- `authenticateBasic*` and `authenticateOAuth2*` treat credentials of another scheme as missing, so
+  `.optional` and `withAnonymousUser` apply.
+- The testkit builds request bodies with `withEntity`, so requests carry `Content-Type` and `Content-Length`.
+- `fileUpload` and friends no longer require a part `Content-Type`; a missing one is `application/octet-stream`.
+
 ## Testkit differences
 
 The http4s-stir testkit differs from the Pekko HTTP testkit in the following ways:

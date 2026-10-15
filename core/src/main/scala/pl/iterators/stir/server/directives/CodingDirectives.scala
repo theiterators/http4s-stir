@@ -161,6 +161,7 @@ object CodingDirectives extends CodingDirectives {
 
   private def isCompressible(response: Response[IO]): Boolean =
     response.status.isEntityAllowed &&
+    !MiscDirectives.isKnownEmpty(response) &&
     response.headers.get[`Content-Encoding`].isEmpty &&
     response.contentType.forall(_.mediaType.compressible)
 

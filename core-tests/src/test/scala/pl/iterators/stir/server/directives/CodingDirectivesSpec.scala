@@ -71,6 +71,12 @@ class CodingDirectivesSpec extends RoutingSpec {
         status shouldEqual Status.NotAcceptable
       }
     }
+    "not encode a response without entity" in {
+      Get() ~> addHeader(`Accept-Encoding`(ContentCoding.gzip)) ~> encodeResponse(complete(Status.Ok)) ~> check {
+        header[`Content-Encoding`] shouldEqual None
+        responseAs[String] shouldEqual ""
+      }
+    }
     "not encode a response that is already encoded" in {
       val preEncoded = mapResponse(_.putHeaders(`Content-Encoding`(ContentCoding.gzip))) { complete("raw") }
       Get() ~> addHeader(`Accept-Encoding`(ContentCoding.gzip)) ~> encodeResponse(preEncoded) ~> check {
