@@ -84,7 +84,7 @@ final class WSProbe private (
   private[testkit] def connect(handler: WebSocketHandler): IO[Unit] = {
     val incoming = Stream.fromQueueNoneTerminated(toHandler)
     val run = handler match {
-      case WebSocketHandler.Combined(pipe) => incoming.through(pipe).enqueueNoneTerminated(fromHandler).compile.drain
+      case WebSocketHandler.Combined(pipe)          => incoming.through(pipe).enqueueNoneTerminated(fromHandler).compile.drain
       case WebSocketHandler.Separate(send, receive) =>
         send.enqueueNoneTerminated(fromHandler).compile.drain.both(incoming.through(receive).compile.drain).void
     }
@@ -93,9 +93,9 @@ final class WSProbe private (
 
   private def next(within: FiniteDuration): Either[TimeoutException, Option[WebSocketFrame]] =
     fromHandler.take.timeout(within).attempt.unsafeRunSync() match {
-      case Right(frame)                 => Right(frame)
+      case Right(frame)                     => Right(frame)
       case Left(timedOut: TimeoutException) => Left(timedOut)
-      case Left(error)                  => throw error
+      case Left(error)                      => throw error
     }
 
   /** Collects the continuation frames of a fragmented message. */
