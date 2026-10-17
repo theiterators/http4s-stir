@@ -131,11 +131,13 @@ instead. Other differences that remain:
   of the text. Error responses (4xx, 5xx: `complete(Status.NotFound, "not found")`) are sent whatever the client
   accepts, as Pekko sends them through an opaque fallback, and exception and rejection handlers are exempt. To keep the old behaviour for a
   route, wrap it in `mapRequestContext(_.withAcceptAll)`; see "Content negotiation" in the marshalling directives.
-- A request body that a route reads partway (it fails mid-stream, or a reader stops early) cannot be read again: under
-  `toHttpApp` and the testkit a later read, typically by an alternative after a rejection, fails at once with an
-  `IllegalStateException` ("The request entity was read partway before ...") instead of waiting on the connection
-  until the idle timeout, as Pekko fails the second materialization of a streamed entity. A body read to the end is
-  readable again as before; `toHttpRoutes` hands the next routes the request as received and is not covered.
+- Under `toHttpApp` and the testkit a request body that cannot be handed out again fails a later read at once with an
+  `IllegalStateException` ("The request entity was read before ...") instead of waiting on the connection until the
+  idle timeout, as Pekko fails the second materialization of a streamed entity: a chunked or length-less body can be
+  read once, and a body of known length cannot be read again after a read that stopped partway (it failed
+  mid-stream, or the reader stopped before asking for the end). A body of known length read to its end is readable
+  again as before. This applies to in-memory test bodies too (a body built with `withBodyStream` has no length, so it
+  can be read once); `toHttpRoutes` hands the next routes the request as received and is not covered.
 
 ## Testkit differences
 
