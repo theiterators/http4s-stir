@@ -3,7 +3,7 @@ package pl.iterators.stir.server
 import cats.effect.IO
 import org.http4s.{ Header, Headers, MediaRange, MediaType, Response }
 import org.http4s.Status._
-import org.http4s.headers.{ `WWW-Authenticate`, Allow }
+import org.http4s.headers.{ `Content-Type`, `WWW-Authenticate`, Allow }
 import org.typelevel.ci._
 import pl.iterators.stir.marshalling.ToResponseMarshallable
 import pl.iterators.stir.server.directives.BasicDirectives
@@ -249,11 +249,12 @@ object RejectionHandler {
         val authenticateHeaders = Headers(rejections.map(r => `WWW-Authenticate`(r.challenge)))
         rejectRequestEntityAndComplete((Unauthorized, authenticateHeaders, rejectionMessage))
       }
-//      .handleAll[UnacceptedResponseContentTypeRejection] { rejections =>
-//        val supported = rejections.flatMap(_.supported)
-//        val msg = supported.map(_.format).mkString("Resource representation is only available with these types:\n", "\n", "")
-//        rejectRequestEntityAndComplete((NotAcceptable, msg))
-//      }
+      .handleAll[UnacceptedResponseContentTypeRejection] { rejections =>
+        val supported = rejections.flatMap(_.supported).distinct
+        val msg = supported.map(`Content-Type`.headerInstance.value)
+          .mkString("Resource representation is only available with these types:\n", "\n", "")
+        rejectRequestEntityAndComplete((NotAcceptable, msg))
+      }
       .handleAll[UnacceptedResponseEncodingRejection] { rejections =>
         val supported = rejections.flatMap(_.supported).distinct
         rejectRequestEntityAndComplete((NotAcceptable,

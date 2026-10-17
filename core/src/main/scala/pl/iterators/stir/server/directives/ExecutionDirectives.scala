@@ -20,8 +20,9 @@ trait ExecutionDirectives {
    */
   def handleExceptions(handler: ExceptionHandler): Directive0 =
     Directive { innerRouteBuilder => ctx =>
+      // the handler's response must reach the client whatever its Accept header says (Pekko: withAcceptAll)
       def handleException: PartialFunction[Throwable, IO[RouteResult]] =
-        handler.andThen(_(ctx))
+        handler.andThen(_(ctx.withAcceptAll))
       try innerRouteBuilder(())(ctx).recoverWith(handleException)
       catch {
         case NonFatal(e) =>
@@ -43,8 +44,10 @@ trait ExecutionDirectives {
           : IO[RouteResult] =
         if (iterationsLeft > 0) {
           handler(rejections) match {
-            case Some(route) => recoverRejectionsWith(handle(_, originalRejections, iterationsLeft - 1))(route)(ctx)
-            case None        => IO.pure(RouteResult.Rejected(rejections))
+            case Some(route) =>
+              // the handler's response must reach the client whatever its Accept header says (Pekko: withAcceptAll)
+              recoverRejectionsWith(handle(_, originalRejections, iterationsLeft - 1))(route)(ctx.withAcceptAll)
+            case None => IO.pure(RouteResult.Rejected(rejections))
           }
         } else
           sys.error(s"Rejection handler still produced new rejections after $maxIterations iterations. " +

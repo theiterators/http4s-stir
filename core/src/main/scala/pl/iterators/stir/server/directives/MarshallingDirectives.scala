@@ -60,6 +60,20 @@ trait MarshallingDirectives {
   def instanceOf[T](implicit m: ToResponseMarshaller[T]): ToResponseMarshaller[T] = m
 
   /**
+   * Uses the marshaller for the given type to produce a completion function that is passed to its inner route.
+   * You can use it to decouple the marshaller resolution from the completion of the request, as Pekko's
+   * `completeWith`. The completion function may be called from any thread; the first call completes the request
+   * and later calls are ignored (Pekko's `Promise` throws on a second call). The request never completes when the
+   * function is never called.
+   *
+   * @group marshalling
+   */
+  def completeWith[T](marshaller: ToResponseMarshaller[T])(inner: (T => Unit) => Unit): Route = {
+    implicit val m: ToResponseMarshaller[T] = marshaller
+    complete(IO.async_[T](callback => inner(value => callback(Right(value)))))
+  }
+
+  /**
    * Completes the request using the given function. The input to the function is produced with the in-scope
    * entity unmarshaller and the result value of the function is marshalled with the in-scope marshaller.
    *

@@ -52,9 +52,9 @@ trait FramedEntityStreamingDirectives extends MarshallingDirectives {
    */
   implicit def streamToResponseMarshaller[T](implicit encoder: EntityEncoder[IO, T],
       support: EntityStreamingSupport): ToResponseMarshaller[Stream[IO, T]] =
-    (stream: Stream[IO, T]) =>
+    ToResponseMarshaller.negotiated((stream: Stream[IO, T]) =>
       IO.pure(Response[IO]().withContentType(support.contentType).withBodyStream(
-        stream.evalMap(element => encoder.toEntity(element).body.compile.to(Chunk)).through(support.framingRenderer)))
+        stream.evalMap(element => encoder.toEntity(element).body.compile.to(Chunk)).through(support.framingRenderer))))
 }
 
 object FramedEntityStreamingDirectives extends FramedEntityStreamingDirectives

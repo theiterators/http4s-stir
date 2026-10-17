@@ -116,6 +116,52 @@ complete(Status.NoContent)
 complete(IO.pure("Async result"))
 ```
 
+## Content negotiation
+
+`complete` negotiates the produced `Content-Type` against the request's `Accept` header the way Pekko's marshallers
+do: without an `Accept` header everything is acceptable; otherwise the most specific matching media range decides, a
+quality of `0` meaning "not acceptable". A representation the client does not accept is rejected with an
+`UnacceptedResponseContentTypeRejection` (406 when sealed, listing the types the route can produce), so a later
+alternative that produces an accepted type can still complete the request:
+
+```scala
+val route: Route = complete(user) ~ complete(user.toString) // JSON, or plain text for `Accept: text/plain`
+```
+
+Only the marshallers built on an `EntityEncoder` negotiate (`complete(value)`, `complete(status, value)`,
+`complete(status, headers, value)`, `IO`s of those, streams); an explicit `Response[IO]` or a bare `Status` is sent as
+it is. A custom `ToResponseMarshaller` is opaque unless it is built with `ToResponseMarshaller.negotiated(...)` or
+delegates to a negotiating one: the mark travels with the produced response. A range with parameters
+(`application/json;version=2`) matches only a type that carries them, except a `charset` parameter, which is ignored
+as Pekko ignores it; `Accept-Charset` is not negotiated, as http4s encoders have a fixed charset. Negotiation happens
+after the value is computed, so `complete(dbCall)` runs the call before rejecting, like Pekko's `Future` marshaller.
+
+Exception and rejection handlers run with `RequestContext.withAcceptAll` (Pekko's name), so their responses always
+reach the client. The handler still sees the request's `Accept` header and can choose a representation by it; its
+response is never rejected, where Pekko appends `*/*;q=MIN` to the header and a `q=0` range can still reject the
+handler's response. This is a behaviour change in 0.7 for clients that send a restrictive `Accept`
+(`Accept: application/json` to a route answering `complete(Status.NotFound, "not found")` now gets a 406); to keep the
+old "always render" behaviour for a route or a whole API, run it with every representation acceptable:
+
+```scala
+val legacy: Route = mapRequestContext(_.withAcceptAll) {
+  complete(Status.NotFound, "not found") // sent whatever `Accept` says
+}
+```
+
+## completeWith
+
+Uses the marshaller for the given type to produce a completion function that is passed to the inner block, as Pekko's
+`completeWith`. The function may be called from any thread; the first call completes the request and later calls are
+ignored (Pekko throws on a second call), and the request never completes when it is not called at all. An exception
+thrown by the block reaches `handleExceptions`:
+
+```scala
+val route: Route = completeWith(instanceOf[String]) { send =>
+  send("done")
+}
+```
+
 ## ToResponseMarshallable
 
 `ToResponseMarshallable` is a wrapper that pairs a value with its `ToResponseMarshaller` instance. The `complete` directive accepts `ToResponseMarshallable`, and any type `T` with a `ToResponseMarshaller[T]` in scope is implicitly converted to `ToResponseMarshallable`.
