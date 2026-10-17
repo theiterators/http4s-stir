@@ -178,13 +178,12 @@ trait RouteTest extends RequestBuilding with WSTestRequestBuilding with RouteTes
 
           val routeTestResult = new RouteTestResult(timeout)
           val effectiveRequest = request
-          val ctx = RequestContext(effectiveRequest)
 
           val sealedExceptionHandler = ExceptionHandler.seal(testExceptionHandler)()
 
           val semiSealedRoute = // sealed for exceptions but not for rejections
             Directives.handleExceptions(sealedExceptionHandler)(route)
-          val deferrableRouteResult = semiSealedRoute(ctx).flatTap {
+          val deferrableRouteResult = RequestContext.forRequest(effectiveRequest).flatMap(semiSealedRoute).flatTap {
             case RouteResult.Complete(response) => connectWebSocketProbe(effectiveRequest, response)
             case _                              => IO.unit
           }

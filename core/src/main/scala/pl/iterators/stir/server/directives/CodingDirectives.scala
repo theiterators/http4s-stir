@@ -160,8 +160,8 @@ object CodingDirectives extends CodingDirectives {
 
   /**
    * Passes requests known to carry no body: `Content-Length: 0`, or an HTTP/1.x request with neither a length nor
-   * chunking (RFC 7230 3.3.3). Unlike `requestEntityEmpty`, a length-less HTTP/2 body is not assumed empty here,
-   * because skipping the decoder would hand compressed bytes to the route.
+   * chunking (RFC 7230 3.3.3). A length-less HTTP/2 body is not taken as empty here (`requestEntityEmpty` reads its
+   * first chunk to find out), because skipping the decoder would hand compressed bytes to the route.
    */
   private val knownEmptyRequest: Directive0 =
     extract { ctx =>

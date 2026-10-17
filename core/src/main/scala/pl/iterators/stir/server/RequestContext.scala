@@ -61,6 +61,10 @@ object RequestContext {
   def apply(request: Request[IO]): RequestContext =
     RequestContext(request, request.pathInfo)
 
+  /** The context a server or the testkit starts routing with (see `MiscDirectives.prepare`). */
+  private[stir] def forRequest(request: Request[IO]): IO[RequestContext] =
+    directives.MiscDirectives.prepare(request).map(RequestContext(_))
+
   /** Set on the request by `withAcceptAll`: responses completed with it are not negotiated. */
   private[stir] val AcceptAllKey: Key[Unit] = Key.newKey[SyncIO, Unit].unsafeRunSync()
 }
