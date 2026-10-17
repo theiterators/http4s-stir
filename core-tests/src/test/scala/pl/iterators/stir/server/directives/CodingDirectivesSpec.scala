@@ -209,6 +209,18 @@ class CodingDirectivesSpec extends RoutingSpec with Inside {
     "send a gzipped chunk without waiting for the rest of the stream" in {
       firstBytes(ContentCoding.gzip, Compression[IO].gunzip().andThen(_.flatMap(_.content))) shouldEqual "hello"
     }
+    "send all of a large chunk without waiting for the rest of the stream" in {
+      // a chunk whose compressed form exceeds the deflater's buffer is still flushed whole
+      val random = new scala.util.Random(7)
+      val big = Array.fill(60000)(('!' + random.nextInt(90)).toByte)
+      val slow = Stream.chunk(fs2.Chunk.array(big)) ++ Stream.sleep_[IO](10.seconds) ++ Stream.emit('!'.toByte)
+      Get() ~> addHeader(`Accept-Encoding`(ContentCoding.gzip)) ~> encodeResponseWith(ContentCoding.gzip) {
+        complete(Response[IO]().withBodyStream(slow).withContentType(`Content-Type`(MediaType.text.plain)))
+      } ~> check {
+        chunksStream.flatMap(Stream.chunk).through(Compression[IO].gunzip()).flatMap(_.content).take(60000L)
+          .compile.count.timeout(3.seconds).unsafeRunSync() shouldEqual 60000L
+      }
+    }
     "send a deflated chunk without waiting for the rest of the stream" in {
       firstBytes(ContentCoding.deflate,
         Compression[IO].inflate(InflateParams(header = ZLibParams.Header.ZLIB))) shouldEqual
