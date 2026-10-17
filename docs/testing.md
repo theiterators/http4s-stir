@@ -71,6 +71,18 @@ Get("/hello") ~!> route ~> check {
 }
 ```
 
+## Timeouts
+
+`~>` and `~!>` wait at most one second for the route to complete or reject, and reading the response body in
+`response`, `responseAs`, `chunks` or `trailer` is bounded the same way (Pekko's `pekko.http.testkit.routes.timeout`).
+A route that hangs fails the test with "Request was neither completed nor rejected within 1 second" instead of
+hanging the suite, and an endless body fails with "Response entity was not read within 1 second". Declare an implicit
+`RouteTestTimeout` in the suite to change the bound:
+
+```scala
+implicit val routeTestTimeout: RouteTestTimeout = RouteTestTimeout(5.seconds)
+```
+
 ## The `check` Block
 
 Inside a `check { }` block, the following members are available for assertions:

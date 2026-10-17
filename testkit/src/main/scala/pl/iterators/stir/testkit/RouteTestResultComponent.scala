@@ -6,6 +6,8 @@ import fs2.Stream
 import org.http4s.{ EntityBody, Response }
 import pl.iterators.stir.server.{ Rejection, RejectionHandler, RouteResult }
 
+import scala.concurrent.TimeoutException
+
 trait RouteTestResultComponent {
 
   def failTest(msg: String): Nothing
@@ -13,9 +15,14 @@ trait RouteTestResultComponent {
   /**
    * A receptacle for the response or rejections created by a route.
    */
-  class RouteTestResult() {
+  class RouteTestResult(timeout: RouteTestTimeout) {
     private[this] var result: Option[Either[Seq[Rejection], Response[IO]]] = None
-//    private[this] val latch = new CountDownLatch(1)
+
+    /** Runs `io`, failing the test with `what` + " within <timeout>" when it does not finish in time. */
+    private[testkit] def awaitWithinTimeout[A](io: IO[A], what: String)(implicit runtime: IORuntime): A =
+      io.timeout(timeout.duration).handleErrorWith {
+        case _: TimeoutException => IO(failTest(what + " within " + timeout.duration))
+      }.unsafeRunSync()
 
     def handled: Boolean = synchronized { result.isDefined && result.get.isRight }
 
@@ -81,11 +88,10 @@ trait RouteTestResultComponent {
 //    }
 
     private[this] lazy val entityRecreator: IORuntime => EntityBody[IO] = implicit runtime =>
-      rawResponse.body.compile.toVector.map { bytes =>
-        Stream.emits(bytes): Stream[IO, Byte]
-      }.unsafeRunSync()
+      awaitWithinTimeout(rawResponse.body.compile.toVector.map(bytes => Stream.emits(bytes): Stream[IO, Byte]),
+        "Response entity was not read")
 
     private def failNeitherCompletedNorRejected(): Nothing =
-      failTest("Request was neither completed nor rejected" /*within " + timeout */ )
+      failTest("Request was neither completed nor rejected within " + timeout.duration)
   }
 }

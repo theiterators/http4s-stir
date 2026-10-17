@@ -41,7 +41,7 @@ trait RouteTest extends RequestBuilding with RouteTestResultComponent
    * The chunks of the response body as the route produced them (one `fs2.Chunk` per emitted chunk). Consumes the
    * raw body: for a one-shot body use either `chunks` / `chunksStream` or `response` / `responseAs`, not both.
    */
-  def chunks: Seq[Chunk[Byte]] = rawResponse.body.chunks.compile.toList.unsafeRunSync()
+  def chunks: Seq[Chunk[Byte]] = result.awaitWithinTimeout(rawResponse.body.chunks.compile.toList, "Response chunks")
 
   /** The response body as a stream of chunks; see `chunks` for the consumption caveat. */
   def chunksStream: Stream[IO, Chunk[Byte]] = rawResponse.body.chunks
@@ -144,7 +144,8 @@ trait RouteTest extends RequestBuilding with RouteTestResultComponent
       type Out = Request[IO]
       def apply(request: Request[IO], f: Request[IO] => Request[IO]) = f(request)
     }
-    implicit def injectIntoRoute: TildeArrow[RequestContext, IO[RouteResult]] { type Out = RouteTestResult } =
+    implicit def injectIntoRoute(implicit timeout: RouteTestTimeout)
+        : TildeArrow[RequestContext, IO[RouteResult]] { type Out = RouteTestResult } =
       new TildeArrow[RequestContext, IO[RouteResult]] {
         type Out = RouteTestResult
         def apply(request: Request[IO], route: Route): Out = {
@@ -157,7 +158,7 @@ trait RouteTest extends RequestBuilding with RouteTestResultComponent
 //          val routingSettings = RoutingSettings(system)
 //          val routingLog = RoutingLog(system.classicSystem.log)
 
-          val routeTestResult = new RouteTestResult()
+          val routeTestResult = new RouteTestResult(timeout)
           val effectiveRequest = request
           val ctx = RequestContext(effectiveRequest)
 
@@ -166,7 +167,8 @@ trait RouteTest extends RequestBuilding with RouteTestResultComponent
           val semiSealedRoute = // sealed for exceptions but not for rejections
             Directives.handleExceptions(sealedExceptionHandler)(route)
           val deferrableRouteResult = semiSealedRoute(ctx)
-          deferrableRouteResult.map(routeTestResult.handleResult).unsafeRunSync()
+          routeTestResult.awaitWithinTimeout(deferrableRouteResult.map(routeTestResult.handleResult),
+            "Request was neither completed nor rejected")
           routeTestResult
         }
       }
@@ -178,13 +180,15 @@ trait RouteTest extends RequestBuilding with RouteTestResultComponent
   }
 
   object TildeBangArrow {
-    implicit def injectIntoRoute: TildeBangArrow[RequestContext, IO[RouteResult]] { type Out = RouteTestResult } =
+    implicit def injectIntoRoute(implicit timeout: RouteTestTimeout)
+        : TildeBangArrow[RequestContext, IO[RouteResult]] { type Out = RouteTestResult } =
       new TildeBangArrow[RequestContext, IO[RouteResult]] {
         type Out = RouteTestResult
         def apply(request: Request[IO], route: Route): Out = {
-          val routeTestResult = new RouteTestResult()
-          val responseF = RouteTest.runRouteClientServer(request, route).unsafeRunSync()
-          routeTestResult.handleResponse(responseF)
+          val routeTestResult = new RouteTestResult(timeout)
+          val response = routeTestResult.awaitWithinTimeout(RouteTest.runRouteClientServer(request, route),
+            "Request was neither completed nor rejected")
+          routeTestResult.handleResponse(response)
           routeTestResult
         }
       }
