@@ -46,6 +46,8 @@ instead. Other differences that remain:
 - The resource directives (`getFromResource`, `getFromResourceDirectory`) only work on the JVM: on Scala Native and
   Scala.js an application using them fails to link (no `java.net.URL`; Native's class loader has only
   `getResourceAsStream`).
+- `HeaderMagnet` and `ModeledCustomHeader` are not ported: `headerValueByType[T]` and `optionalHeaderValueByType[T]`
+  use http4s' `Header[T, _]` type class; define a custom header with `Header.create`.
 - `complete(status)` and `complete((status, headers))` for a status that allows an entity send an empty body, and so
   does the default exception handler's 500; Pekko sends the status's default message as `text/plain` (for example
   "The requested resource could not be found." for 404, "There was an internal server error." for 500).
@@ -127,6 +129,9 @@ instead. Other differences that remain:
   requests (206, 416) as Pekko does.
 - `getFromResource` rejects a directory entry inside a jar instead of serving it as an empty body.
 - `logRequestResultWith(show)` is new; a `show` that fails fails the request, as in Pekko.
+- `headerValueByType[T]` rejects with `MissingHeaderRejection` naming the header as its http4s `Header` instance does
+  (`X-Custom-Header`), as Pekko names a modeled custom header; it used the Scala class name (`XCustomHeader`), which
+  only matched for http4s' own header classes. It now needs a `Header[T, _]` instance instead of a `ClassTag`.
 - `complete(status, value)` (with or without headers) sends no entity when the status allows none (1xx, 204, 205, 304),
   as Pekko does; the value used to be sent as the body. Without an entity such a response is not negotiated either
   (Pekko still answers a 204 with an unacceptable value's type with 406).
