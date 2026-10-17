@@ -4,12 +4,13 @@ import cats.effect.{ IO, Outcome }
 import cats.syntax.all._
 import fs2.Stream
 import fs2.io.file.{ Files, Path }
-import org.http4s.{ EntityDecoder, MediaType }
+import org.http4s.{ EmptyBody, EntityDecoder, MediaType }
 import org.http4s.headers.`Content-Type`
 import org.http4s.multipart.{ Multipart, Part }
 import pl.iterators.stir.server._
 
 import java.io.File
+import java.util.concurrent.atomic.AtomicReference
 import scala.annotation.unused
 
 /**
@@ -98,6 +99,8 @@ trait FileUploadDirectives {
                 }
             }
             run.attempt.flatMap {
+              case Right(RouteResult.Complete(response)) if response.body eq EmptyBody =>
+                release.as(RouteResult.Complete(response))
               case Right(RouteResult.Complete(response)) =>
                 IO.pure(RouteResult.Complete(response.withBodyStream(response.body.onFinalize(release))))
               case Right(rejected) => release.as(rejected)
@@ -112,30 +115,43 @@ trait FileUploadDirectives {
    * a stream of the file contents. Files are stored in temporary files on disk so in-memory buffers don't overflow.
    * The temporary files are deleted once the response body has been consumed (so a part can be streamed back as the
    * response), or as soon as the inner route rejects, fails or is cancelled; nothing is registered with
-   * `deleteOnExit`, which would keep every path in memory for the life of the process.
+   * `deleteOnExit`, which would keep every path in memory for the life of the process. The part streams are therefore
+   * only valid while the request is being handled: copy a part elsewhere before completing if it is needed later.
    *
    * @group fileupload
    */
   def fileUploadAll(fieldName: String): Directive1[Seq[(FileInfo, Stream[IO, Byte])]] =
     Directive[Tuple1[Seq[(FileInfo, Stream[IO, Byte])]]] { inner => ctx =>
-      def tempDest(@unused fileInfo: FileInfo): File = File.createTempFile("http4s-stir-upload", ".tmp")
-      storeUploadedFiles(fieldName, tempDest).tapply { case Tuple1(files) =>
-        innerCtx =>
-          val delete = files.toList.traverse_ { case (_, file) => IO.blocking(file.delete()).void }
-          IO.ref(false).flatMap { released =>
-            // the files are deleted once: on rejection, error or cancellation, or when the response body is finalized
-            val release = released.getAndSet(true).flatMap(done => if (done) IO.unit else delete)
+      // every file is owned from the moment it is created, so a failure or cancellation while the parts are still
+      // being copied to disk cannot leak the ones already written
+      val created = new AtomicReference(List.empty[File])
+      def tempDest(@unused fileInfo: FileInfo): File = {
+        val file = File.createTempFile("http4s-stir-upload", ".tmp")
+        created.updateAndGet(file :: _)
+        file
+      }
+      val delete = IO.blocking(created.get.foreach(_.delete())).void
+      IO.ref(false).flatMap { released =>
+        // the files are deleted once: on rejection, error or cancellation, or when the response body is finalized
+        val release = released.getAndSet(true).flatMap(done => if (done) IO.unit else delete)
+        val run = storeUploadedFiles(fieldName, tempDest).tapply { case Tuple1(files) =>
+          innerCtx =>
             val streams = files.map { case (info, src) => (info, Files[IO].readAll(Path(src.getAbsolutePath))) }
-            IO.defer(inner(Tuple1(streams))(innerCtx)).guaranteeCase {
-              case Outcome.Succeeded(_) => IO.unit
-              case _                    => release
-            }.flatMap {
-              case RouteResult.Complete(response) =>
-                IO.pure(RouteResult.Complete(response.withBodyStream(response.body.onFinalize(release))))
-              case rejected => release.as(rejected)
-            }
+            IO.defer(inner(Tuple1(streams))(innerCtx))
+        }(ctx)
+        IO.uncancelable { poll =>
+          poll(run).guaranteeCase {
+            case Outcome.Succeeded(_) => IO.unit
+            case _                    => release
+          }.flatMap {
+            case RouteResult.Complete(response) if response.body eq EmptyBody =>
+              release.as(RouteResult.Complete(response))
+            case RouteResult.Complete(response) =>
+              IO.pure(RouteResult.Complete(response.withBodyStream(response.body.onFinalize(release))))
+            case rejected => release.as(rejected)
           }
-      }(ctx)
+        }
+      }
     }
 
   private def multipartToDisk(fieldName: String, destFn: FileInfo => File,

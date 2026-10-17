@@ -11,6 +11,7 @@ import org.typelevel.ci._
 import pl.iterators.stir.server._
 
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 import java.nio.file.{ Files => NioFiles }
 
 class FileUploadDirectivesSpec extends RoutingSpec {
@@ -161,18 +162,42 @@ class FileUploadDirectivesSpec extends RoutingSpec {
     }
     "delete its temporary files when the inner route fails" in {
       val before = leftoverUploads()
+      val during = new AtomicInteger(-1)
       upload(textPart("file", "a.txt", "first")) ~> Route.seal(fileUploadAll("file") { _ =>
+        during.set(leftoverUploads())
         throw new RuntimeException("boom")
       }) ~> check {
         status shouldEqual Status.InternalServerError
+        during.get shouldEqual before + 1
         leftoverUploads() shouldEqual before
       }
     }
     "delete its temporary files when the inner route rejects" in {
       val before = leftoverUploads()
-      upload(textPart("file", "a.txt", "first")) ~> fileUploadAll("file") { _ => reject } ~> check {
+      val during = new AtomicInteger(-1)
+      upload(textPart("file", "a.txt", "first")) ~> fileUploadAll("file") { _ =>
+        during.set(leftoverUploads())
+        reject
+      } ~> check {
         handled shouldEqual false
+        during.get shouldEqual before + 1
         leftoverUploads() shouldEqual before
+      }
+    }
+    "stream a part back as the response over a real server and delete the file afterwards" in {
+      val before = leftoverUploads()
+      upload(textPart("file", "a.txt", "streamed back")) ~!> fileUploadAll("file") { files =>
+        complete(Response[IO]().withBodyStream(files.head._2))
+      } ~> check {
+        responseAs[String] shouldEqual "streamed back"
+        leftoverUploads() shouldEqual before
+      }
+    }
+    "answer an empty completion with Content-Length: 0 rather than a chunked body" in {
+      upload(textPart("file", "a.txt", "first")) ~!> fileUploadAll("file") { _ => complete(Status.Ok) } ~> check {
+        status shouldEqual Status.Ok
+        header("Transfer-Encoding") shouldEqual None
+        header("Content-Length").map(_.value) shouldEqual Some("0")
       }
     }
   }
