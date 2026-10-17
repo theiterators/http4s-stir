@@ -51,7 +51,7 @@ coalescing and limits). An empty file is served as is, without range support.
 
 ### getFromResource
 
-Completes GET requests with the content of the given classpath resource. If the resource cannot be found or read, the request is rejected, so a later route alternative can handle it. A second `Content-Type` argument replaces the content type derived from the resource name, as for `getFromFile`. Requests for resource "directories" (paths ending with `/`) are rejected.
+Completes GET requests with the content of the given classpath resource. If the resource cannot be found or read, the request is rejected, so a later route alternative can handle it. A second `Content-Type` argument replaces the content type derived from the resource name, as for `getFromFile`. Requests for resource "directories" (paths ending with `/`) are rejected. `getFromResource(name, contentType, classLoader)` looks the resource up through the given class loader instead of http4s' own, for deployments where the application's resources are not visible from the library's loader (Pekko's `classLoader` argument).
 
 ```scala
 val route: Route = path("static" / "logo") {
@@ -75,7 +75,7 @@ val route: Route = pathPrefix("files") {
 
 ### getFromResourceDirectory
 
-Same as `getFromDirectory` except that files are served from the classpath rather than the filesystem.
+Same as `getFromDirectory` except that files are served from the classpath rather than the filesystem. `getFromResourceDirectory(directoryName, classLoader)` uses the given class loader.
 
 ```scala
 val route: Route = pathPrefix("assets") {
