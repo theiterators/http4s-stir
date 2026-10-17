@@ -68,6 +68,14 @@ class ScalatestRouteTestSpec extends AnyFreeSpec with Matchers with ScalatestRou
       failure.getMessage should include("within 300 milliseconds")
     }
 
+    "propagating a failure of the response body instead of turning it into a timeout" in {
+      val failing = Stream.raiseError[IO](new IllegalStateException("body boom"))
+      val failure = the[IllegalStateException] thrownBy {
+        Get() ~> complete(Response[IO]().withBodyStream(failing)) ~> check { responseAs[String]; () }
+      }
+      failure.getMessage shouldEqual "body boom"
+    }
+
     "honouring a longer route test timeout for a slow route, also over a real server" in {
       implicit val timeout: RouteTestTimeout = RouteTestTimeout(5.seconds)
       Get()                                                ~> complete(IO.sleep(1200.millis).as("slow")) ~> check { responseAs[String] shouldEqual "slow" }

@@ -22,6 +22,7 @@ trait RouteTestResultComponent {
     private[testkit] def awaitWithinTimeout[A](io: IO[A], what: String)(implicit runtime: IORuntime): A =
       io.timeout(timeout.duration).handleErrorWith {
         case _: TimeoutException => IO(failTest(what + " within " + timeout.duration))
+        case other               => IO.raiseError(other)
       }.unsafeRunSync()
 
     def handled: Boolean = synchronized { result.isDefined && result.get.isRight }
