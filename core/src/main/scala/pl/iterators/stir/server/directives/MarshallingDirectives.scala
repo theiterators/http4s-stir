@@ -73,7 +73,8 @@ object MarshallingDirectives extends MarshallingDirectives {
 
   /**
    * Decodes the request with the given decoder. The `Content-Type` is checked only when the request has one.
-   * A `DecodeFailure` (returned or raised) becomes a rejection; any other error is re-raised.
+   * A `DecodeFailure` (returned or raised), an `EntityStreamSizeException` or an `IllegalRequestException` becomes a
+   * rejection; any other error is re-raised.
    */
   private[stir] def decodeEntity[T](request: Request[IO], decoder: EntityDecoder[IO, T]): IO[Either[Rejection, T]] =
     decoder.decode(request, strict = request.contentType.isDefined).value.attempt.flatMap {
@@ -81,7 +82,10 @@ object MarshallingDirectives extends MarshallingDirectives {
       case Right(Left(failure))               => IO.pure(Left(rejectionFor(failure)))
       case Left(failure: DecodeFailure)       => IO.pure(Left(rejectionFor(failure)))
       case Left(e: EntityStreamSizeException) => IO.pure(Left(MalformedRequestContentRejection(e.getMessage, e)))
-      case Left(error)                        => IO.raiseError(error)
+      case Left(e: IllegalRequestException)   =>
+        // e.g. a corrupt compressed body from decodeRequest: a rejection, so alternatives and handlers still apply
+        IO.pure(Left(MalformedRequestContentRejection(e.message, e)))
+      case Left(error) => IO.raiseError(error)
     }
 
   private[stir] def rejectionFor(failure: DecodeFailure): Rejection = failure match {
