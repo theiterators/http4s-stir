@@ -56,6 +56,12 @@ size limits) is set per directive instead.
 - `getFromFile`, `getFromResource`, `getFromDirectory`, `getFromResourceDirectory` and the browseable directory
   directives take an implicit `ContentTypeResolver`; code that passed them as function values (`xs.map(getFromDirectory)`)
   now needs `xs.map(getFromDirectory(_))`.
+- `complete` negotiates the response's `Content-Type` against the request's `Accept` header, as Pekko does: a
+  representation the client does not accept is rejected with `UnacceptedResponseContentTypeRejection` (406 when sealed,
+  "Resource representation is only available with these types:" followed by the types). Clients sending `*/*` or no
+  `Accept` see no difference; a client sending `Accept: application/json` to `complete(Status.NotFound, "not found")`
+  now gets a 406 instead of the text. Exception and rejection handlers are exempt. To keep the old behaviour for a
+  route, wrap it in `mapRequestContext(_.withAcceptAll)`; see "Content negotiation" in the marshalling directives.
 
 ## Testkit differences
 

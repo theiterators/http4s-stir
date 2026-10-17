@@ -1,30 +1,42 @@
 package pl.iterators.stir.server
 
-import cats.effect.IO
+import cats.effect.{ IO, SyncIO }
 import org.http4s.{ Request, Response, Status, Uri }
 import org.http4s.Uri.Path
-import org.http4s.headers.Accept
-import pl.iterators.stir.marshalling.{ ContentNegotiation, ToResponseMarshallable }
+import org.typelevel.vault.Key
+import pl.iterators.stir.marshalling.{ ContentNegotiation, ToResponseMarshallable, ToResponseMarshaller }
 
 case class RequestContext(request: Request[IO], unmatchedPath: Path) {
+  import RequestContext.AcceptAllKey
+  import ToResponseMarshaller.NegotiatedKey
 
   /**
-   * Completes the request with the given ToResponseMarshallable.
+   * Completes the request with the given ToResponseMarshallable. A response the marshaller marked as negotiated
+   * (`ToResponseMarshaller.negotiated`) is rejected with an `UnacceptedResponseContentTypeRejection` when the
+   * request's `Accept` header does not accept its `Content-Type`, unless the context accepts all (`withAcceptAll`).
    */
   def complete(obj: ToResponseMarshallable): IO[RouteResult] =
     obj.marshaller.toResponse(obj.value).map { response =>
-      response.contentType match {
-        case Some(contentType) if obj.marshaller.negotiable && !ContentNegotiation.isAcceptable(request, contentType) =>
-          RouteResult.Rejected(UnacceptedResponseContentTypeRejection(Set(contentType)) :: Nil)
-        case _ => RouteResult.Complete(response)
+      if (response.attributes.lookup(NegotiatedKey).isEmpty) RouteResult.Complete(response)
+      else {
+        val plain = response.withAttributes(response.attributes.delete(NegotiatedKey))
+        plain.contentType match {
+          case Some(contentType) if !acceptsAll && !ContentNegotiation.isAcceptable(request, contentType) =>
+            RouteResult.Rejected(UnacceptedResponseContentTypeRejection(Set(contentType)) :: Nil)
+          case _ => RouteResult.Complete(plain)
+        }
       }
     }
 
   /**
-   * Returns a copy of this context without the request's `Accept` header, so that whatever is completed with it is
-   * acceptable to the client: Pekko's `withAcceptAll`, used for the responses of exception and rejection handlers.
+   * Returns a copy of this context in which every response is acceptable to the client, whatever the request's
+   * `Accept` header says: Pekko's `withAcceptAll`, used for the responses of exception and rejection handlers. The
+   * header itself stays on the request, so a handler can still choose a representation by it (Pekko appends
+   * `*&#47;*;q=MIN` instead, which lets a `q=0` range still reject the handler's response).
    */
-  def withAcceptAll: RequestContext = copy(request = request.removeHeader[Accept])
+  def withAcceptAll: RequestContext = copy(request = request.withAttribute(AcceptAllKey, ()))
+
+  private def acceptsAll: Boolean = request.attributes.lookup(AcceptAllKey).isDefined
 
   /**
    * Rejects the request with the given rejections.
@@ -48,4 +60,7 @@ case class RequestContext(request: Request[IO], unmatchedPath: Path) {
 object RequestContext {
   def apply(request: Request[IO]): RequestContext =
     RequestContext(request, request.pathInfo)
+
+  /** Set on the request by `withAcceptAll`: responses completed with it are not negotiated. */
+  private[stir] val AcceptAllKey: Key[Unit] = Key.newKey[SyncIO, Unit].unsafeRunSync()
 }

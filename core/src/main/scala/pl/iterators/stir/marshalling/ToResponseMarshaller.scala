@@ -1,28 +1,31 @@
 package pl.iterators.stir.marshalling
 
-import cats.effect.IO
+import cats.effect.{ IO, SyncIO }
 import org.http4s.{ EntityEncoder, Headers, Response, Status }
+import org.typelevel.vault.Key
 
 trait ToResponseMarshaller[T] {
   def toResponse(trm: T): IO[Response[IO]]
-
-  /**
-   * Whether `complete` negotiates the produced `Content-Type` against the request's `Accept` header and rejects
-   * with an `UnacceptedResponseContentTypeRejection` (406 when sealed) when it is not acceptable, as Pekko does for
-   * its marshallers. The marshallers built on an `EntityEncoder` negotiate; an explicit `Response` or a bare status
-   * is opaque and never rejected. Override in a custom marshaller to opt in.
-   */
-  def negotiable: Boolean = false
 }
 
 object ToResponseMarshaller {
   def apply[T](implicit trm: ToResponseMarshaller[T]): ToResponseMarshaller[T] = trm
 
-  /** A marshaller whose produced content type is negotiated against the request's `Accept`. */
-  def negotiated[T](f: T => IO[Response[IO]]): ToResponseMarshaller[T] = new ToResponseMarshaller[T] {
-    def toResponse(trm: T): IO[Response[IO]] = f(trm)
-    override def negotiable: Boolean = true
-  }
+  /**
+   * Marks a response whose `Content-Type` `complete` negotiates against the request's `Accept` header, rejecting
+   * with an `UnacceptedResponseContentTypeRejection` (406 when sealed) when it is not acceptable, as Pekko does
+   * for its marshallers. Carried by the response rather than the marshaller so that it survives every wrapper
+   * (`IO[T]`, `ToResponseMarshallable`, a custom marshaller delegating to a built-in one).
+   */
+  private[stir] val NegotiatedKey: Key[Unit] = Key.newKey[SyncIO, Unit].unsafeRunSync()
+
+  /**
+   * A marshaller whose produced content type is negotiated against the request's `Accept`. The marshallers built on
+   * an `EntityEncoder` are; an explicit `Response` or a bare status is opaque and never rejected. Build a custom
+   * marshaller with it to opt in.
+   */
+  def negotiated[T](f: T => IO[Response[IO]]): ToResponseMarshaller[T] =
+    (trm: T) => f(trm).map(_.withAttribute(NegotiatedKey, ()))
 
   implicit def fromEncoderable[E](implicit encoder: EntityEncoder[IO, E]): ToResponseMarshaller[E] =
     negotiated(trm => IO.pure(Response[IO]().withEntity(trm)))
@@ -50,10 +53,7 @@ object ToResponseMarshaller {
   }
 
   implicit def fromIO[E](implicit trm: ToResponseMarshaller[E]): ToResponseMarshaller[IO[E]] =
-    new ToResponseMarshaller[IO[E]] {
-      def toResponse(trmIO: IO[E]): IO[Response[IO]] = trmIO.flatMap(trm.toResponse)
-      override def negotiable: Boolean = trm.negotiable
-    }
+    (trmIO: IO[E]) => trmIO.flatMap(trm.toResponse)
 
   implicit def fromResponse[E]: ToResponseMarshaller[Response[IO]] = {
     (trmResponse: Response[IO]) =>

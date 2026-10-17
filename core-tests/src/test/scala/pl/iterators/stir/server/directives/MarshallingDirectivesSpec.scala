@@ -2,6 +2,7 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
+import fs2.Stream
 import io.circe.Json
 import org.http4s.{
   Charset,
@@ -18,6 +19,8 @@ import org.http4s.{
 import org.http4s.circe._
 import org.http4s.headers.{ `Content-Type`, Accept, MediaRangeAndQValue }
 import org.scalatest.Inside
+import pl.iterators.stir.common.EntityStreamingSupport
+import pl.iterators.stir.marshalling.{ ToResponseMarshallable, ToResponseMarshaller }
 import pl.iterators.stir.server._
 
 class MarshallingDirectivesSpec extends RoutingSpec with Inside {
@@ -66,6 +69,69 @@ class MarshallingDirectivesSpec extends RoutingSpec with Inside {
         status shouldEqual Status.NoContent
       }
     }
+    "let the most specific matching range decide, before its quality" in {
+      Get()                                                      ~> addHeader(Accept(MediaRangeAndQValue(MediaRange.`text/*`, QValue.fromThousandths(500).toOption.get),
+        MediaRangeAndQValue(MediaType.text.plain, QValue.Zero))) ~> text ~> check {
+        rejection shouldBe a[UnacceptedResponseContentTypeRejection]
+      }
+      val wildcardOff =
+        Accept(MediaRangeAndQValue(MediaRange.`*/*`, QValue.Zero), MediaRangeAndQValue(MediaType.text.plain))
+      Get() ~> addHeader(wildcardOff) ~> text                 ~> check { responseAs[String] shouldEqual "foo" }
+      Get() ~> addHeader(wildcardOff) ~> complete(Json.obj()) ~> check {
+        rejection shouldBe a[UnacceptedResponseContentTypeRejection]
+      }
+    }
+    "ignore a charset parameter of an Accept range" in {
+      val jsonUtf8 = MediaType.application.json.withExtensions(Map("charset" -> "utf8"))
+      Get() ~> addHeader(Accept(MediaRangeAndQValue(jsonUtf8))) ~> complete(Json.obj()) ~> check {
+        responseAs[String] shouldEqual "{}"
+      }
+    }
+    "match an Accept range with other parameters only when the produced type carries them" in {
+      val html = ToResponseMarshaller.negotiated[String](s =>
+        IO.pure(Response[IO]().withEntity(s).withContentType(`Content-Type`(MediaType.text.html))))
+      val htmlRoute: Route = completeWith(html) { send => send("<p/>") }
+      val level1 = MediaType.text.html.withExtensions(Map("level" -> "1"))
+      Get()     ~> addHeader(Accept(MediaRangeAndQValue(level1, QValue.Zero), MediaRangeAndQValue(MediaType.text.html)))  ~>
+      htmlRoute ~> check { responseAs[String] shouldEqual "<p/>" }
+      Get()     ~> addHeader(Accept(MediaRangeAndQValue(MediaType.text.plain.withExtensions(Map("format" -> "flowed"))))) ~>
+      text      ~> check { rejection shouldBe a[UnacceptedResponseContentTypeRejection] }
+    }
+    "negotiate a value computed in an IO, a ToResponseMarshallable computed in an IO and a stream" in {
+      val xml = addHeader(Accept(MediaType.application.xml))
+      Get() ~> xml ~> complete(IO.pure("foo"))                         ~> check { rejection shouldBe a[UnacceptedResponseContentTypeRejection] }
+      Get() ~> xml ~> complete(IO.pure(ToResponseMarshallable("foo"))) ~> check {
+        rejection shouldBe a[UnacceptedResponseContentTypeRejection]
+      }
+      implicit val support: EntityStreamingSupport = EntityStreamingSupport.json()
+      Get() ~> xml ~> complete(Stream.emits(List(Json.obj())).covary[IO]) ~> check {
+        rejection shouldBe a[UnacceptedResponseContentTypeRejection]
+      }
+    }
+    "list every type the alternatives produce in the sealed 406" in {
+      val json: Route = complete(Json.obj("a" -> Json.fromInt(1)))
+      Get() ~> addHeader(Accept(MediaType.application.xml)) ~> Route.seal(text ~ json) ~> check {
+        status shouldEqual Status.NotAcceptable
+        responseAs[String] shouldEqual
+        "Resource representation is only available with these types:\ntext/plain; charset=UTF-8\napplication/json"
+      }
+    }
+    "let exception and rejection handlers see the Accept header and still reach the client" in {
+      object Boom extends RuntimeException("boom")
+      val acceptEcho: Route = (headerValueByType[Accept] & get) { accept =>
+        complete(Accept.headerInstance.value(accept))
+      }
+      val exceptions = handleExceptions(ExceptionHandler { case Boom => acceptEcho })
+      Get() ~> addHeader(Accept(MediaType.application.json)) ~> exceptions(failWith(Boom)) ~> check {
+        status shouldEqual Status.Ok
+        responseAs[String] shouldEqual "application/json"
+      }
+      val rejections = handleRejections(RejectionHandler.newBuilder().handleNotFound(acceptEcho).result())
+      Get() ~> addHeader(Accept(MediaType.application.json)) ~> rejections(reject) ~> check {
+        status shouldEqual Status.Ok
+        responseAs[String] shouldEqual "application/json"
+      }
+    }
   }
 
   "The 'completeWith' directive" should {
@@ -78,6 +144,12 @@ class MarshallingDirectivesSpec extends RoutingSpec with Inside {
       Get() ~> addHeader(Accept(MediaType.text.css)) ~> completeWith(instanceOf[String]) { prod => prod("42") } ~>
       check {
         rejection shouldBe a[UnacceptedResponseContentTypeRejection]
+      }
+    }
+    "let an exception thrown by the inner block reach handleExceptions" in {
+      object Boom extends RuntimeException("boom")
+      Get() ~> completeWith(instanceOf[String]) { _ => throw Boom } ~> check {
+        status shouldEqual Status.InternalServerError
       }
     }
   }

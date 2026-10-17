@@ -61,8 +61,10 @@ trait MarshallingDirectives {
 
   /**
    * Uses the marshaller for the given type to produce a completion function that is passed to its inner route.
-   * You can use it do decouple the marshaller resolution from the completion of the request, as Pekko's
-   * `completeWith`. The completion function may be called from any thread, once.
+   * You can use it to decouple the marshaller resolution from the completion of the request, as Pekko's
+   * `completeWith`. The completion function may be called from any thread; the first call completes the request
+   * and later calls are ignored (Pekko's `Promise` throws on a second call). The request never completes when the
+   * function is never called.
    *
    * @group marshalling
    */
