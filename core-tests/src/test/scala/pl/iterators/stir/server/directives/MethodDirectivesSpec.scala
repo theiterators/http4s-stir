@@ -53,6 +53,7 @@ class MethodDirectivesSpec extends RoutingSpec {
         status shouldEqual Status.Ok
         responseAs[Array[Byte]] shouldBe empty
       }
+      Get() ~> headRoute ~> check { rejection shouldEqual MethodRejection(Method.HEAD) }
     }
     "allow manual complete over a real server, keeping the declared length" in {
       Head() ~!> headRoute ~> check {

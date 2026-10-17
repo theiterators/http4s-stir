@@ -142,7 +142,7 @@ class ScalatestRouteTestSpec extends AnyFreeSpec with Matchers with ScalatestRou
       } ~> check {
         status shouldEqual Ok
         header[`Content-Type`].map(_.mediaType) shouldEqual Some(MediaType.application.`octet-stream`)
-        chunksStream.take(5).map(c => new String(c.toArray, "UTF-8").toInt).compile.toVector should
+        chunksStream.take(5).map(c => new String(c.toArray, "UTF-8").toInt).compile.toVector.timeout(5.seconds) should
         evaluateTo((0 until 5).toVector)
       }
     }
@@ -153,7 +153,7 @@ class ScalatestRouteTestSpec extends AnyFreeSpec with Matchers with ScalatestRou
         Locale.setDefault(Locale.forLanguageTag("tr-TR"))
         val ifMatch = Header.Raw(CIString("If-Match"), "\"xyzzy\"")
         Get() ~> respondWithHeader(ifMatch) { complete("abc") } ~> check {
-          header("If-Match").map(_.value) shouldEqual Some("\"xyzzy\"")
+          header("if-match").map(_.value) shouldEqual Some("\"xyzzy\"")
         }
       } finally Locale.setDefault(previous)
     }
