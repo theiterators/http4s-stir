@@ -46,14 +46,9 @@ instead. Other differences that remain:
 - The resource directives (`getFromResource`, `getFromResourceDirectory`) only work on the JVM: on Scala Native and
   Scala.js an application using them fails to link (no `java.net.URL`; Native's class loader has only
   `getResourceAsStream`).
-- An `Accept-Language` (or other) header that http4s cannot parse is ignored, where Pekko parses leniently: Pekko's
-  `q=.5` is not a valid RFC 7231 q-value, so `selectPreferredLanguage` then picks the first language.
 - `parameter("x".repeated)` returns the values in the order of the query string; Pekko returns them reversed.
 - A header that http4s cannot parse is ignored where Pekko may parse it leniently (`selectPreferredLanguage` reads
   `Accept-Language` q-values as leniently as Pekko).
-- `parameterMultiMap` lists a parameter without a value (`?flag`) with no values, where Pekko lists one empty value;
-  `parameterSeq` gives `("flag", "")` as Pekko does. For a bare `?`, `parameterSeq` is empty as in Pekko, while
-  `parameterMap` gives `Map("" -> "")` and `parameterMultiMap` `Map("" -> List())` (Pekko: empty maps).
 - Content negotiation differs from Pekko for wildcard ranges with parameters: stir ignores `charset` on every range
   (Pekko only on `type/subtype` ranges, so its `text/*;charset=...` never matches) and does not count a wildcard
   range's parameters towards its specificity.

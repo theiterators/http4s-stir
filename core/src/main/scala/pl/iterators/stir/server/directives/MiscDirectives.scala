@@ -278,8 +278,8 @@ object MiscDirectives extends MiscDirectives {
 
   private def lenientQParameter(parameter: String): String = {
     val eq = parameter.indexOf('=')
-    if (eq < 0 || parameter.substring(0, eq).trim != "q") parameter
-    else canonicalQValue(parameter.substring(eq + 1).trim).fold(parameter)("q=" + _)
+    if (eq < 0 || trimOws(parameter.substring(0, eq)) != "q") parameter
+    else canonicalQValue(trimOws(parameter.substring(eq + 1))).fold(parameter)("q=" + _)
   }
 
   /**
@@ -291,8 +291,8 @@ object MiscDirectives extends MiscDirectives {
     val dot = text.indexOf('.')
     val (whole, fraction) = if (dot < 0) (text, "") else (text.substring(0, dot), text.substring(dot + 1))
     val valid = whole match {
-      case "0" => fraction.forall(_.isDigit)
-      case ""  => dot == 0 && fraction.nonEmpty && fraction.forall(_.isDigit)
+      case "0" => fraction.forall(isDigit)
+      case ""  => dot == 0 && fraction.nonEmpty && fraction.forall(isDigit)
       case "1" => fraction.forall(_ == '0')
       case _   => false
     }
@@ -304,10 +304,21 @@ object MiscDirectives extends MiscDirectives {
     }
   }
 
+  private def isDigit(c: Char): Boolean = c >= '0' && c <= '9'
+
+  /** Optional whitespace (RFC 7230 OWS) is spaces and tabs only. */
+  private def isOws(c: Char): Boolean = c == ' ' || c == '\t'
+
   private def trimEnd(s: String): String = {
     var end = s.length
-    while (end > 0 && s.charAt(end - 1).isWhitespace) end -= 1
+    while (end > 0 && isOws(s.charAt(end - 1))) end -= 1
     s.substring(0, end)
+  }
+
+  private def trimOws(s: String): String = {
+    var start = 0
+    while (start < s.length && isOws(s.charAt(start))) start += 1
+    trimEnd(s.substring(start))
   }
 
   private val _rejectEmptyResponse: Directive0 =

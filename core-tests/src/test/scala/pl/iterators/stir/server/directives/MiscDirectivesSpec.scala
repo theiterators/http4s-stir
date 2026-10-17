@@ -105,6 +105,8 @@ class MiscDirectivesSpec extends RoutingSpec {
     "fall back to the first language when Accept-Language cannot be parsed" in {
       preferred("en;q=2, de;q=0.1") shouldEqual "de"
       preferred("en;q=.") shouldEqual "de"
+      preferred("de;q=0.1, en;q=0.1234\u0665") shouldEqual "de" // Pekko's DIGIT is ASCII
+      preferred("de;q=0.1, en;\u0001q=0.5") shouldEqual "de"
     }
     "fall back to the first language without Accept-Language" in {
       Get() ~> selectPreferredLanguage(LanguageTag("de"), LanguageTag("en")) { lang => complete(lang.primaryTag) } ~>
