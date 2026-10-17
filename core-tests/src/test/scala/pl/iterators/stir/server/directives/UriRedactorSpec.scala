@@ -14,8 +14,13 @@ class UriRedactorSpec extends AnyWordSpec with Matchers {
         uri("/a?reset_token=QS&user=alice%20b&flag&t=1&t=2&password=&X-Api-Key=k")).renderString shouldEqual
       "/a?reset_token=REDACTED&user=alice%20b&flag&t=1&t=2&password=REDACTED&X-Api-Key=REDACTED"
     }
-    "honour ; separators, re-rendering with &" in {
-      UriRedactor.query(names)(uri("/a?token=t;user=u")).renderString shouldEqual "/a?token=REDACTED&user=u"
+    "mask a sensitive value up to the next &, as the parameter directives read it, ; included" in {
+      UriRedactor.query(names)(uri("/a?token=se;cret&user=u")).renderString shouldEqual "/a?token=REDACTED&user=u"
+      UriRedactor.query(names)(uri("/a?token=t;user=u")).renderString shouldEqual "/a?token=REDACTED"
+    }
+    "mask a sensitive pair after a ;, as http4s' Query reads it" in {
+      UriRedactor.query(names)(uri("/a?user=u;token=t")).renderString shouldEqual "/a?user=u;token=REDACTED"
+      UriRedactor.query(names)(uri("/a?flag;token=t")).renderString shouldEqual "/a?flag;token=REDACTED"
     }
     "leave a URI without a query untouched" in {
       UriRedactor.query(names)(uri("/a")).renderString shouldEqual "/a"

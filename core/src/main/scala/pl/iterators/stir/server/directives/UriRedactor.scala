@@ -11,11 +11,20 @@ import org.http4s.{ Query, Uri }
 object UriRedactor {
 
   /**
-   * Every pair `(k, Some(v))` with `isSensitive(k)` becomes `(k, Some("REDACTED"))`; keys, order and flags stay. A
-   * query without a masked value is kept as received; one with a masked value is re-rendered by http4s, so `;`
-   * becomes `&` and percent-encoding is normalised.
+   * The value of every sensitive parameter becomes `REDACTED`; keys, order and flags stay. The query is masked under
+   * both readings: as the parameter directives read it, split on `&` alone, so a sensitive value is masked whole up
+   * to the next `&` even when it contains `;`; and as http4s' `Query` reads it, `;` also separating pairs (in a
+   * name, `flag;token=…`, or a value, `user=u;token=…`). Masking only ever replaces a value, so a reading that does
+   * not apply can hide more, never expose. The first pass rewrites the text as received; when the second masks
+   * more, the query is re-rendered by http4s, so `;` becomes `&` and percent-encoding is normalised.
    */
-  def query(isSensitive: String => Boolean): Uri => Uri = { uri =>
+  def query(isSensitive: String => Boolean): Uri => Uri = { received =>
+    val raw = received.query.renderString
+    val text = maskPairs(raw, isSensitive)
+    // parsed as a URI reference, the query keeps the text as written (`Query.unsafeFromString` re-renders it)
+    val uri =
+      if (text == raw) received
+      else received.copy(query = Uri.fromString("?" + text).fold(_ => Query.unsafeFromString(text), _.query))
     val pairs = uri.query.pairs
     val masked = pairs.map {
       case (k, Some(_)) if isSensitive(k) => (k, Some(Mask))

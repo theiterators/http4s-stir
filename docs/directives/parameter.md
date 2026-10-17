@@ -11,6 +11,8 @@ Parameter directives extract query parameter values from the request URI. They s
 ## parameter (required String)
 
 Extracts a required query parameter as a `String`. Rejects with `MissingQueryParamRejection` if the parameter is absent.
+When the parameter occurs more than once, the first occurrence is used, even without a value (`?x&x=1` gives `""`), as
+in Pekko. The query string is split on `&` only, as Pekko does (`;` is part of a name or value).
 
 ```scala
 val route: Route = path("search") {

@@ -6,7 +6,7 @@ import org.scalatest.freespec.AnyFreeSpec
 import pl.iterators.stir.server._
 import pl.iterators.stir.unmarshalling.Unmarshaller
 import Unmarshaller._
-import org.http4s.Status
+import org.http4s.{ Status, Uri }
 
 class ParameterDirectivesSpec extends AnyFreeSpec with GenericRoutingSpec with Inside {
   override implicit def runtime: IORuntime = IORuntime.global
@@ -446,6 +446,11 @@ class ParameterDirectivesSpec extends AnyFreeSpec with GenericRoutingSpec with I
     "keep empty segments and parameters without a name" in {
       Get("/?a&") ~> pairs ~> check { responseAs[String] shouldEqual "(a,), (,)" }
       Get("/?=x") ~> pairs ~> check { responseAs[String] shouldEqual "(,x)" }
+    }
+    "read back a query built through http4s' API" in {
+      Get(Uri.unsafeFromString("/p").withQueryParam("a b&c;d", "x=y+z")) ~> pairs ~> check {
+        responseAs[String] shouldEqual "(a b&c;d,x=y+z)"
+      }
     }
     "split a parameter at its first '=' and decode '+' and percent escapes" in {
       Get("/?a=b=c&a+b=c%2Bd%26e") ~> pairs ~> check { responseAs[String] shouldEqual "(a,b=c), (a b,c+d&e)" }

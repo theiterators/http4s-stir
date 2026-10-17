@@ -81,7 +81,8 @@ instead. Other differences that remain:
   `parameterMultiMap` lists a parameter without a value (`?flag`) with one empty value (was none), as Pekko does; a
   bare `?` gives empty maps (was `Map("" -> "")` and `Map("" -> List())`). So `?flag=on&flag` now gives `flag -> ""`.
 - The parameter directives parse the query string themselves, as Pekko does, instead of through http4s' `Query`: `;`
-  no longer separates parameters (`?a;b=c` is the parameter `a;b`), `parameter("x")` takes the first occurrence even
+  no longer separates parameters (`?a;b=c` is the parameter `a;b`; a query rebuilt through http4s' `Query` API,
+  e.g. by `withQueryParam` in a middleware, was already split there), `parameter("x")` takes the first occurrence even
   when it has no value (`?x&x=1` gives `""`, was `"1"`), and `.repeated` lists an occurrence without a value as `""`
   (was skipped).
 - The form directives parse url-encoded bodies themselves instead of through http4s' `UrlForm` decoder: `;` no
