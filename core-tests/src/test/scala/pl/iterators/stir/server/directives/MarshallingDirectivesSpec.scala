@@ -9,6 +9,8 @@ import org.http4s.{
   DecodeFailure,
   DecodeResult,
   EntityDecoder,
+  Header,
+  Headers,
   HttpVersion,
   InvalidMessageBodyFailure,
   MediaRange,
@@ -20,6 +22,7 @@ import org.http4s.{
 import org.http4s.circe._
 import org.http4s.headers.{ `Content-Length`, `Content-Type`, Accept, MediaRangeAndQValue }
 import org.scalatest.Inside
+import org.typelevel.ci.CIString
 import pl.iterators.stir.common.EntityStreamingSupport
 import pl.iterators.stir.marshalling.{ ToResponseMarshallable, ToResponseMarshaller }
 import pl.iterators.stir.server._
@@ -136,6 +139,57 @@ class MarshallingDirectivesSpec extends RoutingSpec with Inside {
     "serve a route run with every representation acceptable whatever Accept says" in {
       Get() ~> addHeader(Accept(MediaType.application.xml)) ~> mapRequestContext(_.withAcceptAll)(text) ~> check {
         responseAs[String] shouldEqual "foo"
+      }
+    }
+  }
+
+  "the status and value marshallers (Pekko's FromStatusCodeAndXYZMarshallerSpec)" should {
+    val routes =
+      path("200-text")(complete(Status.Ok, "ok")) ~
+      path("201-text")(complete(Status.Created, "created")) ~
+      path("400-text")(complete(Status.BadRequest, "bad-request")) ~
+      path("404-headers-text")(complete(Status.NotFound, Headers(Header.Raw(CIString("X-A"), "a")), "not-found"))
+    def accepting(range: MediaRange) = addHeader(Accept(range))
+    val textPlain = `Content-Type`(MediaType.text.plain, Charset.`UTF-8`)
+
+    "return 200 text when text/plain is accepted, 406 when it is not" in {
+      Post("/200-text") ~> accepting(MediaRange.`text/*`) ~> Route.seal(routes) ~> check {
+        status shouldEqual Status.Ok
+        header[`Content-Type`] shouldEqual Some(textPlain)
+        responseAs[String] shouldEqual "ok"
+      }
+      Post("/200-text") ~> accepting(MediaRange.`application/*`) ~> Route.seal(routes) ~> check {
+        status shouldEqual Status.NotAcceptable
+        responseAs[String] should include("text/plain")
+      }
+    }
+    "return 201 text when text/plain is accepted, 406 when it is not" in {
+      Post("/201-text") ~> accepting(MediaRange.`text/*`) ~> Route.seal(routes) ~> check {
+        status shouldEqual Status.Created
+        responseAs[String] shouldEqual "created"
+      }
+      Post("/201-text") ~> accepting(MediaRange.`application/*`) ~> Route.seal(routes) ~> check {
+        status shouldEqual Status.NotAcceptable
+        responseAs[String] should include("text/plain")
+      }
+    }
+    "return 400 text when text/plain is accepted" in {
+      Post("/400-text") ~> accepting(MediaRange.`text/*`) ~> Route.seal(routes) ~> check {
+        status shouldEqual Status.BadRequest
+        header[`Content-Type`] shouldEqual Some(textPlain)
+        responseAs[String] shouldEqual "bad-request"
+      }
+    }
+    "allow not explicitly Accept-ed content type to be returned if response code is non-2xx" in {
+      Post("/400-text") ~> accepting(MediaRange.`application/*`) ~> Route.seal(routes) ~> check {
+        status shouldEqual Status.BadRequest
+        header[`Content-Type`] shouldEqual Some(textPlain)
+        responseAs[String] shouldEqual "bad-request"
+      }
+      Post("/404-headers-text") ~> addHeader(Accept(MediaType.application.json)) ~> Route.seal(routes) ~> check {
+        status shouldEqual Status.NotFound
+        header[`Content-Type`] shouldEqual Some(textPlain)
+        responseAs[String] shouldEqual "not-found"
       }
     }
   }
