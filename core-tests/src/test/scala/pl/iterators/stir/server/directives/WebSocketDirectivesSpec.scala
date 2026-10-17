@@ -14,6 +14,7 @@ import pl.iterators.stir.testkit.{ RouteTestTimeout, WSProbe }
 import scodec.bits.ByteVector
 
 import scala.concurrent.duration._
+import scala.util.{ Failure, Try }
 
 class WebSocketDirectivesSpec extends RoutingSpec {
   override implicit def runtime: IORuntime = IORuntime.global
@@ -300,7 +301,11 @@ class WebSocketDirectivesSpec extends RoutingSpec {
         wsClient.expectMessage("tick")
         cleanUp()
         cancelled.get.timeout(5.seconds).unsafeRunSync()
-        (the[AssertionError] thrownBy wsClient.expectCompletion()).getMessage should include("was cancelled")
+        // ticks sent before the cancellation are still buffered; past them the cancellation is reported
+        val firstFailure = Iterator.continually(Try(wsClient.expectMessage())).take(1000).collectFirst {
+          case Failure(error) => error
+        }
+        firstFailure.map(_.getMessage).getOrElse("") should include("was cancelled")
       }
     }
   }
