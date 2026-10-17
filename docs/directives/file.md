@@ -84,10 +84,11 @@ val route: Route = pathPrefix("assets") {
 // GET /assets/js/app.js -> serves classpath resource public/js/app.js
 ```
 
-The resource directives are JVM-only in practice. They look resources up with `ClassLoader.getResource`, through
-http4s' `StaticFile.fromResource`; Scala Native implements only `getResourceAsStream` (with `embedResources`
-enabled), not `getResource`, and Scala.js has no classpath resources, so on those platforms the directives
-compile but cannot find anything. Serve files with `getFromFile` / `getFromDirectory` there instead.
+The resource directives are JVM-only. They look resources up with `ClassLoader.getResource` and read them through
+`java.net.URL`, via http4s' `StaticFile.fromResource`. Scala Native's class loader offers only `getResourceAsStream`
+(with `embedResources` enabled) and neither Scala Native nor Scala.js provides `java.net.URL`, so an application that
+uses these directives on those platforms fails to link. Serve files with `getFromFile` / `getFromDirectory` there
+instead.
 
 ### listDirectoryContents
 

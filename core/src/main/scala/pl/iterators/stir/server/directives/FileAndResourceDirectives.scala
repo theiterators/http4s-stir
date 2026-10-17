@@ -307,8 +307,9 @@ object FileAndResourceDirectives extends FileAndResourceDirectives {
   private def withTrailingSlash(path: String): String = if (path.endsWith("/")) path else path + '/'
 
   /**
-   * Whether the resource is a directory entry of an archive (a jar): only then does the name with a trailing slash
-   * resolve as well. Directories on the file system are left to http4s, which rejects them (and there a trailing
+   * Whether the resource is a directory entry of a jar, as Pekko checks through `JarEntry.isDirectory`: a `jar:` URL
+   * whose name with a trailing slash resolves to the same entry of the same jar. Other protocols are left to http4s,
+   * which rejects file-system directories itself (and on the file system, and with some custom loaders, a trailing
    * slash resolves for plain files too). The name is normalised as http4s normalises it, and the default loader is
    * the one http4s uses.
    */
@@ -316,8 +317,9 @@ object FileAndResourceDirectives extends FileAndResourceDirectives {
     IO.blocking {
       val normalized = resourceName.split("/").filter(_.nonEmpty).mkString("/")
       val loader = classLoader.getOrElse(StaticFile.getClass.getClassLoader)
-      Option(loader.getResource(normalized)).exists(url =>
-        url.getProtocol != "file" && loader.getResource(normalized + "/") != null)
+      Option(loader.getResource(normalized)).filter(_.getProtocol == "jar").exists { url =>
+        Option(loader.getResource(normalized + "/")).exists(_.toString == url.toString + "/")
+      }
     }
 
   private def readableDirectories(paths: List[Path]): IO[List[Path]] =

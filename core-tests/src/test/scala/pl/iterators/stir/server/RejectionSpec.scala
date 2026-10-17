@@ -10,7 +10,7 @@ import pl.iterators.stir.server.directives.RoutingSpec
 class RejectionSpec extends RoutingSpec {
   override implicit def runtime: IORuntime = IORuntime.global
 
-  "RejectionHandler.default" which {
+  "RejectionHandler.default".which {
     implicit val myRejectionHandler: RejectionHandler =
       RejectionHandler.default.mapRejectionResponse { response =>
         // wrap the handler's text in a JSON object, reading the body when the response is sent
@@ -65,12 +65,14 @@ class RejectionSpec extends RoutingSpec {
       "format error message with contentType and without supported ranges" in {
         Get("/unsupported-content-type?provide-content-type=true&provide-supported=false") ~> route ~> check {
           status shouldEqual Status.UnsupportedMediaType
+          mediaType shouldEqual MediaType.application.json
           responseAs[String] shouldEqual """{"rejection": "The request's Content-Type [image/gif] is not supported."}"""
         }
       }
       "format error message without contentType and with supported ranges" in {
         Get("/unsupported-content-type?provide-content-type=false&provide-supported=true") ~> route ~> check {
           status shouldEqual Status.UnsupportedMediaType
+          mediaType shouldEqual MediaType.application.json
           responseAs[String] shouldEqual
           "{\"rejection\": \"The request's Content-Type is not supported. Expected:\nimage/jpeg or image/png\"}"
         }
@@ -78,6 +80,7 @@ class RejectionSpec extends RoutingSpec {
       "format error message with contentType and with supported ranges" in {
         Get("/unsupported-content-type?provide-content-type=true&provide-supported=true") ~> route ~> check {
           status shouldEqual Status.UnsupportedMediaType
+          mediaType shouldEqual MediaType.application.json
           responseAs[String] shouldEqual
           "{\"rejection\": \"The request's Content-Type [image/gif] is not supported. Expected:\nimage/jpeg or image/png\"}"
         }
