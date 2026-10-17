@@ -41,11 +41,99 @@ class CodingDirectivesSpec extends RoutingSpec with Inside {
 
   val refuseIdentity = `Accept-Encoding`(ContentCoding.identity.withQValue(QValue.Zero))
 
+  "a (decodeRequestWith(gzip) | decodeRequestWith(identity)) compound directive" should {
+    val decodeWithGzipOrIdentity = decodeRequestWith(ContentCoding.gzip) | decodeRequestWith(ContentCoding.identity)
+    "decode the request content if it has encoding 'gzip'" in {
+      Post("/", gzipped("Hello"))       ~> addHeader(`Content-Encoding`(ContentCoding.gzip)) ~>
+      decodeWithGzipOrIdentity { echo } ~> check { responseAs[String] shouldEqual "Hello" }
+    }
+    "decode the request content if it has encoding 'identity'" in {
+      Post("/", "yes") ~> addHeader(`Content-Encoding`(ContentCoding.identity)) ~> decodeWithGzipOrIdentity { echo } ~>
+      check { responseAs[String] shouldEqual "yes" }
+    }
+    "decode the request content if no Content-Encoding header is present" in {
+      Post("/", "yes") ~> decodeWithGzipOrIdentity { echo } ~> check { responseAs[String] shouldEqual "yes" }
+    }
+    "reject the request content if it has encoding 'deflate'" in {
+      Post("/", "yes") ~> addHeader(`Content-Encoding`(ContentCoding.deflate)) ~> decodeWithGzipOrIdentity { echo } ~>
+      check {
+        rejections shouldEqual Seq(UnsupportedRequestEncodingRejection(ContentCoding.gzip),
+          UnsupportedRequestEncodingRejection(ContentCoding.identity))
+      }
+    }
+  }
+
+  "the encodeResponseWith(identity) directive" should {
+    "produce a response if no Accept-Encoding is present in the request" in {
+      Get() ~> encodeResponseWith(ContentCoding.identity) { textRoute } ~> check {
+        header[`Content-Encoding`] shouldEqual None
+        responseAs[String] shouldEqual text
+      }
+    }
+    "produce a not encoded response if the client only accepts non matching encodings" in {
+      Get() ~> addHeader(`Accept-Encoding`(ContentCoding.gzip)) ~> encodeResponseWith(ContentCoding.identity) {
+        textRoute
+      } ~> check {
+        header[`Content-Encoding`] shouldEqual None
+        responseAs[String] shouldEqual text
+      }
+    }
+    "reject the request if the request has an 'Accept-Encoding: identity; q=0' header" in {
+      Get() ~> addHeader(refuseIdentity) ~> encodeResponseWith(ContentCoding.identity) { textRoute } ~> check {
+        rejection shouldEqual UnacceptedResponseEncodingRejection(Set(ContentCoding.identity))
+      }
+    }
+  }
+
+  "a (encodeResponseWith(gzip) | encodeResponseWith(identity)) compound directive" should {
+    val encodeGzipOrIdentity = encodeResponseWith(ContentCoding.gzip) | encodeResponseWith(ContentCoding.identity)
+    "produce a GZIP encoded response if the request has no Accept-Encoding header" in {
+      Get() ~> encodeGzipOrIdentity { textRoute } ~> check {
+        header[`Content-Encoding`] shouldEqual Some(`Content-Encoding`(ContentCoding.gzip))
+        gunzipped shouldEqual text
+      }
+    }
+    "produce a GZIP encoded response if the request has an `Accept-Encoding: deflate;q=0.5, gzip` header" in {
+      Get()                  ~> addHeader(`Accept-Encoding`(ContentCoding.deflate.withQValue(QValue.unsafeFromString("0.5")),
+        ContentCoding.gzip)) ~> encodeGzipOrIdentity { textRoute } ~> check {
+        header[`Content-Encoding`] shouldEqual Some(`Content-Encoding`(ContentCoding.gzip))
+        gunzipped shouldEqual text
+      }
+    }
+    "produce a non-encoded response if the request has an `Accept-Encoding: identity` header" in {
+      Get() ~> addHeader(`Accept-Encoding`(ContentCoding.identity)) ~> encodeGzipOrIdentity { textRoute } ~> check {
+        header[`Content-Encoding`] shouldEqual None
+        responseAs[String] shouldEqual text
+      }
+    }
+    "produce a non-encoded response if the request has an `Accept-Encoding: deflate` header" in {
+      Get() ~> addHeader(`Accept-Encoding`(ContentCoding.deflate)) ~> encodeGzipOrIdentity { textRoute } ~> check {
+        header[`Content-Encoding`] shouldEqual None
+        responseAs[String] shouldEqual text
+      }
+    }
+    "reject the request if it refuses identity and does not accept gzip" in {
+      Get()                              ~> addHeader(`Accept-Encoding`(ContentCoding.deflate, ContentCoding.identity.withQValue(QValue.Zero))) ~>
+      encodeGzipOrIdentity { textRoute } ~> check {
+        rejections shouldEqual Seq(UnacceptedResponseEncodingRejection(Set(ContentCoding.gzip)),
+          UnacceptedResponseEncodingRejection(Set(ContentCoding.identity)))
+      }
+    }
+  }
+
   "the encodeResponse directive" should {
     "not encode when the request has no Accept-Encoding" in {
       Get() ~> encodeResponse(textRoute) ~> check {
         header[`Content-Encoding`] shouldEqual None
         responseAs[String] shouldEqual text
+      }
+    }
+    "produce a GZIP encoded response if the request has an `Accept-Encoding: gzip, deflate` header" in {
+      Get()                        ~> addHeader(`Accept-Encoding`(ContentCoding.gzip, ContentCoding.deflate)) ~>
+      encodeResponse { textRoute } ~>
+      check {
+        header[`Content-Encoding`] shouldEqual Some(`Content-Encoding`(ContentCoding.gzip))
+        gunzipped shouldEqual text
       }
     }
     "gzip the response when the client accepts gzip" in {

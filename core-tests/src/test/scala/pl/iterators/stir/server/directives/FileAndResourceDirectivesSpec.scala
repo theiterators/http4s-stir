@@ -7,6 +7,7 @@ import org.http4s.headers.{
   `Accept-Encoding`,
   `Accept-Ranges`,
   `Content-Encoding`,
+  `Content-Length`,
   `Content-Range`,
   `Content-Type`,
   `If-Match`,
@@ -24,7 +25,8 @@ import pl.iterators.stir.server.{ Route, UnsatisfiableRangeRejection }
 
 import java.io.File
 import java.net.URLClassLoader
-import java.nio.file.{ Files => NioFiles, Paths }
+import java.util.jar.{ JarEntry, JarOutputStream }
+import java.nio.file.{ Files => NioFiles, Path => NioPath, Paths }
 import java.time.{ LocalDate, ZoneOffset }
 import scala.annotation.unused
 import scala.util.Properties
@@ -46,6 +48,17 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
 
   def writeAllText(text: String, file: File) =
     NioFiles.write(file.toPath, text.getBytes("UTF-8"))
+
+  /** Writes a jar with the given entries: a name ending with `/` and no content is a directory entry. */
+  def writeJar(jar: NioPath, entries: (String, Option[String])*): Unit = {
+    val out = new JarOutputStream(NioFiles.newOutputStream(jar))
+    try entries.foreach { case (name, content) =>
+        out.putNextEntry(new JarEntry(name))
+        content.foreach(text => out.write(text.getBytes("UTF-8")))
+        out.closeEntry()
+      }
+    finally out.close()
+  }
 
   "getFromFile" should {
     "reject non-GET requests" in {
@@ -615,6 +628,52 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
         loader.close()
         NioFiles.deleteIfExists(dir.resolve("only-here.txt"))
         NioFiles.deleteIfExists(dir)
+        ()
+      }
+    }
+    "serve a resource from a jar whose path has spaces and umlauts, repeatedly, and reject its directories" in {
+      // Pekko's "return the resource from an archive with spaces and umlauts" and "... the archive is shared between
+      // requests": the jar is built here instead of checked in
+      val dir = NioFiles.createTempDirectory("stir jar späces")
+      val jar = dir.resolve("lib with späces.jar")
+      writeJar(jar, "inJar/" -> None, "inJar/test-resource.txt" -> Some("I have spaces, too!"))
+      val loader = new URLClassLoader(Array(jar.toUri.toURL), null)
+      try {
+        // the metadata comes from the archive entry, as in Pekko
+        def runCheck() = Get() ~> getFromResource("inJar/test-resource.txt", loader) ~> check {
+          mediaType shouldEqual MediaType.text.plain
+          responseAs[String] shouldEqual "I have spaces, too!"
+          header[`Content-Length`].map(_.length) shouldEqual Some("I have spaces, too!".length.toLong)
+          header[`Last-Modified`] shouldBe defined
+        }
+        runCheck()
+        runCheck()
+        Get()                     ~> getFromResource("inJar", loader)          ~> check { handled shouldEqual false }
+        Get()                     ~> getFromResource("inJar/", loader)         ~> check { handled shouldEqual false }
+        Get("/test-resource.txt") ~> getFromResourceDirectory("inJar", loader) ~> check {
+          responseAs[String] shouldEqual "I have spaces, too!"
+        }
+        Get("/inJar") ~> getFromResourceDirectory("", loader) ~> check { handled shouldEqual false }
+      } finally {
+        loader.close()
+        try NioFiles.deleteIfExists(jar)
+        finally { NioFiles.deleteIfExists(dir); () }
+        ()
+      }
+    }
+    "serve a file of one jar although another jar has a directory of the same name" in {
+      val dir = NioFiles.createTempDirectory("stirJars")
+      val withFile = dir.resolve("a.jar")
+      val withDirectory = dir.resolve("b.jar")
+      writeJar(withFile, "z" -> Some("a file named z"))
+      writeJar(withDirectory, "z/" -> None, "z/inner.txt" -> Some("inner"))
+      val loader = new URLClassLoader(Array(withFile.toUri.toURL, withDirectory.toUri.toURL), null)
+      try {
+        Get() ~> getFromResource("z", loader) ~> check { responseAs[String] shouldEqual "a file named z" }
+      } finally {
+        loader.close()
+        try { NioFiles.deleteIfExists(withFile); NioFiles.deleteIfExists(withDirectory) }
+        finally { NioFiles.deleteIfExists(dir); () }
         ()
       }
     }

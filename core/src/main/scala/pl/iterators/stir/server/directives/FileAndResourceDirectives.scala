@@ -171,7 +171,9 @@ trait FileAndResourceDirectives {
         // after `conditional` and the range pre-checks have decided that a body will be sent. http4s is given no
         // request so that it does not run its own If-None-Match / If-Modified-Since check.
         def open = StaticFile.fromResource[IO](resourceName, None, classloader = classLoader)
-        open.value.flatMap {
+        // http4s recognises directories only on the file system; a directory entry in a jar would be served as an
+        // empty body (Pekko rejects it through `JarEntry.isDirectory`)
+        isResourceDirectory(resourceName, classLoader).ifM(IO.pure(None), open.value).flatMap {
           case None        => IO.pure(RouteResult.Rejected(Nil))
           case Some(probe) =>
             probe.body.take(1).compile.drain *> {
@@ -303,6 +305,22 @@ object FileAndResourceDirectives extends FileAndResourceDirectives {
   import RangeDirectives._
 
   private def withTrailingSlash(path: String): String = if (path.endsWith("/")) path else path + '/'
+
+  /**
+   * Whether the resource is a directory entry of a jar, as Pekko checks through `JarEntry.isDirectory`: a `jar:` URL
+   * whose name with a trailing slash resolves to the same entry of the same jar. Other protocols are left to http4s,
+   * which rejects file-system directories itself (and on the file system, and with some custom loaders, a trailing
+   * slash resolves for plain files too). The name is normalised as http4s normalises it, and the default loader is
+   * the one http4s uses.
+   */
+  private def isResourceDirectory(resourceName: String, classLoader: Option[ClassLoader]): IO[Boolean] =
+    IO.blocking {
+      val normalized = resourceName.split("/").filter(_.nonEmpty).mkString("/")
+      val loader = classLoader.getOrElse(StaticFile.getClass.getClassLoader)
+      Option(loader.getResource(normalized)).filter(_.getProtocol == "jar").exists { url =>
+        Option(loader.getResource(normalized + "/")).exists(_.toString == url.toString + "/")
+      }
+    }
 
   private def readableDirectories(paths: List[Path]): IO[List[Path]] =
     paths.filterA(path =>

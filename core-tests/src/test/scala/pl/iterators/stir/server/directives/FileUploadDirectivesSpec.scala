@@ -123,9 +123,23 @@ class FileUploadDirectivesSpec extends RoutingSpec {
       storeUploadedFile("file", tempDest) { case (info, file) => complete(info.fileName + ":" + read(file)) } ~>
       check { responseAs[String] shouldEqual "a.txt:first" }
     }
+    "fail when the file cannot be written" in {
+      def unwritable(info: FileInfo): File = new File("/nonexistent-dir-for-stir/" + info.fileName)
+      val route = storeUploadedFile("fieldName", unwritable) { case (info, _) => complete(info.toString) }
+      upload(textPart("fieldName", "age.xml", "<int>42</int>")) ~> Route.seal(route) ~> check {
+        status shouldEqual Status.InternalServerError
+      }
+    }
   }
 
   "storeUploadedFiles" should {
+    "fail when the file cannot be written" in {
+      def unwritable(info: FileInfo): File = new File("/nonexistent-dir-for-stir/" + info.fileName)
+      val route = storeUploadedFiles("fieldName", unwritable) { infos => complete(infos.mkString(", ")) }
+      upload(textPart("fieldName", "age.txt", "42")) ~> Route.seal(route) ~> check {
+        status shouldEqual Status.InternalServerError
+      }
+    }
     "store every part with the field name, including parts without a content type" in {
       upload(textPart("file", "a.txt", "first"), untypedPart("file", "b.bin", "second"), textPart("x", "c", "no")) ~>
       storeUploadedFiles("file", tempDest) { files =>

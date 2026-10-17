@@ -51,7 +51,7 @@ coalescing and limits). An empty file is served as is, without range support.
 
 ### getFromResource
 
-Completes GET requests with the content of the given classpath resource. If the resource cannot be found or read, the request is rejected, so a later route alternative can handle it. A second `Content-Type` argument replaces the content type derived from the resource name, as for `getFromFile`. Requests for resource "directories" (paths ending with `/`) are rejected. `getFromResource(name, classLoader)` and `getFromResource(name, contentType, classLoader)` look the resource up through the given class loader instead of http4s' own, for deployments where the application's resources are not visible from the library's loader (Pekko's `classLoader` argument).
+Completes GET requests with the content of the given classpath resource. If the resource cannot be found or read, the request is rejected, so a later route alternative can handle it. A second `Content-Type` argument replaces the content type derived from the resource name, as for `getFromFile`. Requests for resource "directories" are rejected, whether the name ends with `/`, names a directory on disk, or names a directory entry inside a jar. `getFromResource(name, classLoader)` and `getFromResource(name, contentType, classLoader)` look the resource up through the given class loader instead of http4s' own, for deployments where the application's resources are not visible from the library's loader (Pekko's `classLoader` argument).
 
 ```scala
 val route: Route = path("static" / "logo") {
@@ -83,6 +83,12 @@ val route: Route = pathPrefix("assets") {
 }
 // GET /assets/js/app.js -> serves classpath resource public/js/app.js
 ```
+
+The resource directives are JVM-only. They look resources up with `ClassLoader.getResource` and read them through
+`java.net.URL`, via http4s' `StaticFile.fromResource`. Scala Native's class loader offers only `getResourceAsStream`
+(with `embedResources` enabled) and neither Scala Native nor Scala.js provides `java.net.URL`, so an application that
+uses these directives on those platforms fails to link. Serve files with `getFromFile` / `getFromDirectory` there
+instead.
 
 ### listDirectoryContents
 
