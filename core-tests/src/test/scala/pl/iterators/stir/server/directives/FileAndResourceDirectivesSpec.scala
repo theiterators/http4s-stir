@@ -63,6 +63,7 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
       try {
         writeAllText("Some content", file)
         Get() ~> getFromFile(file) ~> check {
+          mediaType shouldEqual MediaType.application.`octet-stream`
           responseAs[String] shouldEqual "Some content"
         }
       } finally {
@@ -170,13 +171,37 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
       try {
         writeAllText("456", file)
         Get() ~> getFromFile(file) ~> check {
-          mediaType shouldEqual MediaType.parse("application/gzip").getOrElse(fail("Media type could not be parsed"))
-//          header[`Content-Encoding`] shouldEqual Some(`Content-Encoding`(HttpEncodings.gzip))
+          mediaType shouldEqual MediaType.application.javascript
+          header[`Content-Encoding`] shouldEqual Some(`Content-Encoding`(ContentCoding.gzip))
           responseAs[String] shouldEqual "456"
         }
       } finally {
         file.delete
         ()
+      }
+    }
+  }
+
+  "ContentTypeResolver.Default and withDefaultCharset" should {
+    "give text files the UTF-8 charset and binary files none" in {
+      ContentTypeResolver.Default("a.txt") shouldEqual Some(`Content-Type`(MediaType.text.plain, Charset.`UTF-8`))
+      ContentTypeResolver.Default("a.png") shouldEqual Some(`Content-Type`(MediaType.image.png))
+    }
+    "fall back to application/octet-stream for unknown or missing extensions" in {
+      ContentTypeResolver.Default("a.unknownext") shouldEqual Some(`Content-Type`(MediaType.application.`octet-stream`))
+      ContentTypeResolver.Default("README") shouldEqual Some(`Content-Type`(MediaType.application.`octet-stream`))
+    }
+    "resolve a .gz file to the type of the inner extension" in {
+      ContentTypeResolver.Default("app.js.gz") shouldEqual
+      Some(`Content-Type`(MediaType.application.javascript, Charset.`UTF-8`))
+      ContentTypeResolver.Default("data.gz") shouldEqual Some(`Content-Type`(MediaType.application.`octet-stream`))
+    }
+    "use the given charset for text files with withDefaultCharset" in {
+      ContentTypeResolver.withDefaultCharset(Charset.`ISO-8859-1`)("a.txt") shouldEqual
+      Some(`Content-Type`(MediaType.text.plain, Charset.`ISO-8859-1`))
+      Get("fileA.txt")                                                ~> getFromDirectory(testRoot.getCanonicalPath + "/someDir")(
+        ContentTypeResolver.withDefaultCharset(Charset.`ISO-8859-1`)) ~> check {
+        charsetOption shouldEqual Some(Charset.`ISO-8859-1`)
       }
     }
   }
@@ -253,7 +278,7 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
     "return the file content with the MediaType matching the file extension" in {
       Get("fileA.txt") ~> _getFromDirectory("someDir") ~> check {
         mediaType shouldEqual MediaType.parse("text/plain").getOrElse(fail("Media type could not be parsed"))
-//        charsetOption shouldEqual Some(Charset.`UTF-8`)
+        charsetOption shouldEqual Some(Charset.`UTF-8`)
         responseAs[String] shouldEqual "123"
         val lastModified = new File(testRoot, "someDir/fileA.txt").lastModified()
         headers.get[`Last-Modified`] should contain(
@@ -372,8 +397,8 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
       }
     }
     "return the file content with MediaType 'application/octet-stream' on unknown file extensions" in {
-      Get() ~> getFromResource("sample.xyz") ~> check {
-//        mediaType shouldEqual `application/octet-stream`
+      Get() ~> getFromResource("sample.unknownext") ~> check {
+        mediaType shouldEqual MediaType.application.`octet-stream`
         responseAs[String] shouldEqual "XyZ"
       }
     }

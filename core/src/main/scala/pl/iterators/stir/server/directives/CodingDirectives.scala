@@ -107,8 +107,9 @@ trait CodingDirectives {
 
   /**
    * Inspects the response and adds a `Content-Encoding: gzip` header if it was served by `getFromFile`,
-   * `getFromDirectory`, `getFromResource` or `getFromResourceDirectory` from a `.svgz` file (the only precompressed
-   * media type Pekko knows) and no `Content-Encoding` is present yet.
+   * `getFromDirectory`, `getFromResource` or `getFromResourceDirectory` from a `.svgz` or `.gz` file and no
+   * `Content-Encoding` is present yet. Those directives already do this when their [[ContentTypeResolver]] typed the
+   * file, so this is only needed around a file served with an explicit content type.
    *
    * @group coding
    */
@@ -147,9 +148,12 @@ object CodingDirectives extends CodingDirectives {
   private def isIdentity(coding: ContentCoding): Boolean = sameCoding(coding, ContentCoding.identity)
   private def isGzip(coding: ContentCoding): Boolean = sameCoding(coding, ContentCoding.gzip)
 
-  /** A response served from a `.svgz` file is already gzipped; never compress it again. */
+  /** A response served from a `.svgz` or `.gz` file is already gzipped; never compress it again. */
   private def isPrecompressed(response: Response[IO]): Boolean =
-    response.attributes.lookup(FileAndResourceDirectives.ServedNameKey).exists(_.toRootLowerCase.endsWith(".svgz"))
+    response.attributes.lookup(FileAndResourceDirectives.ServedNameKey).exists { name =>
+      val lower = name.toRootLowerCase
+      lower.endsWith(".svgz") || lower.endsWith(".gz")
+    }
 
   /**
    * Passes requests known to carry no body: `Content-Length: 0`, or an HTTP/1.x request with neither a length nor

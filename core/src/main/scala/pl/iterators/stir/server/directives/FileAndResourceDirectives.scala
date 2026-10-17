@@ -5,9 +5,10 @@ import cats.effect.{ IO, SyncIO }
 import cats.syntax.all._
 import fs2.io.file.Files
 import fs2.io.file.Path
-import org.http4s.{ Response, StaticFile, Uri }
-import org.http4s.headers.`Content-Type`
+import org.http4s.{ Charset, ContentCoding, MediaType, Response, StaticFile, Uri }
+import org.http4s.headers.{ `Content-Encoding`, `Content-Type` }
 import org.typelevel.vault.Key
+import pl.iterators.stir.impl.util._
 import pl.iterators.stir.server.{ Route, RouteConcatenation, RouteResult }
 
 import java.io.{ File, IOException }
@@ -45,8 +46,10 @@ trait FileAndResourceDirectives {
    *
    * @group fileandresource
    */
-  def getFromFile(file: File)(implicit resolver: ContentTypeResolver): Route =
-    serveFile(file, resolver(file.getName))
+  def getFromFile(file: File)(implicit resolver: ContentTypeResolver): Route = {
+    val contentType = resolver(file.getName)
+    serveFile(file, contentType, gzipped = isPrecompressed(file.getName, contentType))
+  }
 
   /**
    * Completes GET requests with the content of the given file, served with the given content type instead of the
@@ -54,13 +57,13 @@ trait FileAndResourceDirectives {
    *
    * @group fileandresource
    */
-  def getFromFile(file: File, contentType: `Content-Type`): Route = serveFile(file, Some(contentType))
+  def getFromFile(file: File, contentType: `Content-Type`): Route = serveFile(file, Some(contentType), gzipped = false)
 
-  private def serveFile(file: File, contentType: Option[`Content-Type`]): Route =
+  private def serveFile(file: File, contentType: Option[`Content-Type`], gzipped: Boolean): Route =
     get {
       if (file.isFile && file.canRead)
         extractRequest { request =>
-          serve(file.getName,
+          serve(file.getName, gzipped,
             StaticFile.fromPath(Path(file.getAbsolutePath), Some(request)).map(response =>
               contentType.fold(response)(response.withContentType)))
         }
@@ -73,8 +76,10 @@ trait FileAndResourceDirectives {
    *
    * @group fileandresource
    */
-  def getFromResource(resourceName: String)(implicit resolver: ContentTypeResolver): Route =
-    serveResource(resourceName, resolver(resourceName))
+  def getFromResource(resourceName: String)(implicit resolver: ContentTypeResolver): Route = {
+    val contentType = resolver(resourceName)
+    serveResource(resourceName, contentType, gzipped = isPrecompressed(resourceName, contentType))
+  }
 
   /**
    * Completes GET requests with the content of the given class-path resource, served with the given content type
@@ -84,13 +89,13 @@ trait FileAndResourceDirectives {
    * @group fileandresource
    */
   def getFromResource(resourceName: String, contentType: `Content-Type`): Route =
-    serveResource(resourceName, Some(contentType))
+    serveResource(resourceName, Some(contentType), gzipped = false)
 
-  private def serveResource(resourceName: String, contentType: Option[`Content-Type`]): Route =
+  private def serveResource(resourceName: String, contentType: Option[`Content-Type`], gzipped: Boolean): Route =
     if (!resourceName.endsWith("/"))
       get {
         extractRequest { request =>
-          serve(resourceName,
+          serve(resourceName, gzipped,
             StaticFile.fromResource(resourceName, Some(request)).map(response =>
               contentType.fold(response)(response.withContentType)))
         }
@@ -204,13 +209,32 @@ object FileAndResourceDirectives extends FileAndResourceDirectives {
   /** The file or resource name a response was served from, for `withPrecompressedMediaTypeSupport`. */
   private[stir] val ServedNameKey: Key[String] = Key.newKey[SyncIO, String].unsafeRunSync()
 
-  /** Completes with the static content when http4s found it and rejects (with no rejections) otherwise. */
-  private def serve(name: String, content: OptionT[IO, Response[IO]]): Route = _ =>
+  /**
+   * Completes with the static content when http4s found it and rejects (with no rejections) otherwise. A
+   * precompressed file (`.gz`, `.svgz`) is marked `Content-Encoding: gzip` unless an encoding is already set, as
+   * Pekko's `withPrecompressedMediaTypeSupport` does for its `Gzipped` media types.
+   */
+  private def serve(name: String, gzipped: Boolean, content: OptionT[IO, Response[IO]]): Route = _ =>
     content.value.map {
       case Some(response) =>
-        RouteResult.Complete(response.withAttributes(response.attributes.insert(ServedNameKey, name)))
+        val named = response.withAttributes(response.attributes.insert(ServedNameKey, name))
+        val encoded =
+          if (gzipped && named.headers.get[`Content-Encoding`].isEmpty)
+            named.putHeaders(`Content-Encoding`(ContentCoding.gzip))
+          else named
+        RouteResult.Complete(encoded)
       case None => RouteResult.Rejected(Nil)
     }
+
+  /**
+   * A `.gz` or `.svgz` file is gzipped content of the resolved type (`app.js.gz` is JavaScript), unless the resolver
+   * typed it as an archive (`application/gzip`), in which case the bytes are served as they are.
+   */
+  private[stir] def isPrecompressed(name: String, contentType: Option[`Content-Type`]): Boolean = {
+    val lower = name.toRootLowerCase
+    (lower.endsWith(".gz") || lower.endsWith(".svgz")) &&
+    contentType.exists(ct => ct.mediaType.subType != "gzip" && ct.mediaType.subType != "x-gzip")
+  }
 
   /**
    * Given a base directory and a (Uri) path, returns a path to a location contained in the base directory,
@@ -265,7 +289,7 @@ object FileAndResourceDirectives extends FileAndResourceDirectives {
 
 /**
  * Resolves the `Content-Type` of a served file or resource from its name. `None` leaves the choice to http4s,
- * which looks the extension up in its media type registry.
+ * which looks the extension up in its media type registry and sends no `Content-Type` for an unknown extension.
  */
 trait ContentTypeResolver {
   def apply(fileName: String): Option[`Content-Type`]
@@ -273,6 +297,27 @@ trait ContentTypeResolver {
 
 object ContentTypeResolver {
 
-  /** Lets http4s derive the content type from the file extension. */
-  implicit val Default: ContentTypeResolver = _ => None
+  /**
+   * Pekko's default: the media type registered for the extension, text types with the `UTF-8` charset, unknown or
+   * missing extensions `application/octet-stream`, and `name.ext.gz` the type of `ext` (served with
+   * `Content-Encoding: gzip`).
+   */
+  implicit val Default: ContentTypeResolver = withDefaultCharset(Charset.`UTF-8`)
+
+  /** Like [[Default]] with the given charset for text types. */
+  def withDefaultCharset(charset: Charset): ContentTypeResolver = fileName => {
+    def forExtension(ext: String): MediaType =
+      MediaType.forExtension(ext.toRootLowerCase).getOrElse(MediaType.application.`octet-stream`)
+    val lastDot = fileName.lastIndexOf('.')
+    val mediaType =
+      if (lastDot < 0) MediaType.application.`octet-stream`
+      else fileName.substring(lastDot + 1).toRootLowerCase match {
+        case "gz" => fileName.lastIndexOf('.', lastDot - 1) match {
+            case -1 => MediaType.application.`octet-stream`
+            case x  => forExtension(fileName.substring(x + 1, lastDot))
+          }
+        case ext => forExtension(ext)
+      }
+    Some(if (mediaType.binary) `Content-Type`(mediaType) else `Content-Type`(mediaType, charset))
+  }
 }

@@ -22,7 +22,7 @@ val route: Route = path("download") {
 
 Both overloads accept a second `Content-Type` argument that replaces the content type derived from the file name, for example `getFromFile("logo.svgz", `Content-Type`(MediaType.image.`svg+xml`))`.
 
-The content type is otherwise chosen by an implicit `ContentTypeResolver` (a `String => Option[Content-Type]` over the file name); the default, `ContentTypeResolver.Default`, returns `None` and leaves the choice to http4s' extension registry. `getFromResource`, `getFromDirectory`, `getFromResourceDirectory` and the browseable directory directives use the same resolver.
+The content type is otherwise chosen by an implicit `ContentTypeResolver` (a `String => Option[Content-Type]` over the file name). The default, `ContentTypeResolver.Default`, behaves like Pekko's: the media type registered for the extension, text types with `charset=UTF-8`, `application/octet-stream` for unknown or missing extensions, and `name.ext.gz` typed as `ext` and served with `Content-Encoding: gzip` (as is `.svgz`). `ContentTypeResolver.withDefaultCharset(charset)` changes the charset; a resolver returning `None` leaves the choice to http4s' registry, which sends no `Content-Type` for unknown extensions and types `.gz` as `application/gzip`. `getFromResource`, `getFromDirectory`, `getFromResourceDirectory` and the browseable directory directives use the same resolver.
 
 ```scala
 import pl.iterators.stir.server.directives.ContentTypeResolver
