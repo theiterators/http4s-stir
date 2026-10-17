@@ -43,16 +43,19 @@ instead. Other differences that remain:
 - `Marshaller.oneOf` and `Accept-Charset` negotiation are not ported: http4s encoders have one content type and a
   fixed charset. Chain `complete(json) ~ complete(text)` to offer several representations.
 - WebSocket `permessage-deflate` (the `shouldCompress` overloads) needs server support http4s 0.23 lacks.
-- The resource directives (`getFromResource`, `getFromResourceDirectory`) only work on the JVM: Scala Native has no
-  `ClassLoader.getResource` and Scala.js no classpath.
+- The resource directives (`getFromResource`, `getFromResourceDirectory`) only work on the JVM: on Scala Native and
+  Scala.js an application using them fails to link (no `java.net.URL`; Native's class loader has only
+  `getResourceAsStream`).
 - An `Accept-Language` (or other) header that http4s cannot parse is ignored, where Pekko parses leniently: Pekko's
   `q=.5` is not a valid RFC 7231 q-value, so `selectPreferredLanguage` then picks the first language.
 - `parameterMultiMap` lists a parameter without a value (`?flag`) with no values, where Pekko lists one empty value;
-  `parameterSeq` gives `("flag", "")` as Pekko does.
-- Content negotiation is slightly more lenient than Pekko for wildcard ranges with parameters (`text/*;charset=...`
-  matches; Pekko's specificity also counts the parameters of a wildcard range).
-- The temporary files of the disk-based upload directives are created with `File.createTempFile` (the default
-  permissions minus the umask); Pekko creates them owner-only.
+  `parameterSeq` gives `("flag", "")` as Pekko does. For a bare `?`, `parameterSeq` is empty as in Pekko, while
+  `parameterMap` gives `Map("" -> "")` and `parameterMultiMap` `Map("" -> List())` (Pekko: empty maps).
+- Content negotiation differs from Pekko for wildcard ranges with parameters: stir ignores `charset` on every range
+  (Pekko only on `type/subtype` ranges, so its `text/*;charset=...` never matches) and does not count a wildcard
+  range's parameters towards its specificity.
+- `fileUploadAll` creates its temporary files with `File.createTempFile` (the default permissions minus the umask);
+  Pekko creates them owner-only. The spool files of the other upload directives are owner-only.
 - `Route.seal` takes no log action; use `handleExceptions(ExceptionHandler.seal(handler)(logAction))` around the route.
 
 ## Behaviour changes in 0.7
@@ -79,24 +82,33 @@ instead. Other differences that remain:
 - The form directives parse url-encoded bodies themselves instead of through http4s' `UrlForm` decoder: `;` no
   longer separates fields (`a=1;b=2` is one field, as in Pekko) and characters that http4s rejected with a 400 when
   unencoded (spaces, quotes, brackets, non-ASCII) are accepted literally.
-- The number matchers (`IntNumber`, `LongNumber`, `HexIntNumber`, `HexLongNumber`, `DoubleNumber`, `JavaUUID`) and
-  one-group regex matchers leave an absolute remainder, so `IntNumber / "x"` matches `/42/x` as in Pekko; they no
-  longer match after a trailing slash, so `pathSuffix(IntNumber)` leaves `/orders/` for `/orders/123` and rejects
+- `IntNumber`, `LongNumber`, `HexIntNumber`, `HexLongNumber` and one-group regex matchers leave an absolute
+  remainder, so `IntNumber / "x"` matches `/42/x` as in Pekko. All number and regex matchers (including
+  `DoubleNumber` and `JavaUUID`) no longer skip an unconsumed leading slash: `rawPathPrefix(IntNumber)` rejects `/23`,
+  `"a" ~ IntNumber` rejects `/a/23`, and `pathSuffix(IntNumber)` leaves `/orders/` for `/orders/123` and rejects
   `/orders/123/`.
-- `respondWithHeader(s)` adds its headers in front of the inner route's, keeping a same-named header the route set,
-  as Pekko does (it used to replace it). To replace a header, use `mapResponseHeaders(_.put(header))`;
-  `respondWithDefaultHeader(s)` adds a header only when the route did not set it.
+- `respondWithHeader(s)` adds its headers in front of the inner route's and keeps a same-named header the route
+  set, as Pekko does; 0.6.1 dropped the added header in that case. To replace a header, use
+  `mapResponseHeaders(_.put(header))`. `respondWithDefaultHeader(s)` adds a header only when the route did not set
+  it, and now puts the missing defaults first, as Pekko does (0.6.1 appended them).
+- `ExceptionHandler.seal(handler)(logAction)` passes the log action to the default fallback; 0.6.1 ignored it.
 - `overrideMethodWithParameter` answers `501 Not Implemented` for an unknown method name and matches names
   independently of the default locale.
-- `withRangeSupport` rejects a `Range` request for a response of unknown length with
-  `UnsatisfiableRangeRejection(ranges, -1)` (416 when sealed), as Pekko does.
-- `decodeRequest` bounds the decoded body to 8 MiB (`CodingDirectives.DefaultDecodeMaxBytes`, Pekko's
-  `decode-max-size`): a larger body fails with 413. A corrupt compressed body is a 400, and `entity` rejects it with
-  `MalformedRequestContentRejection`.
-- The disk-based upload directives reject a body with more than 1000 parts with a 400 instead of silently dropping
-  the parts after the 50th, and spool parts above 64 KiB to disk.
+- `withRangeSupport` and the coding directives (`decodeRequest`, `encodeResponse` and friends) are new in 0.7.
+  `withRangeSupport` rejects a `Range` request for a response of unknown length with
+  `UnsatisfiableRangeRejection(ranges, -1)` (416 when sealed); `decodeRequest` bounds the decoded body to 8 MiB
+  (`CodingDirectives.DefaultDecodeMaxBytes`, Pekko's `decode-max-size`, 413 above it) and answers a corrupt
+  compressed body with 400 (`MalformedRequestContentRejection` from `entity`), as Pekko does.
+- The disk-based upload directives no longer decode the whole multipart body in memory: `storeUploadedFile(s)` and
+  `fileUploadAll` spool parts above 64 KiB to disk, `fileUploadSpooled` above 50 MiB, and a body with more than 1000
+  parts is rejected with a 400.
+- `fileUploadAll` deletes its temporary files once the response body has been consumed, or as soon as the route
+  rejects, fails or is cancelled; a part stream kept past the request fails. 0.6.1 kept each file until its stream was
+  read and relied on `deleteOnExit`.
 - The testkit bounds `~>` and `~!>` with an implicit `RouteTestTimeout`, 1 second by default as in Pekko: a route
-  that does not answer in time fails the test with "Request was neither completed nor rejected within 1 second".
+  that does not answer in time fails the test with "Request was neither completed nor rejected within 1 second", and
+  reading the response (`response`, `responseAs`, `chunks`, `trailer`) is bounded the same way ("Response entity was
+  not read within ...").
   Declare `implicit val routeTestTimeout: RouteTestTimeout = RouteTestTimeout(5.seconds)` for slower routes.
 - The static file and resource directives type content like Pekko: text types carry `charset=UTF-8`, an unknown
   extension is `application/octet-stream`, and `name.ext.gz` / `.svgz` are served with the inner type and
