@@ -61,6 +61,32 @@ class FileUploadDirectivesSpec extends RoutingSpec {
     }
   }
 
+  "fileUploadSpooled" should {
+    "stream the first matching part while the inner route runs" in {
+      upload(textPart("file", "a.txt", "first"), textPart("file", "b.txt", "second")) ~> fileUploadSpooled("file") {
+        case (info, data) =>
+          onSuccess(data.through(fs2.text.utf8.decode).compile.string) { content =>
+            complete(info.fileName + ":" + content)
+          }
+      } ~> check { responseAs[String] shouldEqual "a.txt:first" }
+    }
+    "default the content type to application/octet-stream when the part has none" in {
+      upload(untypedPart("file", "a.bin", "abc")) ~> fileUploadSpooled("file") { case (info, _) =>
+        complete(mediaType(info))
+      } ~> check { responseAs[String] shouldEqual "application/octet-stream" }
+    }
+    "reject with MissingFormFieldRejection when no part has the field name" in {
+      upload(textPart("other", "a.txt", "abc")) ~> fileUploadSpooled("file") { _ => completeOk } ~> check {
+        rejection shouldEqual MissingFormFieldRejection("file")
+      }
+    }
+    "stream a part over a real server" in {
+      upload(textPart("file", "a.txt", "streamed")) ~!> fileUploadSpooled("file") { case (_, data) =>
+        onSuccess(data.through(fs2.text.utf8.decode).compile.string) { content => complete(content) }
+      } ~> check { responseAs[String] shouldEqual "streamed" }
+    }
+  }
+
   "storeUploadedFile" should {
     "write the first matching part to the destination" in {
       upload(textPart("file", "a.txt", "first"), textPart("file", "b.txt", "second"))                         ~>
