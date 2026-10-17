@@ -3,7 +3,19 @@ package pl.iterators.stir.server.directives
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import org.http4s.{ Charset, ContentCoding, EntityTag, Header, HttpDate, MediaType, RangeUnit, Response, Status, Uri }
-import org.http4s.headers.{ `Accept-Encoding`, `Accept-Ranges`, `Content-Encoding`, `Content-Range`, `Content-Type`, `If-Match`, `If-None-Match`, `If-Unmodified-Since`, `Last-Modified`, ETag, Range }
+import org.http4s.headers.{
+  `Accept-Encoding`,
+  `Accept-Ranges`,
+  `Content-Encoding`,
+  `Content-Range`,
+  `Content-Type`,
+  `If-Match`,
+  `If-None-Match`,
+  `If-Unmodified-Since`,
+  `Last-Modified`,
+  ETag,
+  Range
+}
 import org.http4s.headers.Range.SubRange
 import org.typelevel.ci._
 import org.scalatest.{ Inside, Inspectors }
@@ -11,6 +23,7 @@ import pl.iterators.stir.impl.util._
 import pl.iterators.stir.server.{ Route, UnsatisfiableRangeRejection }
 
 import java.io.File
+import java.net.URLClassLoader
 import java.nio.file.{ Files => NioFiles, Paths }
 import java.time.{ LocalDate, ZoneOffset }
 import scala.annotation.unused
@@ -579,6 +592,30 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
       Route.seal(getFromResource("sample.html")) ~> check {
         status shouldEqual Status.Ok
         header("Content-Range") shouldEqual None
+      }
+    }
+    "load the resource through the given class loader" in {
+      val dir = NioFiles.createTempDirectory("stirResources")
+      NioFiles.write(dir.resolve("only-here.txt"), "from the extra loader".getBytes("UTF-8"))
+      val loader = new URLClassLoader(Array(dir.toUri.toURL), null)
+      try {
+        Get() ~> getFromResource("only-here.txt")                                               ~> check { handled shouldEqual false }
+        Get() ~> getFromResource("only-here.txt", `Content-Type`(MediaType.text.plain), loader) ~> check {
+          responseAs[String] shouldEqual "from the extra loader"
+          mediaType shouldEqual MediaType.text.plain
+        }
+        Get() ~> getFromResource("only-here.txt", loader) ~> check {
+          responseAs[String] shouldEqual "from the extra loader"
+          charsetOption shouldEqual Some(Charset.`UTF-8`) // typed by the resolver, like the one-argument form
+        }
+        Get("/only-here.txt") ~> getFromResourceDirectory("", loader) ~> check {
+          responseAs[String] shouldEqual "from the extra loader"
+        }
+      } finally {
+        loader.close()
+        NioFiles.deleteIfExists(dir.resolve("only-here.txt"))
+        NioFiles.deleteIfExists(dir)
+        ()
       }
     }
     "carry an ETag and serve ranges, like files" in {

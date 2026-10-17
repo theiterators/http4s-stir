@@ -125,9 +125,13 @@ trait FileAndResourceDirectives {
    *
    * @group fileandresource
    */
-  def getFromResource(resourceName: String)(implicit resolver: ContentTypeResolver): Route = {
+  def getFromResource(resourceName: String)(implicit resolver: ContentTypeResolver): Route =
+    getFromResource(resourceName, None)(resolver)
+
+  private def getFromResource(resourceName: String, classLoader: Option[ClassLoader])(
+      resolver: ContentTypeResolver): Route = {
     val contentType = resolver(resourceName)
-    serveResource(resourceName, contentType, gzipped = isPrecompressed(resourceName, contentType))
+    serveResource(resourceName, contentType, gzipped = isPrecompressed(resourceName, contentType), classLoader)
   }
 
   /**
@@ -138,16 +142,35 @@ trait FileAndResourceDirectives {
    * @group fileandresource
    */
   def getFromResource(resourceName: String, contentType: `Content-Type`): Route =
-    serveResource(resourceName, Some(contentType), gzipped = false)
+    serveResource(resourceName, Some(contentType), gzipped = false, classLoader = None)
 
-  private def serveResource(resourceName: String, contentType: Option[`Content-Type`], gzipped: Boolean): Route =
+  /**
+   * Completes GET requests with the content of the given class-path resource looked up through the given class
+   * loader (http4s' own loader otherwise), served with the given content type. Useful where the application's
+   * resources are not visible from the library's class loader.
+   *
+   * @group fileandresource
+   */
+  def getFromResource(resourceName: String, contentType: `Content-Type`, classLoader: ClassLoader): Route =
+    serveResource(resourceName, Some(contentType), gzipped = false, classLoader = Some(classLoader))
+
+  /**
+   * Completes GET requests with the content of the given class-path resource looked up through the given class
+   * loader and typed by the in-scope [[ContentTypeResolver]].
+   *
+   * @group fileandresource
+   */
+  def getFromResource(resourceName: String, classLoader: ClassLoader)(implicit resolver: ContentTypeResolver): Route =
+    getFromResource(resourceName, Some(classLoader))(resolver)
+  private def serveResource(resourceName: String, contentType: Option[`Content-Type`], gzipped: Boolean,
+      classLoader: Option[ClassLoader]): Route =
     if (!resourceName.endsWith("/"))
       get { ctx =>
         // http4s opens the resource's stream as soon as it builds the response, so the first response is only a
         // probe for the validators and is released at once; the content is opened again inside the inner route,
         // after `conditional` and the range pre-checks have decided that a body will be sent. http4s is given no
         // request so that it does not run its own If-None-Match / If-Modified-Since check.
-        def open = StaticFile.fromResource[IO](resourceName, None)
+        def open = StaticFile.fromResource[IO](resourceName, None, classloader = classLoader)
         open.value.flatMap {
           case None        => IO.pure(RouteResult.Rejected(Nil))
           case Some(probe) =>
@@ -250,12 +273,25 @@ trait FileAndResourceDirectives {
    *
    * @group fileandresource
    */
-  def getFromResourceDirectory(directoryName: String)(implicit resolver: ContentTypeResolver): Route = {
+  def getFromResourceDirectory(directoryName: String)(implicit resolver: ContentTypeResolver): Route =
+    getFromResourceDirectory(directoryName, None)(resolver)
+
+  /**
+   * Same as `getFromResourceDirectory` with the resources looked up through the given class loader.
+   *
+   * @group fileandresource
+   */
+  def getFromResourceDirectory(directoryName: String, classLoader: ClassLoader)(
+      implicit resolver: ContentTypeResolver): Route =
+    getFromResourceDirectory(directoryName, Some(classLoader))(resolver)
+
+  private def getFromResourceDirectory(directoryName: String, classLoader: Option[ClassLoader])(
+      resolver: ContentTypeResolver): Route = {
     val base = if (directoryName.isEmpty) "" else withTrailingSlash(directoryName)
     extractUnmatchedPath { path =>
       safeJoinPaths(base, path, separator = '/') match {
         case ""           => reject
-        case resourceName => getFromResource(resourceName)
+        case resourceName => getFromResource(resourceName, classLoader)(resolver)
       }
     }
   }
