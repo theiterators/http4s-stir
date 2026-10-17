@@ -20,6 +20,11 @@ class AttributeDirectivesSpec extends RoutingSpec {
         responseAs[String] shouldEqual "alice"
       }
     }
+    "extract an attribute added with the testkit's addAttribute" in {
+      Get() ~> addAttribute(userKey, "bob") ~> attribute(userKey) { echoComplete } ~> check {
+        responseAs[String] shouldEqual "bob"
+      }
+    }
     "reject with MissingAttributeRejection when it is absent" in {
       Get() ~> attribute(userKey) { echoComplete } ~> check {
         rejection shouldEqual MissingAttributeRejection(userKey)

@@ -1,12 +1,13 @@
 package pl.iterators.stir.server.directives
 
-import cats.effect.IO
+import cats.effect.{ IO, SyncIO }
 import fs2.{ Pipe, Stream }
 import org.http4s.{ Header, Headers, Protocol, Request, Response, Status }
 import org.http4s.headers.{ Connection, Upgrade }
 import org.http4s.server.websocket.WebSocketBuilder2
 import org.http4s.websocket.WebSocketFrame
 import org.typelevel.ci._
+import org.typelevel.vault.Key
 import pl.iterators.stir.server._
 
 /**
@@ -48,7 +49,8 @@ trait WebSocketDirectives {
   def handleWebSocketMessages(ws: WebSocketBuilder2[IO], send: Stream[IO, WebSocketFrame],
       receive: Pipe[IO, WebSocketFrame, Unit]): Route =
     requireWebSocketUpgrade { _ =>
-      ws.withOnNonWebSocketRequest(IO.pure(switchingProtocols(None))).build(send, receive).map(RouteResult.Complete(_))
+      ws.withOnNonWebSocketRequest(IO.pure(switchingProtocols(None))).build(send, receive)
+        .map(response => RouteResult.Complete(withHandler(response, WebSocketHandler.Separate(send, receive))))
     }
 
   /**
@@ -83,7 +85,8 @@ trait WebSocketDirectives {
           val headers = selected.fold(Headers.empty)(p => Headers(Header.Raw(SecWebSocketProtocol, p)))
           _ =>
             ws.withHeaders(headers).withOnNonWebSocketRequest(IO.pure(switchingProtocols(selected)))
-              .build(handler).map(RouteResult.Complete(_))
+              .build(handler).map(response =>
+                RouteResult.Complete(withHandler(response, WebSocketHandler.Combined(handler))))
       }
     }
 
@@ -96,6 +99,23 @@ trait WebSocketDirectives {
 object WebSocketDirectives extends WebSocketDirectives {
   private val SecWebSocketProtocol = ci"Sec-WebSocket-Protocol"
   private val WebSocketProtocolName = ci"websocket"
+
+  /** The handler a WebSocket directive was given, as the user wrote it (before http4s' ping/pong and defragmentation). */
+  private[stir] sealed trait WebSocketHandler
+  private[stir] object WebSocketHandler {
+    final case class Combined(pipe: Pipe[IO, WebSocketFrame, WebSocketFrame]) extends WebSocketHandler
+    final case class Separate(send: Stream[IO, WebSocketFrame], receive: Pipe[IO, WebSocketFrame, Unit])
+        extends WebSocketHandler
+  }
+
+  /**
+   * Set on the upgrade response by the WebSocket directives, so that the in-memory testkit can exchange frames with
+   * the handler (http4s keeps its own WebSocket context private). Servers ignore it.
+   */
+  private[stir] val WebSocketHandlerKey: Key[WebSocketHandler] = Key.newKey[SyncIO, WebSocketHandler].unsafeRunSync()
+
+  private def withHandler(response: Response[IO], handler: WebSocketHandler): Response[IO] =
+    response.withAttribute(WebSocketHandlerKey, handler)
 
   private[stir] def isWebSocketUpgrade(request: Request[IO]): Boolean =
     request.headers.get[Connection].exists(_.hasUpgrade) &&

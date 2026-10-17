@@ -10,13 +10,14 @@ import org.http4s.ember.server._
 import org.http4s.headers.{ `Content-Type`, Upgrade }
 import org.typelevel.ci.CIString
 import pl.iterators.stir.server._
+import pl.iterators.stir.server.directives.WebSocketDirectives.WebSocketHandlerKey
 
 import scala.annotation.unused
 import scala.concurrent.duration.{ Duration, FiniteDuration }
 import scala.reflect.ClassTag
 import scala.util.DynamicVariable
 
-trait RouteTest extends RequestBuilding with RouteTestResultComponent
+trait RouteTest extends RequestBuilding with WSTestRequestBuilding with RouteTestResultComponent
     with MarshallingTestUtils {
   this: TestFrameworkInterface =>
 
@@ -168,7 +169,10 @@ trait RouteTest extends RequestBuilding with RouteTestResultComponent
 
           val semiSealedRoute = // sealed for exceptions but not for rejections
             Directives.handleExceptions(sealedExceptionHandler)(route)
-          val deferrableRouteResult = semiSealedRoute(ctx)
+          val deferrableRouteResult = semiSealedRoute(ctx).flatTap {
+            case RouteResult.Complete(response) => RouteTest.connectWebSocketProbe(effectiveRequest, response)
+            case _                              => IO.unit
+          }
           routeTestResult.awaitWithinTimeout(deferrableRouteResult.map(routeTestResult.handleResult),
             "Request was neither completed nor rejected")
           routeTestResult
@@ -198,6 +202,14 @@ trait RouteTest extends RequestBuilding with RouteTestResultComponent
   }
 }
 private[stir] object RouteTest {
+
+  /** Wires the probe a `WS(...)` request carries to the handler the route upgraded with, when both are present. */
+  private def connectWebSocketProbe(request: Request[IO], response: Response[IO]): IO[Unit] =
+    (request.attributes.lookup(WSProbe.RequestKey), response.attributes.lookup(WebSocketHandlerKey)) match {
+      case (Some(probe), Some(handler)) => probe.connect(handler)
+      case _                            => IO.unit
+    }
+
   def runRouteClientServer(request: Request[IO], route: Route, timeout: FiniteDuration): IO[Response[IO]] = {
     val resources = for {
       server <- EmberServerBuilder

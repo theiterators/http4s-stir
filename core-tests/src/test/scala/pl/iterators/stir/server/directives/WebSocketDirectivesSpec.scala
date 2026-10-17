@@ -1,6 +1,6 @@
 package pl.iterators.stir.server.directives
 
-import cats.effect.IO
+import cats.effect.{ Deferred, IO }
 import cats.effect.unsafe.IORuntime
 import fs2.{ Pipe, Stream }
 import org.http4s.{ Header, Protocol, Status }
@@ -10,6 +10,10 @@ import org.http4s.websocket.WebSocketFrame
 import org.scalatest.exceptions.TestFailedException
 import org.typelevel.ci._
 import pl.iterators.stir.server._
+import pl.iterators.stir.testkit.{ RouteTestTimeout, WSProbe }
+import scodec.bits.ByteVector
+
+import scala.concurrent.duration._
 
 class WebSocketDirectivesSpec extends RoutingSpec {
   override implicit def runtime: IORuntime = IORuntime.global
@@ -131,6 +135,97 @@ class WebSocketDirectivesSpec extends RoutingSpec {
       Get("/ws") ~> upgradeHeaders ~> handleWebSocketMessages(ws, echo) ~> check {
         an[TestFailedException] should be thrownBy
         expectWebSocketUpgradeWithProtocol { _ => () }
+      }
+    }
+  }
+
+  "the testkit WSProbe" should {
+    // Pekko's greeter: text frames are answered, binary frames ignored
+    val greeter: Pipe[IO, WebSocketFrame, WebSocketFrame] =
+      _.collect { case text: WebSocketFrame.Text => WebSocketFrame.Text(s"Hello ${text.str}!") }
+
+    "handle websocket requests" in {
+      val wsClient = WSProbe()
+      WS("/", wsClient) ~> handleWebSocketMessages(ws, greeter) ~> check {
+        isWebSocketUpgrade shouldEqual true
+        wsClient.sendMessage("Peter")
+        wsClient.expectMessage("Hello Peter!")
+
+        wsClient.sendMessage(WebSocketFrame.Binary(ByteVector("abcdef".getBytes)))
+        wsClient.expectNoMessage()
+
+        wsClient.sendMessage("John")
+        wsClient.expectMessage("Hello John!")
+
+        wsClient.sendCompletion()
+        wsClient.expectCompletion()
+      }
+    }
+    "choose subprotocol from offered ones" in {
+      val wsClient = WSProbe()
+      val route = handleWebSocketMessagesForProtocol(ws, echo, "echo") ~
+        handleWebSocketMessagesForProtocol(ws, greeter, "greeter")
+      WS("/", wsClient, "other", "echo", "greeter") ~> route ~> check {
+        expectWebSocketUpgradeWithProtocol { protocol =>
+          protocol shouldEqual "echo"
+
+          wsClient.sendMessage("Peter")
+          wsClient.expectMessage("Peter")
+
+          wsClient.sendMessage(ByteVector("abcdef".getBytes))
+          wsClient.expectMessage(ByteVector("abcdef".getBytes))
+
+          wsClient.sendMessage("John")
+          wsClient.expectMessage("John")
+
+          wsClient.sendCompletion()
+          wsClient.expectCompletion()
+        }
+      }
+    }
+    "drive a handler with separate send and receive sides" in {
+      val wsClient = WSProbe()
+      val received = Deferred[IO, String].unsafeRunSync()
+      val send = Stream("a", "b").map(WebSocketFrame.Text(_)).covary[IO]
+      val receive: Pipe[IO, WebSocketFrame, Unit] =
+        _.collect { case text: WebSocketFrame.Text => text.str }.evalMap(received.complete(_).void)
+      WS("/", wsClient) ~> handleWebSocketMessages(ws, send, receive) ~> check {
+        wsClient.expectMessage("a")
+        wsClient.expectMessage("b")
+        wsClient.expectCompletion()
+        wsClient.sendMessage("from client")
+        received.get.timeout(5.seconds).unsafeRunSync() shouldEqual "from client"
+      }
+    }
+    "fail the expectations that are not met" in {
+      implicit val routeTestTimeout: RouteTestTimeout = RouteTestTimeout(200.millis) // shadows the spec-wide one
+      val wsClient = WSProbe()
+      WS("/", wsClient) ~> handleWebSocketMessages(ws, greeter) ~> check {
+        an[AssertionError] should be thrownBy wsClient.expectMessage()
+        wsClient.sendMessage("Peter")
+        an[AssertionError] should be thrownBy wsClient.expectNoMessage()
+        wsClient.sendMessage("John")
+        an[AssertionError] should be thrownBy wsClient.expectMessage("Goodbye John!")
+        wsClient.sendMessage("Mary")
+        an[AssertionError] should be thrownBy wsClient.expectCompletion()
+        wsClient.sendCompletion()
+        an[AssertionError] should be thrownBy wsClient.expectMessage()
+      }
+    }
+    "report a failing handler on the next expectation" in {
+      val wsClient = WSProbe()
+      val failing: Pipe[IO, WebSocketFrame, WebSocketFrame] =
+        _.evalMap(_ => IO.raiseError[WebSocketFrame](new IllegalStateException("boom")))
+      WS("/", wsClient) ~> handleWebSocketMessages(ws, failing) ~> check {
+        wsClient.sendMessage("Peter")
+        (the[AssertionError] thrownBy wsClient.expectMessage() should have).message(
+          "Expected a message but the handler failed: java.lang.IllegalStateException: boom")
+      }
+    }
+    "leave a plain request's rejection untouched" in {
+      WS("/", WSProbe()) ~> complete("plain")                    ~> check { responseAs[String] shouldEqual "plain" }
+      Get("/")           ~> handleWebSocketMessages(ws, greeter) ~> check {
+        rejection shouldEqual ExpectedWebSocketRequestRejection
       }
     }
   }

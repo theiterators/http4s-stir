@@ -122,23 +122,34 @@ Inside a `check { }` block, the following members are available for assertions:
 
 ## WebSocket Routes
 
-A WebSocket route run with `~>` answers an upgrade request with the handshake decision: `isWebSocketUpgrade` is
-true when the route accepted the upgrade, and `expectWebSocketUpgradeWithProtocol` asserts the upgrade and hands
-the selected `Sec-WebSocket-Protocol` to the given function. Frames are not exchanged; the server performs the
-real handshake.
+`WS(uri, probe, subprotocols*)` builds a WebSocket upgrade request (`Connection: Upgrade`, `Upgrade: websocket`,
+`Sec-WebSocket-Version`, `Sec-WebSocket-Key` and, when subprotocols are given, `Sec-WebSocket-Protocol`), and a
+`WSProbe` plays the client, as Pekko's `WS` and `WSProbe` do. When the route accepts the upgrade, the in-memory
+testkit (`~>`) connects the probe to the handler the directive was given; inside `check`, `sendMessage` sends a
+text, binary or raw frame to the handler and `sendCompletion()` ends the client's stream, while `expectMessage()`,
+`expectMessage(text)`, `expectMessage(bytes)`, `expectNoMessage()` and `expectCompletion()` assert on what the
+handler sends back. `expectMessage` and `expectCompletion` wait for the route test timeout and `expectNoMessage` for
+100 ms (or the duration given); a failed expectation throws an `AssertionError`, and a handler that fails is reported
+by the next expectation.
 
 ```scala
-val upgrade = addHeaders(
-  Connection(ci"Upgrade"),
-  Upgrade(Protocol(ci"websocket", None)),
-  Header.Raw(ci"Sec-WebSocket-Version", "13"),
-  Header.Raw(ci"Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ=="),
-  Header.Raw(ci"Sec-WebSocket-Protocol", "json"))
+import pl.iterators.stir.testkit.WSProbe
 
-Get("/ws") ~> upgrade ~> handleWebSocketMessagesForProtocol(ws, handler, "json") ~> check {
+val wsClient = WSProbe()
+
+WS("/greeter", wsClient, "json") ~> handleWebSocketMessagesForProtocol(ws, greeter, "json") ~> check {
   expectWebSocketUpgradeWithProtocol { protocol => protocol shouldEqual "json" }
+  wsClient.sendMessage("Peter")
+  wsClient.expectMessage("Hello Peter!")
+  wsClient.sendCompletion()
+  wsClient.expectCompletion()
 }
 ```
+
+`isWebSocketUpgrade` is true when the route accepted the upgrade, and `expectWebSocketUpgradeWithProtocol` asserts
+the upgrade and hands the selected `Sec-WebSocket-Protocol` to the given function. The probe talks to the handler as
+the directive received it: the ping/pong filtering and frame defragmentation the server adds are not applied, and
+the real handshake is the server's. Over a real server (`~!>`) frames are not exchanged.
 
 ## Streamed Responses
 
@@ -170,6 +181,8 @@ Builders that accept an entity require an implicit `EntityEncoder[IO, T]` for th
 
 `Query` builds a request with the `QUERY` method (`MethodDirectives.QUERY`).
 
+`WS(uri, probe, subprotocols*)` builds a WebSocket upgrade request driven by a `WSProbe`; see "WebSocket Routes".
+
 A request built with a body (`Post("/", body)`) carries the `Content-Type` and `Content-Length` the body's
 `EntityEncoder` produces, as a real client would send; override with `addHeader`.
 
@@ -187,6 +200,7 @@ Transform requests before sending them to a route:
 | `removeHeaders(names*)` | Remove headers by multiple names. |
 | `mapHeaders(f)` | Transform the headers collection with a function. |
 | `addCredentials(credentials)` | Add an `Authorization` header with the given credentials. |
+| `addAttribute(key, value)` | Set a request attribute (a `org.typelevel.vault.Key`), read in a route with `attribute(key)`. |
 
 Apply transformers using `~>`:
 
