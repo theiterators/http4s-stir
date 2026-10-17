@@ -724,13 +724,13 @@ class PathDirectivesSpec extends RoutingSpec with Inside {
       }
     }
 
-//    "redirect if the request path doesn't have a trailing slash" in {
-//      Get("/foo/bar") ~> route ~> checkRedirectTo(Uri.unsafeFromString("/foo/bar/"))
-//    }
+    "redirect if the request path doesn't have a trailing slash" in {
+      Get("/foo/bar") ~> route ~> checkRedirectTo(Uri.unsafeFromString("/foo/bar/"))
+    }
 
-//    "preserve the query and the frag when redirect" in {
-//      Get("/foo/bar?query#frag") ~> route ~> checkRedirectTo(Uri.unsafeFromString("/foo/bar/?query#frag"))
-//    }
+    "preserve the query and the frag when redirect" in {
+      Get("/foo/bar?query#frag") ~> route ~> checkRedirectTo(Uri.unsafeFromString("/foo/bar/?query#frag"))
+    }
 
     "redirect with the given redirection status code" in {
       Get("/foo/bar") ~>

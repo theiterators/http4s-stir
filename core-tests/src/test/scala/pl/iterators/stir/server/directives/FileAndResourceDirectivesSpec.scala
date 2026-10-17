@@ -28,23 +28,15 @@ import java.net.URLClassLoader
 import java.util.jar.{ JarEntry, JarOutputStream }
 import java.nio.file.{ Files => NioFiles, Path => NioPath, Paths }
 import java.time.{ LocalDate, ZoneOffset }
-import scala.annotation.unused
 import scala.util.Properties
 
 class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Inside {
   override implicit def runtime: IORuntime = IORuntime.global
 
-  // operations touch files, can be randomly hit by slowness
-//  implicit val routeTestTimeout: RouteTestTimeout = RouteTestTimeout(3.seconds.dilated)
-
   // need to serve from the src directory, when sbt copies the resource directory over to the
   // target directory it will resolve symlinks in the process
   val testRoot = new File("core-tests/src/test/resources")
   require(testRoot.exists(), s"testRoot was not found at ${testRoot.getAbsolutePath}")
-
-//  override def testConfigSource = super.testConfigSource ++ """
-//    pekko.http.routing.range-coalescing-threshold = 1
-//  """
 
   def writeAllText(text: String, file: File) =
     NioFiles.write(file.toPath, text.getBytes("UTF-8"))
@@ -424,15 +416,11 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
 
       Get() ~> route("file.html") ~> check { handled shouldEqual true }
 
-      def shouldReject(prefix: String, @unused warnings: Int = 1) =
+      def shouldReject(prefix: String) =
         try {
-//          EventFilter.warning(
-//            start = "File-system path for base",
-//            occurrences = warnings).intercept {
           Get() ~> route(prefix + "fileA.txt") ~> check {
             handled shouldEqual false
           }
-//          }
         } catch {
           case err: AssertionError => throw new AssertionError(s"Failure for prefix $prefix", err)
         }
@@ -449,10 +437,9 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
       shouldReject("%5c")
       shouldReject("..%5c")
 
-      // FIXME these don't cause log warnings for some reason
-      shouldReject("..%255c", warnings = 0)
-      shouldReject("..%c0%af", warnings = 0)
-      shouldReject("..%c1%9c", warnings = 0)
+      shouldReject("..%255c")
+      shouldReject("..%c0%af")
+      shouldReject("..%c1%9c")
     }
     "reject the whole request when a segment is suspicious instead of dropping the segment" in {
       // "..\\" is dropped today, leaving someDir/sub/file.html, which exists and is served
@@ -494,14 +481,9 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
       }
     }
     "not follow symbolic links to find a file" in {
-//      EventFilter.warning(pattern = ".* points to a location that is not part of .*", occurrences = 1).intercept {
       Get("linked-dir/empty.pdf") ~> _getFromDirectory("dirWithLink") ~> check {
         handled shouldBe false
-        /* TODO: resurrect following links under an option
-          responseAs[String] shouldEqual "123"
-          mediaType shouldEqual `application/pdf`*/
       }
-//      }
     }
   }
 
@@ -548,19 +530,6 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
         responseAs[String] shouldEqual "fallback"
       }
     }
-    "reject requests to directory resources from an archive " in {
-      Get() ~> getFromResource("com/typesafe/config") ~> check { handled shouldEqual false }
-    }
-    "reject requests to directory resources from an archive with trailing slash" in {
-      Get() ~> getFromResource("com/typesafe/config/") ~> check { handled shouldEqual false }
-    }
-//    "return the resource from an archive with spaces and umlauts" in {
-//      // contained within lib/jar with späces.jar
-//      Get() ~> getFromResource("test-resource.txt") ~> check {
-////        mediaType shouldEqual MediaType.parse("text/plain").getOrElse(fail("Media type could not be parsed"))
-//        responseAs[String] shouldEqual "I have spaces, too!"
-//      }
-//    }
     "return the resource content with the MediaType matching the file extension" in {
       val route = getFromResource("sample.html")
 
@@ -581,13 +550,6 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
       runCheck()
       runCheck() // additional test to check that no internal state is kept
     }
-//    "return the resource content from an archive" in {
-//      Get() ~> getFromResource("com/typesafe/config/Config.class") ~> check {
-//        mediaType shouldEqual `application/octet-stream`
-//        responseEntity.toStrict(1.second.dilated).awaitResult(
-//          1.second.dilated).data.asByteBuffer.getInt shouldEqual 0xCAFEBABE
-//      }
-//    }
     "use the given content type instead of the one derived from the resource name" in {
       Get() ~> getFromResource("sample.xyz", `Content-Type`(MediaType.text.plain)) ~> check {
         mediaType shouldEqual MediaType.text.plain
@@ -653,7 +615,8 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
         Get("/test-resource.txt") ~> getFromResourceDirectory("inJar", loader) ~> check {
           responseAs[String] shouldEqual "I have spaces, too!"
         }
-        Get("/inJar") ~> getFromResourceDirectory("", loader) ~> check { handled shouldEqual false }
+        Get("/inJar")  ~> getFromResourceDirectory("", loader) ~> check { handled shouldEqual false }
+        Get("/inJar/") ~> getFromResourceDirectory("", loader) ~> check { handled shouldEqual false }
       } finally {
         loader.close()
         try NioFiles.deleteIfExists(jar)
@@ -694,7 +657,6 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
     }
     "properly handle zero-byte files" in {
       Get() ~> getFromResource("subDirectory/fileA.txt") ~> check {
-//        mediaType shouldEqual NoMediaType
         responseAs[String] shouldEqual ""
       }
     }
@@ -717,13 +679,6 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
     "return the resource content with the MediaType matching the file extension - example 3" in {
       Get("subDirectory/empty.pdf") ~> getFromResourceDirectory("") ~> verify
     }
-//    "return the resource content from an archive" in {
-//      Get("Config.class") ~> getFromResourceDirectory("com/typesafe/config") ~> check {
-//        mediaType shouldEqual `application/octet-stream`
-//        responseEntity.toStrict(1.second.dilated).awaitResult(
-//          1.second.dilated).data.asByteBuffer.getInt shouldEqual 0xCAFEBABE
-//      }
-//    }
     "reject requests to directory resources" in {
       Get() ~> getFromResourceDirectory("subDirectory") ~> check { handled shouldEqual false }
     }
@@ -735,12 +690,6 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
     }
     "reject requests to sub directory resources with trailing slash" in {
       Get("sub/") ~> getFromResourceDirectory("someDir") ~> check { handled shouldEqual false }
-    }
-    "reject requests to directory resources from an archive" in {
-      Get() ~> getFromResourceDirectory("com/typesafe/config") ~> check { handled shouldEqual false }
-    }
-    "reject requests to directory resources from an archive with trailing slash" in {
-      Get() ~> getFromResourceDirectory("com/typesafe/config/") ~> check { handled shouldEqual false }
     }
   }
 
