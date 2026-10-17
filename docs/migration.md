@@ -85,6 +85,8 @@ instead. Other differences that remain:
   e.g. by `withQueryParam` in a middleware, was already split there), `parameter("x")` takes the first occurrence even
   when it has no value (`?x&x=1` gives `""`, was `"1"`), and `.repeated` lists an occurrence without a value as `""`
   (was skipped).
+- Logged request URIs mask a sensitive query value up to the next `&`, as the parameter directives now read it, and keep
+  the query as received: `?token=t;user=u` logs as `?token=REDACTED` (was `?token=REDACTED&user=u`).
 - The form directives parse url-encoded bodies themselves instead of through http4s' `UrlForm` decoder: `;` no
   longer separates fields (`a=1;b=2` is one field, as in Pekko) and characters that http4s rejected with a 400 when
   unencoded (spaces, quotes, brackets, non-ASCII) are accepted literally.

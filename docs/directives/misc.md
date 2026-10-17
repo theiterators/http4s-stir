@@ -207,7 +207,8 @@ With no configuration, values under conventionally named keys never reach the lo
 - header values whose name matches (`X-Api-Key`, `Proxy-Authorization`, `X-Csrf-Token`, …) render as `<REDACTED>`,
   in addition to `Authorization`, `Cookie` and `Set-Cookie`;
 - query parameter values and the userinfo of the request URI, and of `Referer`/`Location` headers, render as `REDACTED`
-  (`/login?token=REDACTED`); so do the values of a query-shaped fragment (`/cb#access_token=REDACTED&state=s`, the
+  (`/login?token=REDACTED`; a query value is masked up to the next `&`, as the parameter directives read it, and across
+  `;` separators, and the query is logged as received); so do the values of a query-shaped fragment (`/cb#access_token=REDACTED&state=s`, the
   shape the OAuth 2.0 implicit grant writes into `Location`): pairs are separated by `&` as `URLSearchParams` reads
   them, and names are matched as written, after each `?` of a hash route (`#/login?id_token=REDACTED`) and across
   legacy `;` separators, so a value is masked under any of those readings (a fragment with more than 16 `?` is
