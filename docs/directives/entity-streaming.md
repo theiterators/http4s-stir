@@ -76,12 +76,14 @@ val route: Route = get {
 instead of an array:
 
 ```scala
-import fs2.{ Chunk, Pipe }
+import cats.effect.IO
+import fs2.{ Chunk, Pipe, Stream }
 
 val newlineSeparated: Pipe[IO, Chunk[Byte], Byte] =
   frames => frames.flatMap(frame => Stream.chunk(frame) ++ Stream.emit('\n'.toByte))
 
-implicit val ndjsonStreaming: EntityStreamingSupport = EntityStreamingSupport.json().withFramingRenderer(newlineSeparated)
+implicit val ndjsonStreaming: EntityStreamingSupport =
+  EntityStreamingSupport.json().withFramingRenderer(newlineSeparated)
 // {"id":"a","value":1.0}
 // {"id":"b","value":2.5}
 ```
@@ -91,10 +93,13 @@ support's (`withContentType` changes it).
 
 ## Parallel (un)marshalling
 
-Elements are encoded and decoded one at a time by default. `withParallelMarshalling(parallelism, unordered)`, as
-Pekko's, lets `asSourceOf` unmarshal and the stream marshaller encode up to `parallelism` elements at once, through
-fs2's `parEvalMap`; with `unordered = true` (`parEvalMapUnordered`) an element is emitted as soon as it is ready, so
-a large element does not hold back the smaller ones after it, at the price of the order.
+Elements are encoded and decoded one at a time by default. `withParallelMarshalling(parallelism, unordered)` lets
+`asSourceOf` unmarshal and the stream marshaller encode up to `parallelism` elements at once, through fs2's
+`parEvalMap`; with `unordered = true` (`parEvalMapUnordered`) an element is emitted as soon as it is ready, so a
+large element does not hold back the smaller ones that are in flight with it, at the price of the order. Pekko
+honours these settings when unmarshalling a request only and always renders a response one element at a time; stir
+applies them on both sides. A failing element fails the stream on both sides, as in Pekko: the request fails, or the
+response body breaks after the elements already sent.
 
 ```scala
 implicit val parallelStreaming: EntityStreamingSupport =

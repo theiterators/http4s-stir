@@ -25,14 +25,15 @@ trait EntityStreamingSupport {
   def framingRenderer: Pipe[IO, Chunk[Byte], Byte]
 
   /**
-   * How many elements are (un)marshalled at the same time by `asSourceOf` and the stream marshaller; 1 by default
-   * (Pekko's `parallelism`).
+   * How many elements are (un)marshalled at the same time by `asSourceOf` and the stream marshaller (Pekko's
+   * `parallelism`, which Pekko applies on the read side only); 1 for the `json()` and `csv()` supports. Values below
+   * 1 are treated as 1.
    */
   def parallelism: Int
 
   /**
    * Whether parallel (un)marshalling may emit the elements out of order, which avoids head-of-line blocking when
-   * some elements are much larger than others; `false` by default (Pekko's `unordered`).
+   * some elements are much larger than others (Pekko's `unordered`); `false` for the `json()` and `csv()` supports.
    */
   def unordered: Boolean
 
