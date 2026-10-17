@@ -3,7 +3,7 @@ package pl.iterators.stir.server.directives
 import cats.effect.IO
 import cats.effect.std.Console
 import fs2.Pull
-import org.http4s.Headers
+import org.http4s.{ Headers, Request }
 import org.typelevel.ci.CIString
 import pl.iterators.stir.server.{ Directive, Directive0, RouteResult }
 
@@ -105,6 +105,30 @@ trait DebuggingDirectives {
     logResult(logHeaders, logBody, redactHeadersWhen, maxBodyBytes, logAction, redaction) &
     logRequest(logHeaders, logBody, redactHeadersWhen, maxBodyBytes, logAction, redaction)
   }
+
+  /**
+   * Produces a log entry for the [[RouteResult]]s the given function chooses to describe, with the request at hand:
+   * Pekko's `logRequestResult(show: HttpRequest => RouteResult => Option[LogEntry])`, so that for instance only
+   * rejections are logged. `show(request)` is applied before the inner route runs and the result function after it;
+   * a `None` logs nothing. As in Pekko, a failing `show` fails the request (the exception handler answers), while a
+   * failing `logAction` is swallowed like in the other debugging directives.
+   *
+   * Treat the response body as opaque: it is the stream the client will read. Reading it re-runs its effects (a
+   * `Stream` completed through the streaming marshaller runs again, an unbounded one never ends), consumes a one-shot
+   * body, and triggers finalizers early (the upload directives delete their files when the body ends). Only a body
+   * built from a strict value (`complete("text")`, `complete(json)`) is safe to read. To log body prefixes use
+   * `logResult(maxBodyBytes = ...)`, which tees the bytes as the client reads them.
+   *
+   * @group debugging
+   */
+  def logRequestResultWith(show: Request[IO] => RouteResult => IO[Option[String]],
+      logAction: Option[String => IO[Unit]] = None): Directive0 =
+    Directive { inner => ctx =>
+      val log = DebuggingDirectives.safeLog(logAction)
+      IO(show(ctx.request)).flatMap { showResult =>
+        inner(())(ctx).flatTap(result => IO.defer(showResult(result)).flatMap(_.fold(IO.unit)(log)))
+      }
+    }
 }
 
 object DebuggingDirectives extends DebuggingDirectives {

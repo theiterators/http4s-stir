@@ -4,10 +4,12 @@ import cats.effect.{ IO, Ref }
 import cats.effect.unsafe.IORuntime
 import fs2.{ Chunk, Stream }
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.atomic.AtomicInteger
 import org.http4s.headers.{ `Content-Length`, `Content-Type`, `Transfer-Encoding` }
-import org.http4s.{ Charset, Header, MediaType, Response, Status, TransferCoding, UrlForm }
+import org.http4s.{ Charset, Header, MediaType, Request, Response, Status, TransferCoding, UrlForm }
 import org.typelevel.ci._
 import pl.iterators.stir.impl.util._
+import pl.iterators.stir.server.{ RouteResult, ValidationRejection }
 
 class DebuggingDirectivesSpec extends RoutingSpec {
   override implicit def runtime: IORuntime = IORuntime.global
@@ -267,6 +269,78 @@ class DebuggingDirectivesSpec extends RoutingSpec {
         """|HTTP/1.1 GET http://bob:pw@example.com/a?reset_token=QS&user=alice%20b&flag&t=1&t=2 Headers(X-Api-Key: KEY1, Cookie: <REDACTED>)
            |HTTP/1.1 200 OK Headers()
            |""".stripMarginWithNewline("\n")
+      }
+    }
+  }
+
+  "The 'logRequestResultWith' directive" should {
+    val rejectionLogger: Request[IO] => RouteResult => IO[Option[String]] = request => {
+      case RouteResult.Rejected(rejections) =>
+        IO.pure(Some(
+          s"Request: ${request.method} ${request.uri}\nwas rejected with rejections:\n${rejections.mkString(", ")}"))
+      case _ => IO.pure(None)
+    }
+
+    "be able to log only rejections" in {
+      val route = logRequestResultWith(rejectionLogger, logAction)(
+        reject(ValidationRejection("The request could not be validated", None)))
+
+      resetDebugMsg()
+      Get("/hello") ~> route ~> check {
+        handled shouldBe false
+        normalizedDebugMsg() shouldEqual
+        """|Request: GET /hello
+           |was rejected with rejections:
+           |ValidationRejection(The request could not be validated,None)
+           |""".stripMarginWithNewline("\n")
+      }
+    }
+    "log nothing when the function returns None" in {
+      resetDebugMsg()
+      Get("/hello") ~> logRequestResultWith(rejectionLogger, logAction)(completeOk) ~> check {
+        response.status shouldEqual Status.Ok
+        normalizedDebugMsg() shouldEqual ""
+      }
+    }
+    "let the function read a strict response body without consuming it" in {
+      val bodyLogger: Request[IO] => RouteResult => IO[Option[String]] = _ => {
+        case RouteResult.Complete(response) => response.bodyText.compile.string.map(body => Some(s"body: $body"))
+        case _                              => IO.pure(None)
+      }
+      resetDebugMsg()
+      Get("/hello") ~> logRequestResultWith(bodyLogger, logAction)(complete("payload")) ~> check {
+        responseAs[String] shouldEqual "payload"
+        normalizedDebugMsg() shouldEqual "body: payload\n"
+      }
+    }
+    "fail the request when the function fails, as Pekko does" in {
+      val failingIO: Request[IO] => RouteResult => IO[Option[String]] =
+        _ => _ => IO.raiseError(new IllegalStateException("no logging today"))
+      val throwing: Request[IO] => RouteResult => IO[Option[String]] =
+        _ => { case _ => throw new IllegalStateException("x") }
+      val throwingEarly: Request[IO] => RouteResult => IO[Option[String]] =
+        _ => throw new IllegalStateException("early")
+      Get("/hello") ~> logRequestResultWith(failingIO, logAction)(completeOk) ~> check {
+        status shouldEqual Status.InternalServerError
+      }
+      Get("/hello") ~> logRequestResultWith(throwing, logAction)(completeOk) ~> check {
+        status shouldEqual Status.InternalServerError
+      }
+      Get("/hello") ~> logRequestResultWith(throwingEarly, logAction)(completeOk) ~> check {
+        status shouldEqual Status.InternalServerError
+      }
+    }
+    "keep the result when the log action fails" in {
+      val failingAction: Option[String => IO[Unit]] = Some(_ => IO.raiseError(new IllegalStateException("sink down")))
+      Get("/hello") ~> logRequestResultWith(rejectionLogger, failingAction)(reject) ~> check { handled shouldBe false }
+    }
+    "not call the function when the inner route fails" in {
+      val calls = new AtomicInteger(0)
+      val counting: Request[IO] => RouteResult => IO[Option[String]] = _ => _ => IO(calls.incrementAndGet()).as(None)
+      Get("/hello") ~> logRequestResultWith(counting, logAction)(failWith(new IllegalStateException("inner"))) ~>
+      check {
+        status shouldEqual Status.InternalServerError
+        calls.get() shouldEqual 0
       }
     }
   }
