@@ -1,5 +1,6 @@
 package pl.iterators.stir.server.directives
 
+import org.http4s.Uri
 import org.http4s.headers.Host
 import pl.iterators.stir.server.{ Directive0, Directive1 }
 
@@ -65,7 +66,22 @@ trait HostDirectives {
 }
 
 object HostDirectives extends HostDirectives {
-  import HeaderDirectives._
+  import BasicDirectives._
 
-  private val _extractHost: Directive1[String] = optionalHeaderValueByType[Host].map(_.fold("")(h => h.host))
+  // the host of the request's effective URI, as Pekko reads it: the authority of the request URI (an absolute-form
+  // request, or HTTP/2's :authority, which brings no Host header), else the Host header (RFC 7230 5.4); an IPv6
+  // address without brackets
+  private val _extractHost: Directive1[String] = extract { ctx =>
+    ctx.request.uri.authority.map(authority => address(authority.host))
+      .orElse(ctx.request.headers.get[Host].map(header => unbracketed(header.host)))
+      .getOrElse("")
+  }
+
+  private def address(host: Uri.Host): String = host match {
+    case Uri.Ipv6Address(ipv6) => ipv6.toString
+    case other                 => other.value
+  }
+
+  private def unbracketed(host: String): String =
+    if (host.startsWith("[") && host.endsWith("]")) host.substring(1, host.length - 1) else host
 }

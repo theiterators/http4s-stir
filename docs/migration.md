@@ -82,6 +82,8 @@ instead. Other differences that remain:
   than an empty body; match on the option and complete explicitly.
 - `extractUri` gives the request URI as received (relative under HTTP/1); Pekko gives the effective, absolute URI.
 - An empty file is served with the `Content-Type` of its extension; Pekko sends an empty entity without one.
+- Over Ember's HTTP/2 the host directives see no host (`extractHost` gives `""`, `host(...)` rejects): Ember 0.23.36
+  drops the `:authority` pseudo-header, and HTTP/2 brings no `Host` header.
 - Content negotiation differs from Pekko for wildcard ranges with parameters: stir ignores `charset` on every range
   (Pekko only on `type/subtype` ranges, so its `text/*;charset=...` never matches) and does not count a wildcard
   range's parameters towards its specificity.
@@ -192,6 +194,9 @@ instead. Other differences that remain:
   directive read the body anew each, so wrap them in `toStrictEntity` to let several of them read a streamed body.
   This applies to in-memory test bodies too (a body built with `withBodyStream` has no length, so it can be read
   once); `toHttpRoutes` hands the next routes the request as received and is not covered.
+- `extractHost` and `host` read the authority of the request URI first, then the `Host` header, as Pekko reads the
+  effective URI: an absolute-form request is matched by its URI's host (it used to need a `Host` header, which
+  absolute-form requests may differ from), and an IPv6 host comes without brackets (`::1`, was `[::1]`).
 
 ## Testkit differences
 
