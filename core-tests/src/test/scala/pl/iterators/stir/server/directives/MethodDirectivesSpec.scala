@@ -4,6 +4,8 @@ import cats.effect.unsafe.IORuntime
 import org.http4s.{ Method, Status }
 import pl.iterators.stir.server._
 
+import java.util.Locale
+
 class MethodDirectivesSpec extends RoutingSpec {
   override implicit def runtime: IORuntime = IORuntime.global
 
@@ -80,12 +82,28 @@ class MethodDirectivesSpec extends RoutingSpec {
         put { complete("PUT") }
       } ~> check { responseAs[String] shouldEqual "GET" }
     }
-//    "complete with 501 Not Implemented when not a valid method" in {
-//      Get("/?_method=hallo") ~> overrideMethodWithParameter("_method") {
-//        get { complete("GET") } ~
-//          put { complete("PUT") }
-//      } ~> check { status shouldEqual Status.NotImplemented }
-//    }
+    "complete with 501 Not Implemented when not a valid method" in {
+      Get("/?_method=hallo") ~> overrideMethodWithParameter("_method") {
+        get { complete("GET") } ~
+        put { complete("PUT") }
+      } ~> check { status shouldEqual Status.NotImplemented }
+    }
+    "override with QUERY" in {
+      Get("/?_method=query") ~> overrideMethodWithParameter("_method") {
+        get { complete("GET") } ~
+        query { complete("QUERY") }
+      } ~> check { responseAs[String] shouldEqual "QUERY" }
+    }
+    "override with a method name containing an i in the turkish locale" in {
+      val previous = Locale.getDefault
+      Locale.setDefault(Locale.forLanguageTag("tr-TR"))
+      try {
+        Get("/?_method=options") ~> overrideMethodWithParameter("_method") {
+          get { complete("GET") } ~
+          options { complete("OPTIONS") }
+        } ~> check { responseAs[String] shouldEqual "OPTIONS" }
+      } finally Locale.setDefault(previous)
+    }
   }
 
 //  "MethodRejections under a successful match" should {
