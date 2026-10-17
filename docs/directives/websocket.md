@@ -91,13 +91,15 @@ Both overloads of `handleWebSocketMessages` require a `WebSocketBuilder2[IO]` in
 import cats.effect._
 import com.comcast.ip4s._
 import org.http4s.ember.server.EmberServerBuilder
+import fs2.Pipe
 import org.http4s.server.websocket.WebSocketBuilder2
+import org.http4s.websocket.WebSocketFrame
 import pl.iterators.stir.server.Directives._
 import pl.iterators.stir.server.Route
 
 def routes(ws: WebSocketBuilder2[IO]): Route =
   path("ws-echo") {
-    val echo: fs2.Pipe[IO, org.http4s.websocket.WebSocketFrame, org.http4s.websocket.WebSocketFrame] = identity
+    val echo: Pipe[IO, WebSocketFrame, WebSocketFrame] = identity
     handleWebSocketMessages(ws, echo)
   }
 

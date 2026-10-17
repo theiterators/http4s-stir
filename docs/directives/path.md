@@ -356,7 +356,8 @@ val route: Route = path("items" / IntNumber.?) { maybeId =>
   complete(s"ID: $maybeId")
 }
 // /items/42 -> Some(42)
-// /items    -> None
+// /items/   -> None
+// /items    -> rejected: the `/` matcher needs a slash, as in Pekko
 ```
 
 ### `repeat(count)` and `repeat(min, max, separator)`

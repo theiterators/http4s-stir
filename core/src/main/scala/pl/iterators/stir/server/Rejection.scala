@@ -11,7 +11,7 @@ trait Rejection
  * thrown by domain model constructors (e.g. via `require`).
  * It signals that an expected value was semantically invalid.
  */
-case class ValidationRejection(message: String, cause: Option[Throwable]) extends Rejection
+case class ValidationRejection(message: String, cause: Option[Throwable] = None) extends Rejection
 
 /**
  * Rejection created by unmarshallers.

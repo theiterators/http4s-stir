@@ -11,6 +11,14 @@ import pl.iterators.stir.server._
 class RouteDirectivesSpec extends AnyWordSpec with GenericRoutingSpec {
   override implicit def runtime: IORuntime = IORuntime.global
 
+  "ValidationRejection" should {
+    "take its cause as optional, as Pekko's does" in {
+      Get() ~> reject(ValidationRejection("Invalid input")) ~> check {
+        rejection shouldEqual ValidationRejection("Invalid input", None)
+      }
+    }
+  }
+
   "The `complete` directive" should {
     "be chainable with the `&` operator" in {
       Get() ~> (get & complete("yeah")) ~> check { responseAs[String] shouldEqual "yeah" }
