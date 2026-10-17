@@ -277,6 +277,29 @@ class MiscDirectivesSpec extends RoutingSpec {
         requestEntityPresent { withoutSizeLimit { entity(as[String])(s => complete("body:" + s)) } }
       } ~> check { responseAs[String] shouldEqual "body:abcde" }
     }
+    "fail a second read of a length-less body, as an alternative would otherwise get it truncated" in {
+      val surfaced = handleExceptions(ExceptionHandler { case e: IllegalStateException => complete(e.getMessage) })
+      http2(Post().withBodyStream(Stream("ab", "c").through(fs2.text.utf8.encode)))                ~>
+      surfaced(entity(as[String])(_ => reject) ~ entity(as[String])(s => complete("second:" + s))) ~> check {
+        responseAs[String] shouldEqual MiscDirectives.RereadMessage
+      }
+    }
+    "not hand a second alternative a truncated body over a real HTTP/2 connection" in {
+      val app = (entity(as[String])(_ => reject) ~ entity(as[String])(s => complete("second:" + s.length))).toHttpApp
+      val result = (for {
+        server <- EmberServerBuilder.default[IO].withHttp2.withHost(ipv4"127.0.0.1").withPort(port"0")
+          .withHttpApp(app).withShutdownTimeout(Duration.Zero).build
+        client <- EmberClientBuilder.default[IO].withHttp2.build
+      } yield (server, client)).use { case (server, client) =>
+        val uri = Uri.unsafeFromString(s"http://127.0.0.1:${server.address.getPort}/")
+        val body = Stream.emits(("v" * 200000).getBytes("UTF-8")).covary[IO].chunkN(8192).flatMap(Stream.chunk)
+        client.run(Request[IO](Method.POST, uri).withBodyStream(body).withAttribute(Http2PriorKnowledge, ())).use {
+          response => response.as[String].map(response.status -> _)
+        }
+      }.unsafeRunSync()
+      (result._2 should not).startWith("second:")
+      result._1.isSuccess shouldBe false
+    }
     "tell an empty request from one with a body over a real HTTP/2 connection" in {
       val app = extractRequest { request =>
         mapResponse(_.putHeaders("X-Version" -> request.httpVersion.renderString)) {
