@@ -83,7 +83,7 @@ val route: Route =
 object Main extends IOApp.Simple {
   val run = EmberServerBuilder
     .default[IO]
-    .withHttpApp(route.toHttpRoutes.orNotFound)
+    .withHttpApp(route.toHttpApp) // seals the route: 404, 405, 400, 401 as Pekko answers them
     .build
     .use(_ => IO.never)
 }

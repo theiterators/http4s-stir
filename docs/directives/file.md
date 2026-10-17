@@ -87,8 +87,9 @@ val route: Route = pathPrefix("assets") {
 The resource directives are JVM-only. They look resources up with `ClassLoader.getResource` and read them through
 `java.net.URL`, via http4s' `StaticFile.fromResource`. Scala Native's class loader offers only `getResourceAsStream`
 (with `embedResources` enabled) and neither Scala Native nor Scala.js provides `java.net.URL`, so an application that
-uses these directives on those platforms fails to link. Serve files with `getFromFile` / `getFromDirectory` there
-instead.
+uses these directives on those platforms fails to link. On Scala Native, serve files with `getFromFile` /
+`getFromDirectory` instead; Scala.js has no `java.io.File` either, so the file directives (`getFromFile`,
+`getFromDirectory`, `listDirectoryContents`) fail to link there too.
 
 ### listDirectoryContents
 
@@ -174,7 +175,8 @@ Streams the bytes of a single multipart file part to disk. The destination file 
 import java.io.File
 
 val route: Route = (post & path("upload")) {
-  storeUploadedFile("file", info => new File(s"/tmp/${info.fileName}")) {
+  // never build the destination from the client-supplied file name: `../` would escape the directory
+  storeUploadedFile("file", _ => File.createTempFile("upload-", ".bin")) {
     case (metadata, file) =>
       complete(s"Stored ${metadata.fileName} at ${file.getAbsolutePath}")
   }
@@ -189,7 +191,8 @@ Streams all multipart file parts with the given field name to disk. Returns a se
 import java.io.File
 
 val route: Route = (post & path("upload-batch")) {
-  storeUploadedFiles("files", info => new File(s"/tmp/${info.fileName}")) { files =>
+  // never build the destinations from the client-supplied file names
+  storeUploadedFiles("files", _ => File.createTempFile("upload-", ".bin")) { files =>
     complete(s"Stored ${files.size} files")
   }
 }

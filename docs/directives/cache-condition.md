@@ -12,7 +12,7 @@ Wraps the inner route with support for conditional requests as defined by
 [RFC 7232](https://tools.ietf.org/html/rfc7232). Given the resource's `EntityTag` and/or `Last-Modified` date, the
 directive evaluates `If-Match`, `If-Unmodified-Since`, `If-None-Match`, `If-Modified-Since` and `If-Range` and
 answers `304 Not Modified` or `412 Precondition Failed` without running the inner route when the preconditions
-say so. The `ETag` and `Last-Modified` headers are added to every response unless the inner route set them.
+say so. The `ETag` and `Last-Modified` headers are added to every response except a 412, unless the inner route set them.
 
 ```scala
 import org.http4s.{ EntityTag, HttpDate }
