@@ -120,7 +120,7 @@ instead. Other differences that remain:
   representation the client does not accept is rejected with `UnacceptedResponseContentTypeRejection` (406 when sealed,
   "Resource representation is only available with these types:" followed by the types). Clients sending `*/*` or no
   `Accept` see no difference; a client sending `Accept: application/json` to `complete("text")` now gets a 406 instead
-  of the text. Responses with a non-2xx status (`complete(Status.NotFound, "not found")`) are sent whatever the client
+  of the text. Error responses (4xx, 5xx: `complete(Status.NotFound, "not found")`) are sent whatever the client
   accepts, as Pekko sends them through an opaque fallback, and exception and rejection handlers are exempt. To keep the old behaviour for a
   route, wrap it in `mapRequestContext(_.withAcceptAll)`; see "Content negotiation" in the marshalling directives.
 

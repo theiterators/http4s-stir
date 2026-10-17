@@ -139,8 +139,9 @@ val route: Route = complete(user) ~ complete(user.toString) // JSON, or plain te
 
 Only the marshallers built on an `EntityEncoder` negotiate (`complete(value)`, `complete(status, value)`,
 `complete(status, headers, value)`, `IO`s of those, streams); an explicit `Response[IO]` or a bare `Status` is sent as
-it is. With a status, only a 2xx response is negotiated: `complete(Status.BadRequest, "...")` reaches a client that asks
-for JSON, as Pekko adds an opaque fallback for non-2xx statuses (eagerly completing with an error message is common). A custom `ToResponseMarshaller` is opaque unless it is built with `ToResponseMarshaller.negotiated(...)` or
+it is. With a status, only a successful response (1xx to 3xx) is negotiated: an error such as
+`complete(Status.BadRequest, "...")` reaches a client that asks for JSON, as Pekko adds an opaque fallback for 4xx and
+5xx statuses (eagerly completing with an error message is common). A custom `ToResponseMarshaller` is opaque unless it is built with `ToResponseMarshaller.negotiated(...)` or
 delegates to a negotiating one: the mark travels with the produced response. A range with parameters
 (`application/json;version=2`) matches only a type that carries them, except a `charset` parameter, which is ignored
 as Pekko ignores it; `Accept-Charset` is not negotiated, as http4s encoders have a fixed charset. Negotiation happens
@@ -155,7 +156,7 @@ old "always render" behaviour for a route or a whole API, run it with every repr
 
 ```scala
 val legacy: Route = mapRequestContext(_.withAcceptAll) {
-  complete(Status.NotFound, "not found") // sent whatever `Accept` says
+  complete("plain text") // sent whatever `Accept` says
 }
 ```
 

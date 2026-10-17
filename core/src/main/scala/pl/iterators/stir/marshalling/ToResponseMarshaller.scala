@@ -35,8 +35,9 @@ object ToResponseMarshaller {
     (trm: (Status, E)) => negotiatedIfSuccess(Response[IO](status = trm._1).withEntity(trm._2))
 
   /**
-   * A 2xx response is negotiated; any other is sent whatever the request accepts, as Pekko adds an opaque fallback
-   * for non-2xx statuses so that `complete(Status.BadRequest, "...")` reaches a client asking for JSON
+   * A successful response (`Status.isSuccess`: 1xx to 3xx, as Pekko's `isSuccess`) is negotiated; an error (4xx, 5xx)
+   * is sent whatever the request accepts, as Pekko adds an opaque fallback for errors so that
+   * `complete(Status.BadRequest, "...")` reaches a client asking for JSON
    * (akka/akka#19397).
    */
   private def negotiatedIfSuccess(response: Response[IO]): IO[Response[IO]] =

@@ -180,6 +180,22 @@ class MarshallingDirectivesSpec extends RoutingSpec with Inside {
         responseAs[String] shouldEqual "bad-request"
       }
     }
+    "still negotiate a successful 3xx response, as Pekko's isSuccess covers 1xx to 3xx" in {
+      Get() ~> accepting(MediaRange.`application/*`) ~> complete(Status.Found, "x") ~> check {
+        rejection shouldBe a[UnacceptedResponseContentTypeRejection]
+      }
+    }
+    "send an error computed in an IO or given as a tuple whatever the client accepts" in {
+      Get() ~> accepting(MediaRange.`application/*`) ~> complete(IO.pure(Status.BadRequest -> "x")) ~> check {
+        status shouldEqual Status.BadRequest
+        responseAs[String] shouldEqual "x"
+      }
+      Get() ~> accepting(MediaRange.`application/*`) ~> complete(Status.InternalServerError -> "y") ~> check {
+        status shouldEqual Status.InternalServerError
+        responseAs[String] shouldEqual "y"
+      }
+    }
+    // Pekko's name; it means 4xx and 5xx (Pekko's and http4s' isSuccess both cover 1xx to 3xx)
     "allow not explicitly Accept-ed content type to be returned if response code is non-2xx" in {
       Post("/400-text") ~> accepting(MediaRange.`application/*`) ~> Route.seal(routes) ~> check {
         status shouldEqual Status.BadRequest
