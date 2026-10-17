@@ -2,22 +2,8 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import org.http4s.{ Charset, ContentCoding, Header, HttpDate, MediaType, Response, Status, Uri }
-import org.http4s.headers.{ `Accept-Encoding`, `Content-Encoding`, `Content-Type`, `Last-Modified` }
 import org.http4s.{ Charset, ContentCoding, EntityTag, Header, HttpDate, MediaType, RangeUnit, Response, Status, Uri }
-import org.http4s.headers.{
-  `Accept-Ranges`,
-  `Content-Encoding`,
-  `Content-Range`,
-  `Content-Type`,
-  `If-Match`,
-  `If-Modified-Since`,
-  `If-None-Match`,
-  `If-Unmodified-Since`,
-  `Last-Modified`,
-  ETag,
-  Range
-}
+import org.http4s.headers.{ `Accept-Encoding`, `Accept-Ranges`, `Content-Encoding`, `Content-Range`, `Content-Type`, ETag, `If-Match`, `If-Modified-Since`, `If-None-Match`, `If-Unmodified-Since`, `Last-Modified`, Range }
 import org.http4s.headers.Range.SubRange
 import org.typelevel.ci._
 import org.scalatest.{ Inside, Inspectors }
@@ -288,6 +274,8 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
       encodeResponse(getFromResourceDirectory("precompressed")) ~> check {
         header[`Content-Encoding`] shouldEqual Some(`Content-Encoding`(ContentCoding.gzip))
         responseAs[String] shouldEqual "gzipped bytes"
+      }
+    }
     "advertise Accept-Ranges on a plain 200 and reject a wholly unsatisfiable range" in {
       val file = File.createTempFile("pekkoHttpTest", null)
       try {
