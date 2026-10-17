@@ -6,7 +6,7 @@ import org.scalatest.freespec.AnyFreeSpec
 import pl.iterators.stir.server._
 import pl.iterators.stir.unmarshalling.Unmarshaller
 import Unmarshaller._
-import org.http4s.Status
+import org.http4s.{ Status, Uri }
 
 class ParameterDirectivesSpec extends AnyFreeSpec with GenericRoutingSpec with Inside {
   override implicit def runtime: IORuntime = IORuntime.global
@@ -401,6 +401,96 @@ class ParameterDirectivesSpec extends AnyFreeSpec with GenericRoutingSpec with I
     }
     "extract nothing from a bare question mark" in {
       Get("/?") ~> parameterSeq { params => complete(params.size.toString) } ~> check {
+        responseAs[String] shouldEqual "0"
+      }
+    }
+  }
+
+  "The 'parameterMap' directive should" - {
+    val completeAsMap = parameterMap(params => complete(params.toList.sorted.mkString(", ")))
+
+    "extract every parameter" in {
+      Get("/?color=blue&count=42") ~> completeAsMap ~> check {
+        responseAs[String] shouldEqual "(color,blue), (count,42)"
+      }
+    }
+    "keep the last value of a repeated parameter" in {
+      Get("/?x=1&x=2") ~> completeAsMap ~> check {
+        responseAs[String] shouldEqual "(x,2)"
+      }
+    }
+    "extract a parameter without a value as an empty string" in {
+      Get("/?flag&a=1") ~> completeAsMap ~> check {
+        responseAs[String] shouldEqual "(a,1), (flag,)"
+      }
+    }
+    "let a later parameter without a value replace an earlier value" in {
+      Get("/?flag=on&flag") ~> completeAsMap ~> check {
+        responseAs[String] shouldEqual "(flag,)"
+      }
+    }
+    "extract nothing from a bare question mark" in {
+      Get("/?") ~> parameterMap(params => complete(params.size.toString)) ~> check {
+        responseAs[String] shouldEqual "0"
+      }
+    }
+  }
+
+  "The query string" - {
+    val pairs = parameterSeq(params => complete(params.mkString(", ")))
+
+    "be split on '&' only, as in Pekko" in {
+      Get("/?a;b=c&d=1;e") ~> pairs                          ~> check { responseAs[String] shouldEqual "(a;b,c), (d,1;e)" }
+      Get("/?a;b=c")       ~> parameter("a;b")(echoComplete) ~> check { responseAs[String] shouldEqual "c" }
+    }
+    "keep empty segments and parameters without a name" in {
+      Get("/?a&") ~> pairs ~> check { responseAs[String] shouldEqual "(a,), (,)" }
+      Get("/?=x") ~> pairs ~> check { responseAs[String] shouldEqual "(,x)" }
+    }
+    "read back a query built through http4s' API" in {
+      Get(Uri.unsafeFromString("/p").withQueryParam("a b&c;d", "x=y+z")) ~> pairs ~> check {
+        responseAs[String] shouldEqual "(a b&c;d,x=y+z)"
+      }
+    }
+    "split a parameter at its first '=' and decode '+' and percent escapes" in {
+      Get("/?a=b=c&a+b=c%2Bd%26e") ~> pairs ~> check { responseAs[String] shouldEqual "(a,b=c), (a b,c+d&e)" }
+    }
+  }
+
+  "The 'parameter' directive on a parameter given more than once" - {
+    "extract the first occurrence, also when it has no value" in {
+      Get("/?x&x=1")   ~> parameter("x")(echoComplete) ~> check { responseAs[String] shouldEqual "" }
+      Get("/?x=1&x=2") ~> parameter("x")(echoComplete) ~> check { responseAs[String] shouldEqual "1" }
+    }
+    "check a required value against the first occurrence" in {
+      Get("/?x&x=1") ~> parameter("x".requiredValue("1"))(_ => completeOk) ~> check {
+        rejection shouldEqual InvalidRequiredValueForQueryParamRejection("x", "1", "")
+      }
+    }
+    "extract a parameter without a value as one empty value when repeated" in {
+      Get("/?flag&flag=on") ~> parameter("flag".repeated)(echoComplete) ~> check {
+        responseAs[String] shouldEqual "List(, on)"
+      }
+    }
+  }
+
+  "The 'parameterMultiMap' directive should" - {
+    val completeAsMultiMap =
+      parameterMultiMap(params =>
+        complete(params.toList.sortBy(_._1).map { case (k, vs) => s"$k -> $vs" }.mkString(", ")))
+
+    "extract every value of a repeated parameter in the order of the query string" in {
+      Get("/?x=23&b=1&x=42&x=7") ~> completeAsMultiMap ~> check {
+        responseAs[String] shouldEqual "b -> List(1), x -> List(23, 42, 7)"
+      }
+    }
+    "extract a parameter without a value as one empty value" in {
+      Get("/?flag&flag=on") ~> completeAsMultiMap ~> check {
+        responseAs[String] shouldEqual "flag -> List(, on)"
+      }
+    }
+    "extract nothing from a bare question mark" in {
+      Get("/?") ~> parameterMultiMap(params => complete(params.size.toString)) ~> check {
         responseAs[String] shouldEqual "0"
       }
     }

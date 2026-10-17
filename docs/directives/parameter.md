@@ -11,6 +11,8 @@ Parameter directives extract query parameter values from the request URI. They s
 ## parameter (required String)
 
 Extracts a required query parameter as a `String`. Rejects with `MissingQueryParamRejection` if the parameter is absent.
+When the parameter occurs more than once, the first occurrence is used, even without a value (`?x&x=1` gives `""`), as
+in Pekko. The query string is split on `&` only, as Pekko does (`;` is part of a name or value).
 
 ```scala
 val route: Route = path("search") {
@@ -77,7 +79,9 @@ val route: Route = path("items") {
 
 ## parameter (repeated)
 
-Extracts all occurrences of a query parameter using `.repeated` (or `.*`). Returns an `Iterable[T]`. If the parameter is absent, an empty collection is returned.
+Extracts all occurrences of a query parameter using `.repeated` (or `.*`). Returns an `Iterable[T]` in the order of
+the query string (Pekko returns them in reverse order). If the parameter is absent, an empty collection is returned;
+an occurrence without a value (`?tag`) is an empty string.
 
 ```scala
 val route: Route = path("filter") {
@@ -153,7 +157,8 @@ val route: Route = path("color") {
 
 ## parameterMap
 
-Extracts all query parameters as a `Map[String, String]`. If a parameter occurs multiple times, only one value is retained.
+Extracts all query parameters as a `Map[String, String]`. If a parameter occurs multiple times, the last value is
+retained; a parameter without a value (`?flag`) is an empty string, as in Pekko.
 
 ```scala
 val route: Route = path("info") {
@@ -162,11 +167,13 @@ val route: Route = path("info") {
   }
 }
 // GET /info?a=1&b=2 -> "Parameters: Map(a -> 1, b -> 2)"
+// GET /info?a=1&a=2 -> "Parameters: Map(a -> 2)"
 ```
 
 ## parameterMultiMap
 
-Extracts all query parameters as a `Map[String, Seq[String]]`, preserving multiple values for the same key. A parameter without a value (`?flag`) maps to an empty list (Pekko: a list with one empty string).
+Extracts all query parameters as a `Map[String, Seq[String]]`, preserving multiple values for the same key in the
+order of the query string. A parameter without a value (`?flag`) has one empty value, as in Pekko.
 
 ```scala
 val route: Route = path("info") {
