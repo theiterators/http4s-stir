@@ -141,7 +141,8 @@ object CodingDirectives extends CodingDirectives {
   private val compression: Compression[IO] = fs2ioCompressionForIO
 
   // each chunk is flushed, as Pekko's encoders flush every chunk: a streamed response (server-sent events, a slow
-  // producer) reaches the client as it is produced instead of when 32 KiB have accumulated
+  // producer) reaches the client as it is produced instead of when zlib's internal buffer fills or the stream ends
+  // (scala-native's Deflater ignores the flush mode, so on Native the output is still buffered)
   private val GzipParams =
     DeflateParams(header = ZLibParams.Header.GZIP, flushMode = DeflateParams.FlushMode.SYNC_FLUSH)
   private val DeflateZlibParams =
@@ -210,11 +211,17 @@ object CodingDirectives extends CodingDirectives {
     response.headers.get[`Content-Encoding`].isEmpty &&
     response.contentType.forall(_.mediaType.compressible)
 
-  private def encodeBody(coding: ContentCoding, body: EntityBody[IO]): EntityBody[IO] =
+  // fs2 moves to the next chunk once the deflater has taken all input, which can leave part of a large chunk's flush
+  // pending until the next chunk arrives; chunks below the deflater's buffer are flushed whole
+  private val MaxChunkToFlush = 16 * 1024
+
+  private def encodeBody(coding: ContentCoding, body: EntityBody[IO]): EntityBody[IO] = {
+    val bounded = body.chunkLimit(MaxChunkToFlush).unchunks
     if (isGzip(coding))
-      body.through(compression.gzip(fileName = None, modificationTime = None, comment = None,
+      bounded.through(compression.gzip(fileName = None, modificationTime = None, comment = None,
         deflateParams = GzipParams))
-    else body.through(compression.deflate(DeflateZlibParams))
+    else bounded.through(compression.deflate(DeflateZlibParams))
+  }
 
   private def decodeBody(coding: ContentCoding, body: EntityBody[IO]): EntityBody[IO] = {
     val decoded =
