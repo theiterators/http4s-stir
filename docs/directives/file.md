@@ -142,7 +142,7 @@ val route: Route = (post & path("upload")) {
 
 ### fileUploadAll
 
-Extracts all multipart file parts with the given field name as a sequence of `(FileInfo, Stream[IO, Byte])` tuples. Files are buffered to temporary files on disk and cleaned up after the stream is consumed. Parts above 50 MiB are spooled to a temporary file while the multipart body is decoded, so memory use stays bounded; parts without `Content-Type` are stored as `application/octet-stream`. http4s' multipart decoder keeps at most 50 parts and 1 KiB of headers per part and silently drops the rest.
+Extracts all multipart file parts with the given field name as a sequence of `(FileInfo, Stream[IO, Byte])` tuples. Files are buffered to temporary files on disk and cleaned up after the stream is consumed. Parts above 50 MiB are spooled to a temporary file while the multipart body is decoded, so memory use stays bounded; parts without `Content-Type` are stored as `application/octet-stream`. A body with more than 1000 parts (`FileUploadDirectives.MaxParts`) is rejected with a 400 ("Parts limit exceeded") rather than silently truncated, and each part may carry at most 1 KiB of headers.
 
 ```scala
 val route: Route = (post & path("upload-many")) {
@@ -154,7 +154,7 @@ val route: Route = (post & path("upload-many")) {
 
 ### storeUploadedFile
 
-Streams the bytes of a single multipart file part to disk. The destination file is determined by the provided function. Returns a tuple of `FileInfo` and the destination `File`. If multiple parts share the same name, only the first is used. On write failure, the destination file is deleted. Parts above 50 MiB are spooled to a temporary file while the multipart body is decoded, so memory use stays bounded; parts without `Content-Type` are stored as `application/octet-stream`. http4s' multipart decoder keeps at most 50 parts and 1 KiB of headers per part and silently drops the rest.
+Streams the bytes of a single multipart file part to disk. The destination file is determined by the provided function. Returns a tuple of `FileInfo` and the destination `File`. If multiple parts share the same name, only the first is used. On write failure, the destination file is deleted. Parts above 50 MiB are spooled to a temporary file while the multipart body is decoded, so memory use stays bounded; parts without `Content-Type` are stored as `application/octet-stream`. A body with more than 1000 parts (`FileUploadDirectives.MaxParts`) is rejected with a 400 ("Parts limit exceeded") rather than silently truncated, and each part may carry at most 1 KiB of headers.
 
 ```scala
 import java.io.File
@@ -169,7 +169,7 @@ val route: Route = (post & path("upload")) {
 
 ### storeUploadedFiles
 
-Streams all multipart file parts with the given field name to disk. Returns a sequence of `(FileInfo, File)` tuples. Parts above 50 MiB are spooled to a temporary file while the multipart body is decoded, so memory use stays bounded; parts without `Content-Type` are stored as `application/octet-stream`. http4s' multipart decoder keeps at most 50 parts and 1 KiB of headers per part and silently drops the rest.
+Streams all multipart file parts with the given field name to disk. Returns a sequence of `(FileInfo, File)` tuples. Parts above 50 MiB are spooled to a temporary file while the multipart body is decoded, so memory use stays bounded; parts without `Content-Type` are stored as `application/octet-stream`. A body with more than 1000 parts (`FileUploadDirectives.MaxParts`) is rejected with a 400 ("Parts limit exceeded") rather than silently truncated, and each part may carry at most 1 KiB of headers.
 
 ```scala
 import java.io.File

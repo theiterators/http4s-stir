@@ -81,7 +81,8 @@ trait FileUploadDirectives {
    */
   def fileUploadSpooled(fieldName: String, maxSizeBeforeWrite: Int): Directive1[(FileInfo, Stream[IO, Byte])] =
     Directive[Tuple1[(FileInfo, Stream[IO, Byte])]] { inner => ctx =>
-      EntityDecoder.mixedMultipartResource[IO](maxSizeBeforeWrite = maxSizeBeforeWrite).allocated.flatMap {
+      EntityDecoder.mixedMultipartResource[IO](maxSizeBeforeWrite = maxSizeBeforeWrite, maxParts = MaxParts,
+        failOnLimit = true).allocated.flatMap {
         case (decoder, releaseDecoder) =>
           IO.ref(false).flatMap { released =>
             // the decoder is released once: on rejection, on error, or when the response body is finalized
@@ -130,7 +131,7 @@ trait FileUploadDirectives {
   private def multipartToDisk(fieldName: String, destFn: FileInfo => File,
       firstOnly: Boolean): Directive1[Seq[(FileInfo, File)]] =
     Directive[Tuple1[Seq[(FileInfo, File)]]] { inner => ctx =>
-      EntityDecoder.mixedMultipartResource[IO]().use { decoder =>
+      EntityDecoder.mixedMultipartResource[IO](maxParts = MaxParts, failOnLimit = true).use { decoder =>
         MarshallingDirectives.decodeEntity(ctx.request, decoder).flatMap {
           case Left(rejection) => IO.pure(Left(rejection): Either[Rejection, Seq[(FileInfo, File)]])
           case Right(formData) =>
@@ -159,6 +160,12 @@ trait FileUploadDirectives {
 }
 
 object FileUploadDirectives extends FileUploadDirectives {
+
+  /**
+   * The most parts a multipart body may carry for the disk-based directives (`storeUploadedFile(s)`, `fileUploadAll`,
+   * `fileUploadSpooled`); a body with more fails with a 400 instead of silently losing parts (Pekko has no limit).
+   */
+  val MaxParts: Int = 1000
 
   /** http4s' default: parts above 50 MiB are spooled to a temporary file. */
   val DefaultMaxSizeBeforeWrite: Int = 52428800
