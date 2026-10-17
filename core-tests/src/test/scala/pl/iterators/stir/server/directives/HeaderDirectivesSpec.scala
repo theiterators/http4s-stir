@@ -67,16 +67,15 @@ class HeaderDirectivesSpec extends RoutingSpec with Inside {
         }
       }
     }
-//    "reject a request if no header matches a custom one, and use the custom header's name for the rejection " in {
-//      val route = headerValueByType(XCustomHeader) { customValue =>
-//        complete(s"Custom-Value: $customValue")
-//      }
-//      Get("abc") ~> route ~> check {
-//        inside(rejection) {
-//          case MissingHeaderRejection("X-Custom-Header") =>
-//        }
-//      }
-//    }
+    "reject a request if no header matches a custom one, and use the custom header's name for the rejection" in {
+      import HeaderDirectivesSpec.XCustomHeader
+      val custom = headerValueByType[XCustomHeader]
+      val route = custom { header => complete(s"Custom-Value: ${header.value}") }
+      Get("abc") ~> route                                                   ~> check { inside(rejection) { case MissingHeaderRejection("X-Custom-Header") => } }
+      Get("abc") ~> addHeader(Header.Raw(CIString("X-Custom-Header"), "v")) ~> route ~> check {
+        responseAs[String] shouldEqual "Custom-Value: v"
+      }
+    }
   }
 
   "The headerValueByName directive under a Turkish default locale" should {
@@ -104,17 +103,6 @@ class HeaderDirectivesSpec extends RoutingSpec with Inside {
       }
     }
 
-//    "extract a header with Symbol name" in {
-//      lazy val symbolRoute =
-//        headerValueByName(Symbol("Referer")) { referer =>
-//          complete(s"The symbol referer was $referer")
-//        }
-//
-//      Get("abc") ~> addHeader(Header.Raw(CIString("Referer"), "http://example.com/symbol")) ~> symbolRoute ~> check {
-//        responseAs[String] shouldEqual "The symbol referer was http://example.com/symbol"
-//      }
-//    }
-
     "reject a request if no header of the given type is present" in {
       Get("abc") ~> route ~> check {
         inside(rejection) {
@@ -135,17 +123,6 @@ class HeaderDirectivesSpec extends RoutingSpec with Inside {
         responseAs[String] shouldEqual "The referer was Some(http://example.com)"
       }
     }
-
-//    "extract a header with Symbol name" in {
-//      lazy val symbolRoute =
-//        optionalHeaderValueByName(Symbol("Referer")) { referer =>
-//          complete(s"The symbol referer was $referer")
-//        }
-//
-//      Get("abc") ~> RawHeader("Referer", "http://example.com/symbol") ~> symbolRoute ~> check {
-//        responseAs[String] shouldEqual "The symbol referer was Some(http://example.com/symbol)"
-//      }
-//    }
 
     "extract None if no header of the given name is present" in {
       Get("abc") ~> route ~> check {
@@ -199,53 +176,6 @@ class HeaderDirectivesSpec extends RoutingSpec with Inside {
       }
     }
   }
-//
-//  "The checkSameOrigin directive" should {
-//    val correctOrigin = HttpOrigin("http://localhost:8080")
-//    val route = checkSameOrigin(HttpOriginRange(correctOrigin)) {
-//      complete("Result")
-//    }
-//    "handle request with correct origin headers" in {
-//      Get("abc") ~> Origin(correctOrigin) ~> route ~> check {
-//        status shouldEqual StatusCodes.OK
-//        responseAs[String] shouldEqual "Result"
-//      }
-//    }
-//    "reject request with missed origin header" in {
-//      Get("abc") ~> route ~> check {
-//        inside(rejection) {
-//          case MissingHeaderRejection(headerName) => headerName shouldEqual Origin.name
-//        }
-//      }
-//    }
-//    "reject requests with invalid origin header value" in {
-//      val invalidHttpOrigin = HttpOrigin("http://invalid.com")
-//      val invalidOriginHeader = Origin(invalidHttpOrigin)
-//      Get("abc") ~> invalidOriginHeader ~> route ~> check {
-//        inside(rejection) {
-//          case InvalidOriginRejection(allowedOrigins) => allowedOrigins shouldEqual Seq(correctOrigin)
-//        }
-//      }
-//      Get("abc") ~> invalidOriginHeader ~> Route.seal(route) ~> check {
-//        status shouldEqual StatusCodes.Forbidden
-//        responseAs[String] should include(s"${correctOrigin.value}")
-//      }
-//    }
-//  }
-//
-//  "The HeaderMagnet" should {
-//    "get the header name from the ModeledCustomHeaderCompanion" in {
-//      val companionMagnet: HeaderMagnet[XCustomHeader] = XCustomHeader
-//      companionMagnet.headerName shouldEqual "X-Custom-Header"
-//
-//      val classMagnet = HeaderMagnet.fromClassForModeledCustomHeader(classOf[XCustomHeader], XCustomHeader)
-//      classMagnet.headerName shouldEqual "X-Custom-Header"
-//
-//      val classTagMagnet =
-//        HeaderMagnet.fromClassTagForModeledCustomHeader(ClassTag(classOf[XCustomHeader]), XCustomHeader)
-//      classTagMagnet.headerName shouldEqual "X-Custom-Header"
-//    }
-//  }
 
   "The checkSameOrigin directive" should {
     val correctOrigin = Origin.Host(Uri.Scheme.http, Uri.RegName("localhost"), Some(8080))
@@ -275,15 +205,10 @@ class HeaderDirectivesSpec extends RoutingSpec with Inside {
   }
 }
 
-//object HeaderDirectivesSpec {
-//  final object XCustomHeader extends ModeledCustomHeaderCompanion[XCustomHeader] {
-//    override def name: String = "X-Custom-Header"
-//    override def parse(value: String): Try[XCustomHeader] = Try(new XCustomHeader)
-//  }
-//  final class XCustomHeader extends ModeledCustomHeader[XCustomHeader] {
-//    override def companion: ModeledCustomHeaderCompanion[XCustomHeader] = XCustomHeader
-//    override def value(): String = "custom-value"
-//    override def renderInRequests(): Boolean = true
-//    override def renderInResponses(): Boolean = false
-//  }
-//}
+object HeaderDirectivesSpec {
+  final case class XCustomHeader(value: String)
+  object XCustomHeader {
+    implicit val header: Header[XCustomHeader, Header.Single] =
+      Header.create(CIString("X-Custom-Header"), _.value, s => Right(XCustomHeader(s)))
+  }
+}

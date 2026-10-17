@@ -6,7 +6,6 @@ import org.typelevel.ci.CIString
 import pl.iterators.stir.impl.util._
 import pl.iterators.stir.server._
 
-import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 trait HeaderDirectives {
@@ -71,14 +70,15 @@ trait HeaderDirectives {
    * Extracts the first HTTP request header of the given type.
    * If no header with a matching type is found the request is rejected with a [[MissingHeaderRejection]].
    *
-   * Custom headers will only be matched by this directive if ev [[Header.Select[T]]] is provided.
+   * Custom headers will only be matched by this directive if an http4s `Header[T, _]` instance is in scope; the
+   * rejection names the header as that instance does (`X-Custom-Header`), as Pekko's names a modeled custom header.
    *
    * @group header
    */
-  def headerValueByType[T](implicit ev: Header.Select[T], cls: ClassTag[T]): Directive1[ev.F[T]] =
+  def headerValueByType[T](implicit ev: Header.Select[T], header: Header[T, _]): Directive1[ev.F[T]] =
     extract(_.request.headers.get(ev)).flatMap {
-      case Some(header) => provide(header)
-      case None         => reject(MissingHeaderRejection(cls.runtimeClass.getSimpleName.replace("$minus", "-")))
+      case Some(value) => provide(value)
+      case None        => reject(MissingHeaderRejection(header.name.toString))
     }
 
   /**
@@ -119,7 +119,8 @@ trait HeaderDirectives {
   /**
    * Extract the header value of the optional HTTP request header with the given type.
    *
-   * Custom headers will only be matched by this directive if ev [[Header.Select[T]]] is provided.
+   * Custom headers will only be matched by this directive if an http4s `Header[T, _]` instance is in scope; the
+   * rejection names the header as that instance does (`X-Custom-Header`), as Pekko's names a modeled custom header.
    *
    * @group header
    */
