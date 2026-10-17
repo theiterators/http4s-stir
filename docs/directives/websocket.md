@@ -107,7 +107,7 @@ val server = EmberServerBuilder
   .default[IO]
   .withHost(ipv4"0.0.0.0")
   .withPort(port"8080")
-  .withHttpWebSocketApp(ws => routes(ws).toHttpRoutes.orNotFound)
+  .withHttpWebSocketApp(ws => routes(ws).toHttpApp)
   .build
 ```
 

@@ -113,10 +113,11 @@ object Main extends IOApp.Simple {
               complete {
                 Status.Ok
               }
-            } ~ (path("file-upload") & storeUploadedFiles("file", fi => new File("/tmp/" + fi.fileName))) { files =>
-              complete {
-                Status.Ok -> s"File $files uploaded"
-              }
+            } ~ (path("file-upload") & storeUploadedFiles("file", _ => File.createTempFile("upload-", ".bin"))) {
+              files =>
+                complete {
+                  Status.Ok -> s"File $files uploaded"
+                }
             } ~ authenticateBasic("d-and-d-realm", authenticator) { _ =>
               path("file") {
                 getFromFile("../src/main/scala/Service.scala")
@@ -150,7 +151,7 @@ object Main extends IOApp.Simple {
       .default[IO]
       .withHost(ipv4"0.0.0.0")
       .withPort(port"8080")
-      .withHttpWebSocketApp(ws => routes(ws).toHttpRoutes.orNotFound)
+      .withHttpWebSocketApp(ws => routes(ws).toHttpApp)
       .build
       .use(_ => IO.never)
   }

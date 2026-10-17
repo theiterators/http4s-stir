@@ -89,7 +89,8 @@ The resource directives are JVM-only. They look resources up with `ClassLoader.g
 (with `embedResources` enabled) and neither Scala Native nor Scala.js provides `java.net.URL`, so an application that
 uses these directives on those platforms fails to link. On Scala Native, serve files with `getFromFile` /
 `getFromDirectory` instead; Scala.js has no `java.io.File` either, so the file directives (`getFromFile`,
-`getFromDirectory`, `listDirectoryContents`) fail to link there too.
+`getFromDirectory`, `listDirectoryContents`) and the disk upload directives (`storeUploadedFile(s)`,
+`fileUploadAll`) fail to link there too.
 
 ### listDirectoryContents
 
