@@ -47,7 +47,7 @@ A `PUT /order` request would be rejected by both the `get` and `post` directives
 | `UnacceptedResponseEncodingRejection(supported)` | The client accepts none of the response encodings the route can produce. Produced by `encodeResponse*` and `responseEncodingAccepted`. Produces 406. |
 | `UnsupportedRequestEncodingRejection(supported)` | The request's `Content-Encoding` is not supported. Produced by `decodeRequest*` and `requestEncodedWith`. Produces 400. |
 | `MissingAttributeRejection(key)` | A request attribute was expected but missing. Produced by `attribute`. Produces 500. |
-| `UnsatisfiableRangeRejection(unsatisfiableRanges, actualEntityLength)` | None of the requested byte ranges fits the entity. Produced by `withRangeSupport`. Produces 416 with `Content-Range: bytes */length`. |
+| `UnsatisfiableRangeRejection(unsatisfiableRanges, actualEntityLength)` | None of the requested byte ranges fits the entity, or the response has no `Content-Length` (then `actualEntityLength` is -1). Produced by `withRangeSupport`. Produces 416 with `Content-Range: bytes */length`, omitted when the length is unknown. |
 | `TooManyRangesRejection(maxRanges)` | The request asked for more byte ranges than allowed. Produced by `withRangeSupport`. Produces 416. |
 | `ExpectedWebSocketRequestRejection` | The request is not a WebSocket upgrade. Produced by the WebSocket directives. Produces 400. |
 | `UnsupportedWebSocketSubprotocolRejection(supportedProtocol)` | None of the offered WebSocket subprotocols is supported. Produces 400 with a `Sec-WebSocket-Protocol` header listing the supported ones. |

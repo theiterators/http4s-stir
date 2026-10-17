@@ -21,10 +21,11 @@ trait RangeDirectives {
    * Answers GET requests with a `Range` header by a `206 Partial Content` response as defined by
    * http://tools.ietf.org/html/rfc7233 and adds an `Accept-Ranges: bytes` header to every GET response.
    * Several ranges are coalesced when they are at most 80 bytes apart and answered as `multipart/byteranges`;
-   * more than 16 ranges reject with a [[TooManyRangesRejection]]. Ranges beyond the entity reject with an
-   * [[UnsatisfiableRangeRejection]] (`416` when sealed). Only `200` responses with a `Content-Length` are sliced;
-   * everything else passes through unchanged, as does a request whose `Range` header holds an invalid byte range
-   * (RFC 7233 requires such a header to be ignored).
+   * more than 16 ranges reject with a [[TooManyRangesRejection]]. A request whose ranges all lie beyond the entity
+   * rejects with an [[UnsatisfiableRangeRejection]] (`416` when sealed), as does a `200` response without a
+   * `Content-Length`, which cannot be sliced (the sealed `416` then carries no `Content-Range`). Responses other than
+   * `200`, non-GET requests, and requests whose `Range` header uses a unit other than `bytes` or holds an invalid byte
+   * range (RFC 7233 requires such a header to be ignored) pass through unchanged.
    *
    * @group range
    */
@@ -62,8 +63,8 @@ trait RangeDirectives {
                 multipartResponse(response, parts, length).map(RouteResult.Complete(_))
             }
           case None =>
-            // a response of unknown length (chunked) cannot be sliced and is served in full, as Pekko does
-            IO.pure(RouteResult.Complete(response))
+            // a response of unknown length (chunked) cannot be sliced; Pekko rejects it with length -1 too
+            IO.pure(RouteResult.Rejected(UnsatisfiableRangeRejection(ranges, -1) :: Nil))
         }
     }
 }
