@@ -32,7 +32,12 @@ object ToResponseMarshaller {
 
   implicit def fromEncoderableWithStatus[E](
       implicit encoder: EntityEncoder[IO, E]): ToResponseMarshaller[(Status, E)] =
-    (trm: (Status, E)) => negotiatedIfSuccess(Response[IO](status = trm._1).withEntity(trm._2))
+    (trm: (Status, E)) => negotiatedIfSuccess(withEntityIfAllowed(Response[IO](status = trm._1), trm._2))
+
+  /** A status that allows no entity (1xx, 204, 205, 304) gets none, whatever the value, as in Pekko. */
+  private def withEntityIfAllowed[E](response: Response[IO], value: E)(
+      implicit encoder: EntityEncoder[IO, E]): Response[IO] =
+    if (response.status.isEntityAllowed) response.withEntity(value) else response
 
   /**
    * A successful response (`Status.isSuccess`: 1xx to 3xx, as Pekko's `isSuccess`) is negotiated; an error (4xx, 5xx)
@@ -53,7 +58,7 @@ object ToResponseMarshaller {
   implicit def fromEncoderableWithStatusAndHeaders[E](
       implicit encoder: EntityEncoder[IO, E]): ToResponseMarshaller[(Status, Headers, E)] =
     (trm: (Status, Headers, E)) =>
-      negotiatedIfSuccess(Response[IO](status = trm._1, headers = trm._2).withEntity(trm._3))
+      negotiatedIfSuccess(withEntityIfAllowed(Response[IO](status = trm._1, headers = trm._2), trm._3))
 
   implicit def fromStatus: ToResponseMarshaller[Status] = {
     (trm: Status) =>
