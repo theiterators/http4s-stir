@@ -463,7 +463,7 @@ class CodingDirectivesSpec extends RoutingSpec with Inside {
           inflated shouldEqual "Nope!"
         }
       }
-      "allow gzipped responses with no body for 204 messages" in {
+      "not encode the response content with gzip if the response is of status not allowing entity" in {
         Post() ~> encodeResponseWith(ContentCoding.gzip)(complete(Status.NoContent)) ~> check {
           status shouldEqual Status.NoContent
           header[`Content-Encoding`] shouldEqual None
@@ -571,6 +571,7 @@ class CodingDirectivesSpec extends RoutingSpec with Inside {
         Post()                                                                                      ~> addHeader(acceptEncoding("identity;q=0.5, deflate;q=0, gzip")) ~>
         encodeResponseWith(ContentCoding.identity, ContentCoding.deflate, ContentCoding.gzip)(yeah) ~> check {
           header[`Content-Encoding`].map(_.contentCoding) shouldEqual Some(ContentCoding.gzip)
+          gunzipped shouldEqual "Yeah!"
         }
         Post()                                                              ~> addHeader(acceptEncoding("*, deflate;q=0.2")) ~>
         encodeResponseWith(ContentCoding.deflate, ContentCoding.gzip)(yeah) ~> check {
