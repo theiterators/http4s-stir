@@ -228,6 +228,81 @@ class WebSocketDirectivesSpec extends RoutingSpec {
         rejection shouldEqual ExpectedWebSocketRequestRejection
       }
     }
+    "reject websocket requests if no subprotocol matches" in {
+      val route = handleWebSocketMessagesForProtocol(ws, echo, "echo") ~
+        handleWebSocketMessagesForProtocol(ws, greeter, "greeter")
+      WS("/", WSProbe(), "other") ~> route ~> check {
+        rejections.collect { case UnsupportedWebSocketSubprotocolRejection(p) => p }.toSet shouldEqual
+        Set("greeter", "echo")
+      }
+    }
+    "reassemble a fragmented message" in {
+      val wsClient = WSProbe()
+      val fragmenting: Pipe[IO, WebSocketFrame, WebSocketFrame] = _.flatMap {
+        case text: WebSocketFrame.Text =>
+          Stream(WebSocketFrame.Text(text.str.take(2), last = false),
+            WebSocketFrame.Continuation(ByteVector(text.str.drop(2).getBytes("UTF-8")), last = true))
+        case other => Stream(other)
+      }
+      WS("/", wsClient) ~> handleWebSocketMessages(ws, fragmenting) ~> check {
+        wsClient.sendMessage("Hello")
+        wsClient.expectMessage("Hello")
+        wsClient.sendMessage(ByteVector("abc".getBytes))
+        wsClient.expectMessage(ByteVector("abc".getBytes))
+      }
+    }
+    "report a frame of the wrong type" in {
+      val wsClient = WSProbe()
+      WS("/", wsClient) ~> handleWebSocketMessages(ws, echo) ~> check {
+        wsClient.sendMessage(ByteVector("abc".getBytes))
+        (the[AssertionError] thrownBy wsClient.expectMessage("abc")).getMessage should startWith(
+          """Expected Text("abc") but got Binary(""")
+      }
+    }
+    "fail every expectation once the handler failed" in {
+      val wsClient = WSProbe()
+      val failing: Pipe[IO, WebSocketFrame, WebSocketFrame] =
+        _.evalMap(_ => IO.raiseError[WebSocketFrame](new IllegalStateException("boom")))
+      WS("/", wsClient) ~> handleWebSocketMessages(ws, failing) ~> check {
+        wsClient.sendMessage("Peter")
+        wsClient.sendCompletion()
+        (the[AssertionError] thrownBy wsClient.expectCompletion() should have).message(
+          "Expected completion but the handler failed: java.lang.IllegalStateException: boom")
+        an[AssertionError] should be thrownBy wsClient.expectNoMessage()
+        an[AssertionError] should be thrownBy wsClient.expectMessage()
+      }
+    }
+    "keep the completion visible and refuse to send after sendCompletion" in {
+      val wsClient = WSProbe()
+      WS("/", wsClient) ~> handleWebSocketMessages(ws, (_: Stream[IO, WebSocketFrame]) => Stream.empty) ~> check {
+        wsClient.expectCompletion()
+        an[AssertionError] should be thrownBy wsClient.expectNoMessage()
+        (the[AssertionError] thrownBy wsClient.expectMessage() should have).message(
+          "Expected a message but the handler completed")
+        wsClient.sendCompletion()
+        an[AssertionError] should be thrownBy wsClient.sendMessage("late")
+      }
+    }
+    "fail expectCompletion while the handler keeps running" in {
+      implicit val routeTestTimeout: RouteTestTimeout = RouteTestTimeout(200.millis) // shadows the spec-wide one
+      val wsClient = WSProbe()
+      WS("/", wsClient) ~> handleWebSocketMessages(ws, greeter) ~> check {
+        an[AssertionError] should be thrownBy wsClient.expectCompletion()
+      }
+    }
+    "cancel a handler that is still running when the suite cleans up" in {
+      val wsClient = WSProbe()
+      val cancelled = Deferred[IO, Unit].unsafeRunSync()
+      val ticking: Pipe[IO, WebSocketFrame, WebSocketFrame] =
+        _ =>
+          Stream.awakeEvery[IO](20.millis).map(_ => WebSocketFrame.Text("tick")).onFinalize(cancelled.complete(()).void)
+      WS("/", wsClient) ~> handleWebSocketMessages(ws, ticking) ~> check {
+        wsClient.expectMessage("tick")
+        cleanUp()
+        cancelled.get.timeout(5.seconds).unsafeRunSync()
+        (the[AssertionError] thrownBy wsClient.expectCompletion()).getMessage should include("was cancelled")
+      }
+    }
   }
 
   "handleWebSocketMessagesForOptionalProtocol" should {

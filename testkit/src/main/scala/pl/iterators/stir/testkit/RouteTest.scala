@@ -12,6 +12,7 @@ import org.typelevel.ci.CIString
 import pl.iterators.stir.server._
 import pl.iterators.stir.server.directives.WebSocketDirectives.WebSocketHandlerKey
 
+import java.util.concurrent.ConcurrentLinkedQueue
 import scala.annotation.unused
 import scala.concurrent.duration.{ Duration, FiniteDuration }
 import scala.reflect.ClassTag
@@ -23,7 +24,21 @@ trait RouteTest extends RequestBuilding with WSTestRequestBuilding with RouteTes
 
   implicit def runtime: IORuntime
 
-  def cleanUp(): Unit = ()
+  /** Cancels the WebSocket handlers still running from this suite's `WS(...)` requests; called from `afterAll`. */
+  def cleanUp(): Unit = closeWebSocketProbes()
+
+  private val connectedProbes = new ConcurrentLinkedQueue[WSProbe]()
+
+  /** Wires the probe a `WS(...)` request carries to the handler the route upgraded with, when both are present. */
+  private def connectWebSocketProbe(request: Request[IO], response: Response[IO]): IO[Unit] =
+    (request.attributes.lookup(WSProbe.RequestKey), response.attributes.lookup(WebSocketHandlerKey)) match {
+      case (Some(probe), Some(handler)) => probe.connect(handler) *> IO(connectedProbes.add(probe)).void
+      case _                            => IO.unit
+    }
+
+  /** Cancels every handler a probe of this suite is still running. */
+  protected def closeWebSocketProbes(): Unit =
+    Iterator.continually(connectedProbes.poll()).takeWhile(_ != null).foreach(_.close().unsafeRunSync())
 
   private val dynRR = new DynamicVariable[RouteTestResult](null)
   private def result =
@@ -170,7 +185,7 @@ trait RouteTest extends RequestBuilding with WSTestRequestBuilding with RouteTes
           val semiSealedRoute = // sealed for exceptions but not for rejections
             Directives.handleExceptions(sealedExceptionHandler)(route)
           val deferrableRouteResult = semiSealedRoute(ctx).flatTap {
-            case RouteResult.Complete(response) => RouteTest.connectWebSocketProbe(effectiveRequest, response)
+            case RouteResult.Complete(response) => connectWebSocketProbe(effectiveRequest, response)
             case _                              => IO.unit
           }
           routeTestResult.awaitWithinTimeout(deferrableRouteResult.map(routeTestResult.handleResult),
@@ -202,13 +217,6 @@ trait RouteTest extends RequestBuilding with WSTestRequestBuilding with RouteTes
   }
 }
 private[stir] object RouteTest {
-
-  /** Wires the probe a `WS(...)` request carries to the handler the route upgraded with, when both are present. */
-  private def connectWebSocketProbe(request: Request[IO], response: Response[IO]): IO[Unit] =
-    (request.attributes.lookup(WSProbe.RequestKey), response.attributes.lookup(WebSocketHandlerKey)) match {
-      case (Some(probe), Some(handler)) => probe.connect(handler)
-      case _                            => IO.unit
-    }
 
   def runRouteClientServer(request: Request[IO], route: Route, timeout: FiniteDuration): IO[Response[IO]] = {
     val resources = for {

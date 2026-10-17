@@ -128,9 +128,11 @@ Inside a `check { }` block, the following members are available for assertions:
 testkit (`~>`) connects the probe to the handler the directive was given; inside `check`, `sendMessage` sends a
 text, binary or raw frame to the handler and `sendCompletion()` ends the client's stream, while `expectMessage()`,
 `expectMessage(text)`, `expectMessage(bytes)`, `expectNoMessage()` and `expectCompletion()` assert on what the
-handler sends back. `expectMessage` and `expectCompletion` wait for the route test timeout and `expectNoMessage` for
-100 ms (or the duration given); a failed expectation throws an `AssertionError`, and a handler that fails is reported
-by the next expectation.
+handler sends back. `expectMessage` and `expectCompletion` wait for the `RouteTestTimeout` in scope when the probe was
+created (`WSProbe()` also needs the implicit `IORuntime`) and `expectNoMessage` for 100 ms (or the duration given); a
+failed expectation throws an `AssertionError`. A handler that fails makes every later expectation fail with its
+error, and once it completed every later `expectMessage` fails too. Handlers still running when the suite ends are
+cancelled by the testkit's `cleanUp()`.
 
 ```scala
 import pl.iterators.stir.testkit.WSProbe
