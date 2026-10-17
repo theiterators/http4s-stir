@@ -141,6 +141,8 @@ instead. Other differences that remain:
   `Content-Encoding: gzip`. They answer conditional requests (`ETag`, `Last-Modified`, 304 and 412) and `Range`
   requests (206, 416) as Pekko does.
 - `getFromResource` rejects a directory entry inside a jar instead of serving it as an empty body.
+- `getFromResource` / `getFromResourceDirectory` reject a directory on a class-path folder whose path has a space or a
+  non-ASCII character; they used to serve the JDK's listing of its file names.
 - `logRequestResultWith(show)` is new; a `show` that fails fails the request, as in Pekko.
 - `headerValueByType[T]` rejects with `MissingHeaderRejection` naming the header as its http4s `Header` instance does
   (`X-Custom-Header`), as Pekko names a modeled custom header; it used the Scala class name (`XCustomHeader`), which
