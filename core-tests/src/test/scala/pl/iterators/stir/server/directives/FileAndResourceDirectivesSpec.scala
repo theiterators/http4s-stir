@@ -616,7 +616,8 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
         Get("/test-resource.txt") ~> getFromResourceDirectory("inJar", loader) ~> check {
           responseAs[String] shouldEqual "I have spaces, too!"
         }
-        Get("/inJar") ~> getFromResourceDirectory("", loader) ~> check { handled shouldEqual false }
+        Get("/inJar")  ~> getFromResourceDirectory("", loader) ~> check { handled shouldEqual false }
+        Get("/inJar/") ~> getFromResourceDirectory("", loader) ~> check { handled shouldEqual false }
       } finally {
         loader.close()
         try NioFiles.deleteIfExists(jar)

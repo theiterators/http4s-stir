@@ -61,7 +61,7 @@ class ExecutionDirectivesSpec extends RoutingSpec {
         }
       } ~> check {
         status shouldEqual Status.InternalServerError
-        responseAs[String] shouldEqual "" // Pekko: "There was an internal server error." (see migration.md)
+        responseAs[String] shouldEqual "" // Pekko: "There was an internal server error."
         lines.get shouldEqual List(logged500("Boom"))
       }
     }

@@ -82,7 +82,7 @@ class RouteDirectivesSpec extends AnyWordSpec with GenericRoutingSpec {
         Get() ~> handleExceptions(recordingDefaultHandler(lines))(complete(IO.raiseError[String](TestException))) ~>
         check {
           status shouldEqual Status.InternalServerError
-          responseAs[String] shouldEqual "" // Pekko: "There was an internal server error." (see migration.md)
+          responseAs[String] shouldEqual "" // Pekko: "There was an internal server error."
           lines.get shouldEqual List(logged500("Boom"))
         }
       }

@@ -4,6 +4,8 @@ title: Migration from Pekko/Akka HTTP
 sidebar_position: 26
 ---
 
+- **Synchronous execution**: all test assertions run synchronously; there is no async test support. `~>` waits for the
+  route, so `~> runRoute` does not separate running the route from checking it as Pekko's does.
 # Migration from Pekko/Akka HTTP
 
 This guide covers the key differences between Pekko HTTP (or Akka HTTP) and http4s-stir, and lists the directives and features that are not yet implemented.
@@ -62,6 +64,19 @@ instead. Other differences that remain:
   "The requested resource could not be found." for 404, "There was an internal server error." for 500).
 - `HeaderMagnet` and `ModeledCustomHeader` are not ported: `headerValueByType[T]` and `optionalHeaderValueByType[T]`
   use http4s' `Header[T, _]` type class; define a custom header with `Header.create`.
+- An `Accept-Language` (or other) header that http4s cannot parse is ignored, where Pekko parses leniently: Pekko's
+  `q=.5` is not a valid RFC 7231 q-value, so `selectPreferredLanguage` then picks the first language.
+- `StrictForm` and `StrictForm.FileData` are not ported: the form-field directives read the text parts of a multipart
+  body and skip a part with a `filename` (Pekko returns its content); read file parts with `fileUpload` /
+  `storeUploadedFile`.
+- `RejectionError` is not ported: a failed `IO` always reaches the exception handler; to reject, recover the `IO` and
+  `reject(...)` (e.g. with `onComplete`).
+- `toStrictEntity` / `extractStrictEntity` answer an entity over `maxBytes` with 413 Payload Too Large; Pekko answers
+  400 "Request too large".
+- The default exception handler logs an `IllegalRequestException` as "Error during processing of request: '...'.
+  Completing with 409 Conflict response. ..." like other errors; Pekko warns "Illegal request: '...'. ...".
+- `toStrictEntity` / `extractStrictEntity` answer a request body stream that fails (other than by the size limit or
+  the timeout) with a 500 from the exception handler; Pekko answers its parser's `EntityStreamException` with 400.
 - `parameter("x".repeated)` returns the values in the order of the query string; Pekko returns them reversed.
 - A header that http4s cannot parse is ignored where Pekko may parse it leniently (`selectPreferredLanguage` reads
   `Accept-Language` q-values as leniently as Pekko).
@@ -197,7 +212,6 @@ instead. Other differences that remain:
 
 The http4s-stir testkit differs from the Pekko HTTP testkit in the following ways:
 
-- **Synchronous execution**: all test assertions run synchronously; there is no async test support.
 - **Chunk inspection**: `chunks`, `chunksStream` and `trailer` expose the body chunks and trailer headers; there is no `ChunkStreamPart` model.
 - **Limited request building**: some minor header convenience methods available in the Pekko HTTP testkit are missing.
 - **WebSocket testing**: `WS(uri, probe, subprotocols*)` and `WSProbe` exchange frames with the handler in memory, as in Pekko, but the probe talks to the handler as the directive received it (no ping/pong filtering or defragmentation) and over `~!>` no frames are exchanged. `isWebSocketUpgrade` and `expectWebSocketUpgradeWithProtocol` work as in Pekko.

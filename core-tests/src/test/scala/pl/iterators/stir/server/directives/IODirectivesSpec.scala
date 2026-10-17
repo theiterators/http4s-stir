@@ -80,7 +80,7 @@ class IODirectivesSpec extends RoutingSpec with Inside {
         onSuccess(IO.raiseError[Unit](TestException)) { throwTestException("EX when ") }
       } ~> check {
         status shouldEqual Status.InternalServerError
-        responseAs[String] shouldEqual "" // Pekko: "There was an internal server error." (see migration.md)
+        responseAs[String] shouldEqual "" // Pekko: "There was an internal server error."
         lines.get shouldEqual List(logged500("XXX"))
       }
     }
