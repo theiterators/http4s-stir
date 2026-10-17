@@ -1,6 +1,6 @@
 package pl.iterators.stir.server.directives
 
-import cats.effect.IO
+import cats.effect.{ IO, Outcome }
 import cats.syntax.all._
 import fs2.Stream
 import fs2.io.file.{ Files, Path }
@@ -109,26 +109,34 @@ trait FileUploadDirectives {
 
   /**
    * Collects each body part that is a multipart file with the given field name as a tuple containing metadata and
-   * a stream of the file contents. Files are stored in temporary files on disk so in-memory buffers don't overflow;
-   * each temporary file is deleted once its stream is consumed, or on exit if it is not.
+   * a stream of the file contents. Files are stored in temporary files on disk so in-memory buffers don't overflow.
+   * The temporary files are deleted once the response body has been consumed (so a part can be streamed back as the
+   * response), or as soon as the inner route rejects, fails or is cancelled; nothing is registered with
+   * `deleteOnExit`, which would keep every path in memory for the life of the process.
    *
    * @group fileupload
    */
-  def fileUploadAll(fieldName: String): Directive1[Seq[(FileInfo, Stream[IO, Byte])]] = {
-    def tempDest(@unused fileInfo: FileInfo): File = {
-      val dest = File.createTempFile("http4s-stir-upload", ".tmp")
-      dest.deleteOnExit()
-      dest
+  def fileUploadAll(fieldName: String): Directive1[Seq[(FileInfo, Stream[IO, Byte])]] =
+    Directive[Tuple1[Seq[(FileInfo, Stream[IO, Byte])]]] { inner => ctx =>
+      def tempDest(@unused fileInfo: FileInfo): File = File.createTempFile("http4s-stir-upload", ".tmp")
+      storeUploadedFiles(fieldName, tempDest).tapply { case Tuple1(files) =>
+        innerCtx =>
+          val delete = files.toList.traverse_ { case (_, file) => IO.blocking(file.delete()).void }
+          IO.ref(false).flatMap { released =>
+            // the files are deleted once: on rejection, error or cancellation, or when the response body is finalized
+            val release = released.getAndSet(true).flatMap(done => if (done) IO.unit else delete)
+            val streams = files.map { case (info, src) => (info, Files[IO].readAll(Path(src.getAbsolutePath))) }
+            IO.defer(inner(Tuple1(streams))(innerCtx)).guaranteeCase {
+              case Outcome.Succeeded(_) => IO.unit
+              case _                    => release
+            }.flatMap {
+              case RouteResult.Complete(response) =>
+                IO.pure(RouteResult.Complete(response.withBodyStream(response.body.onFinalize(release))))
+              case rejected => release.as(rejected)
+            }
+          }
+      }(ctx)
     }
-
-    storeUploadedFiles(fieldName, tempDest).map { files =>
-      files.map {
-        case (info, src) =>
-          val path = Path(src.getAbsolutePath)
-          (info, Files[IO].readAll(path).onFinalize(IO.delay(src.delete()).void))
-      }
-    }
-  }
 
   private def multipartToDisk(fieldName: String, destFn: FileInfo => File,
       firstOnly: Boolean): Directive1[Seq[(FileInfo, File)]] =

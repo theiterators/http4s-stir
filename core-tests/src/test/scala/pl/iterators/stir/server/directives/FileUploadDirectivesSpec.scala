@@ -147,5 +147,33 @@ class FileUploadDirectivesSpec extends RoutingSpec {
         }) { rendered => complete(rendered.mkString(",")) }
       } ~> check { responseAs[String] shouldEqual "a.txt=first,b.bin=second" }
     }
+    def leftoverUploads(): Int =
+      Option(new File(System.getProperty("java.io.tmpdir")).listFiles())
+        .map(_.count(_.getName.startsWith("http4s-stir-upload"))).getOrElse(0)
+    "delete its temporary files once the response has been sent, even when the streams were never read" in {
+      val before = leftoverUploads()
+      upload(textPart("file", "a.txt", "first"), textPart("file", "b.txt", "second")) ~> fileUploadAll("file") {
+        files => complete(files.size.toString)
+      } ~> check {
+        responseAs[String] shouldEqual "2"
+        leftoverUploads() shouldEqual before
+      }
+    }
+    "delete its temporary files when the inner route fails" in {
+      val before = leftoverUploads()
+      upload(textPart("file", "a.txt", "first")) ~> Route.seal(fileUploadAll("file") { _ =>
+        throw new RuntimeException("boom")
+      }) ~> check {
+        status shouldEqual Status.InternalServerError
+        leftoverUploads() shouldEqual before
+      }
+    }
+    "delete its temporary files when the inner route rejects" in {
+      val before = leftoverUploads()
+      upload(textPart("file", "a.txt", "first")) ~> fileUploadAll("file") { _ => reject } ~> check {
+        handled shouldEqual false
+        leftoverUploads() shouldEqual before
+      }
+    }
   }
 }
