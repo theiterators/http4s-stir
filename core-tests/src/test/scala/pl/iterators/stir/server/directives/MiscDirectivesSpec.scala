@@ -45,22 +45,20 @@ class MiscDirectivesSpec extends RoutingSpec {
   }
 
   "the selectPreferredLanguage directive" should {
-    // Pekko's table: the header on the left, the preferred of the offered languages on the right. Pekko writes
-    // `q=.5`; http4s follows RFC 7231 (`qvalue = ( "0" [ "." 0*3DIGIT ] ) / ...`) and rejects it, so the table
-    // uses `0.5`, and the leading-dot form is pinned separately below
+    // Pekko's table: the header on the left, the preferred of the offered languages on the right
     "Accept-Language: de, en".test { selectFrom =>
       selectFrom("de", "en") shouldEqual "de"
       selectFrom("en", "de") shouldEqual "en"
     }
-    "Accept-Language: en, de;q=0.5".test { selectFrom =>
+    "Accept-Language: en, de;q=.5".test { selectFrom =>
       selectFrom("de", "en") shouldEqual "en"
       selectFrom("en", "de") shouldEqual "en"
     }
-    "Accept-Language: en;q=0.5, de".test { selectFrom =>
+    "Accept-Language: en;q=.5, de".test { selectFrom =>
       selectFrom("de", "en") shouldEqual "de"
       selectFrom("en", "de") shouldEqual "de"
     }
-    "Accept-Language: en-US, en;q=0.7, *;q=0.1, de;q=0.5".test { selectFrom =>
+    "Accept-Language: en-US, en;q=.7, *;q=.1, de;q=.5".test { selectFrom =>
       selectFrom("en", "en-US") shouldEqual "en-US"
       selectFrom("de", "en") shouldEqual "en"
       selectFrom("de", "hu") shouldEqual "de"
@@ -68,7 +66,7 @@ class MiscDirectivesSpec extends RoutingSpec {
       selectFrom("hu", "es") shouldEqual "hu"
       selectFrom("es", "hu") shouldEqual "es"
     }
-    "Accept-Language: en, *;q=0.5, de;q=0".test { selectFrom =>
+    "Accept-Language: en, *;q=.5, de;q=0".test { selectFrom =>
       selectFrom("es", "de") shouldEqual "es"
       selectFrom("de", "es") shouldEqual "es"
       selectFrom("es", "en") shouldEqual "en"
@@ -78,11 +76,22 @@ class MiscDirectivesSpec extends RoutingSpec {
       selectFrom("de", "es") shouldEqual "de"
       selectFrom("es", "en") shouldEqual "en"
     }
-    "fall back to the first language when Accept-Language cannot be parsed, such as `q=.5`" in {
-      Get()                                                                                               ~> addHeader(Header.Raw(CIString("Accept-Language"), "en, de;q=.5")) ~>
-      selectPreferredLanguage(LanguageTag("de"), LanguageTag("en")) { lang => complete(lang.primaryTag) } ~> check {
-        responseAs[String] shouldEqual "de"
-      }
+    def preferred(acceptLanguage: String): String =
+      Get()                                                                                               ~> addHeader(Header.Raw(CIString("Accept-Language"), acceptLanguage)) ~>
+      selectPreferredLanguage(LanguageTag("de"), LanguageTag("en")) { lang => complete(lang.primaryTag) } ~>
+      check(responseAs[String])
+
+    "read q-values as leniently as Pekko" in {
+      preferred("en, de;q=0.5") shouldEqual "en"
+      preferred("en, de;q=.5") shouldEqual "en"
+      preferred("de;q=0.4999, en;q=0.5") shouldEqual "en"
+      preferred("de ; q = 0.5, en") shouldEqual "en"
+      preferred("de;q=0., en;q=1.") shouldEqual "en"
+      preferred("de;q=0, en;q=0.0001") shouldEqual "en"
+    }
+    "fall back to the first language when Accept-Language cannot be parsed" in {
+      preferred("en;q=2, de;q=0.1") shouldEqual "de"
+      preferred("en;q=.") shouldEqual "de"
     }
     "fall back to the first language without Accept-Language" in {
       Get() ~> selectPreferredLanguage(LanguageTag("de"), LanguageTag("en")) { lang => complete(lang.primaryTag) } ~>

@@ -105,7 +105,7 @@ val route: Route = withSizeLimit(1024 * 1024) {
 
 ## selectPreferredLanguage
 
-Inspects the request's `Accept-Language` header and determines which of the given language alternatives is preferred by the client, following RFC 7231 Section 5.3.5 negotiation logic. If the client has equal preference for multiple alternatives, the argument order serves as a tiebreaker. If no `Accept-Language` header is present, the first language is returned. An `Accept-Language` header http4s cannot parse is ignored the same way; note that RFC 7231 q-values need a leading zero (`q=0.5`), so a header with Pekko-style `q=.5` selects the first language.
+Inspects the request's `Accept-Language` header and determines which of the given language alternatives is preferred by the client, following RFC 7231 Section 5.3.5 negotiation logic. If the client has equal preference for multiple alternatives, the argument order serves as a tiebreaker. If no `Accept-Language` header is present, the first language is returned. q-values are read as leniently as Pekko reads them (`q=.5`, more than three decimals, spaces around `;` and `=`); a header that still cannot be parsed is ignored the same way.
 
 ```scala
 import org.http4s.LanguageTag

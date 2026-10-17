@@ -6,6 +6,7 @@ import com.comcast.ip4s.IpAddress
 import fs2.{ Pull, Stream }
 import org.http4s.{ EmptyBody, EntityBody, LanguageTag, Request, Response }
 import org.http4s.headers._
+import org.typelevel.ci.CIString
 import org.typelevel.vault.Key
 import pl.iterators.stir.server._
 
@@ -75,12 +76,13 @@ trait MiscDirectives {
    * If there are several best language alternatives that the client
    * has equal preference for (even if this preference is zero!)
    * the order of the arguments is used as a tie breaker (First one wins).
+   * q-values are read as leniently as Pekko does (`q=.5`, more than three decimals, spaces around `=`); a header
+   * that still cannot be parsed is ignored.
    *
    * @group misc
    */
   def selectPreferredLanguage(first: LanguageTag, more: LanguageTag*): Directive1[LanguageTag] = {
-    import HeaderDirectives._
-    optionalHeaderValueByType[`Accept-Language`].flatMap {
+    extract(ctx => MiscDirectives.acceptLanguage(ctx.request)).flatMap {
       case Some(acceptLanguage) =>
         val availableLanguages = first +: more
         val preferredLanguage =
@@ -252,6 +254,28 @@ object MiscDirectives extends MiscDirectives {
 
   private val _requestEntityPresent: Directive0 =
     knownEmpty.flatMap(if (_) reject(RequestEntityExpectedRejection) else pass)
+
+  /**
+   * The `Accept-Language` header with its q-values read as Pekko reads them: http4s rejects `.5` and rounds
+   * `0.4999` up to `0.5`, so the values are rewritten to three truncated decimals before http4s parses them.
+   */
+  private def acceptLanguage(request: Request[IO]): Option[`Accept-Language`] =
+    request.headers.get(CIString("Accept-Language")).flatMap { raw =>
+      `Accept-Language`.parse(raw.map(h => lenientQValues(h.value)).toList.mkString(", ")).toOption
+    }
+
+  // Pekko's `CommonRules.qvalue`: "0" ["." *DIGIT] / "." 1*DIGIT / "1" ["." *"0"], with optional spaces around it
+  private val LenientQValue = """\s*;\s*q\s*=\s*(0(?:\.\d*)?|\.\d+|1(?:\.0*)?)(?=\s*(?:[,;]|$))""".r
+
+  // truncated to the three decimals http4s takes, which keeps the order against any such value; a positive q-value
+  // stays positive
+  private def lenientQValues(value: String): String =
+    LenientQValue.replaceAllIn(value,
+      { m =>
+        val q = BigDecimal(if (m.group(1).startsWith(".")) "0" + m.group(1) else m.group(1).stripSuffix("."))
+        val truncated = q.setScale(3, BigDecimal.RoundingMode.DOWN)
+        ";q=" + (if (q > 0 && truncated == 0) BigDecimal("0.001") else truncated).toString
+      })
 
   private val _rejectEmptyResponse: Directive0 =
     mapRouteResultPF {
