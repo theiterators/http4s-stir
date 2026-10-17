@@ -330,6 +330,14 @@ class PathDirectivesSpec extends RoutingSpec with Inside {
     "accept [/12/x]".inThe(test("12:"))
   }
 
+  "pathSuffix(IntNumber)" should {
+    val test = testFor(pathSuffix(IntNumber) {
+      echoCaptureAndUnmatchedPath
+    })
+    "accept [/orders/123] and leave the trailing slash".inThe(test("123:/orders/"))
+    "reject [/orders/abc]".inThe(test())
+  }
+
   "pathPrefix(CustomShortNumber)" should {
     object CustomShortNumber extends NumberMatcher[Short](Short.MaxValue, 10) {
       def fromChar(c: Char) = fromDecimalChar(c)
