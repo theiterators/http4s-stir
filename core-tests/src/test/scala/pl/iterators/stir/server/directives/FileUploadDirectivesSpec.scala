@@ -97,7 +97,10 @@ class FileUploadDirectivesSpec extends RoutingSpec {
         Option(tmp.listFiles()).toList.flatten.filter(f => f.isFile && f.getName.endsWith(".tmp") && f.length < 1000000)
           .filter(f => scala.util.Try(read(f).contains(marker)).getOrElse(false))
       upload(textPart("file", "a.txt", marker + ("x" * 4096))) ~> withRequestTimeout(300.millis) {
-        fileUploadSpooled("file", 1024) { _ => complete(IO.never[String]) }
+        // the part is spooled before the route waits, so the cancellation has a file to delete
+        fileUploadSpooled("file", 1024) { _ =>
+          complete(IO(spooledWithMarker should not be empty) *> IO.never[String])
+        }
       } ~> check { status shouldEqual Status.ServiceUnavailable }
       eventually(timeout(Span(3, Seconds)))(spooledWithMarker shouldBe empty)
     }
