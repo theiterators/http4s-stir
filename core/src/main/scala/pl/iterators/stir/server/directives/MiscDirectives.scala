@@ -6,6 +6,7 @@ import com.comcast.ip4s.IpAddress
 import fs2.{ Pull, Stream }
 import org.http4s.{ EmptyBody, EntityBody, LanguageTag, Request, Response }
 import org.http4s.headers._
+import org.typelevel.ci.CIString
 import org.typelevel.vault.Key
 import pl.iterators.stir.server._
 
@@ -75,12 +76,13 @@ trait MiscDirectives {
    * If there are several best language alternatives that the client
    * has equal preference for (even if this preference is zero!)
    * the order of the arguments is used as a tie breaker (First one wins).
+   * q-values are read as leniently as Pekko does (`q=.5`, more than three decimals, spaces around `=`); a header
+   * that still cannot be parsed is ignored.
    *
    * @group misc
    */
   def selectPreferredLanguage(first: LanguageTag, more: LanguageTag*): Directive1[LanguageTag] = {
-    import HeaderDirectives._
-    optionalHeaderValueByType[`Accept-Language`].flatMap {
+    extract(ctx => MiscDirectives.acceptLanguage(ctx.request)).flatMap {
       case Some(acceptLanguage) =>
         val availableLanguages = first +: more
         val preferredLanguage =
@@ -252,6 +254,72 @@ object MiscDirectives extends MiscDirectives {
 
   private val _requestEntityPresent: Directive0 =
     knownEmpty.flatMap(if (_) reject(RequestEntityExpectedRejection) else pass)
+
+  /**
+   * The `Accept-Language` header with its q-values read as Pekko reads them: http4s rejects `.5` and spaces around
+   * `;` and `=`, and rounds `0.4999` up to `0.5`, so each q-value is rewritten to three truncated decimals before
+   * http4s parses the header. Each header line is parsed on its own and the lines it can parse are kept, as Pekko
+   * keeps the `Accept-Language` headers it parsed.
+   */
+  private def acceptLanguage(request: Request[IO]): Option[`Accept-Language`] =
+    request.headers.get(CIString("Accept-Language")).flatMap { raw =>
+      raw.toList.flatMap(header => `Accept-Language`.parse(lenientQValues(header.value)).toOption)
+        .reduceOption((a, b) => `Accept-Language`(a.values.concatNel(b.values)))
+    }
+
+  // written without regular expressions: Scala Native's engine has no lookaround, and a backtracking pattern over
+  // a long run of whitespace takes quadratic time
+  private def lenientQValues(value: String): String =
+    value.split(",", -1).map { element =>
+      val parameters = element.split(";", -1)
+      if (parameters.length < 2) element
+      else (trimEnd(parameters.head) +: parameters.tail.map(lenientQParameter)).mkString(";")
+    }.mkString(",")
+
+  private def lenientQParameter(parameter: String): String = {
+    val eq = parameter.indexOf('=')
+    if (eq < 0 || trimOws(parameter.substring(0, eq)) != "q") parameter
+    else canonicalQValue(trimOws(parameter.substring(eq + 1))).fold(parameter)("q=" + _)
+  }
+
+  /**
+   * Pekko's `CommonRules.qvalue`, `"0" ["." *DIGIT] / "." 1*DIGIT / "1" ["." *"0"]`, as the three decimals http4s
+   * takes, truncated: that never inverts the order against another q-value (it may make two of them equal), and a
+   * positive q-value stays positive, as in Pekko.
+   */
+  private def canonicalQValue(text: String): Option[String] = {
+    val dot = text.indexOf('.')
+    val (whole, fraction) = if (dot < 0) (text, "") else (text.substring(0, dot), text.substring(dot + 1))
+    val valid = whole match {
+      case "0" => fraction.forall(isDigit)
+      case ""  => dot == 0 && fraction.nonEmpty && fraction.forall(isDigit)
+      case "1" => fraction.forall(_ == '0')
+      case _   => false
+    }
+    if (!valid) None
+    else if (whole == "1") Some("1.000")
+    else {
+      val decimals = (fraction + "000").substring(0, 3)
+      Some(if (decimals == "000" && fraction.exists(_ != '0')) "0.001" else "0." + decimals)
+    }
+  }
+
+  private def isDigit(c: Char): Boolean = c >= '0' && c <= '9'
+
+  /** Optional whitespace (RFC 7230 OWS) is spaces and tabs only. */
+  private def isOws(c: Char): Boolean = c == ' ' || c == '\t'
+
+  private def trimEnd(s: String): String = {
+    var end = s.length
+    while (end > 0 && isOws(s.charAt(end - 1))) end -= 1
+    s.substring(0, end)
+  }
+
+  private def trimOws(s: String): String = {
+    var start = 0
+    while (start < s.length && isOws(s.charAt(start))) start += 1
+    trimEnd(s.substring(start))
+  }
 
   private val _rejectEmptyResponse: Directive0 =
     mapRouteResultPF {
