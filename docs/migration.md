@@ -134,11 +134,6 @@ instead. Other differences that remain:
 - `selectPreferredLanguage` reads `Accept-Language` q-values as leniently as Pekko: `q=.5` and spaces around `;` and
   `=` are accepted (the header used to be ignored, picking the first language), and a q-value with more than three
   decimals is truncated instead of rounded (`q=0.4999` now ranks below `q=0.5`).
-- A request body that a route reads partway (it fails mid-stream, or a reader stops early) cannot be read again: under
-  `toHttpApp` and the testkit a later read, typically by an alternative after a rejection, fails at once with an
-  `IllegalStateException` ("The request entity was read partway before ...") instead of waiting on the connection
-  until the idle timeout, as Pekko fails the second materialization of a streamed entity. A body read to the end is
-  readable again as before; `toHttpRoutes` hands the next routes the request as received and is not covered.
 - Under `toHttpApp` and the testkit a request body that cannot be handed out again fails a later read at once with an
   `IllegalStateException` ("The request entity was read before ...") instead of waiting on the connection until the
   idle timeout, as Pekko fails the second materialization of a streamed entity: a chunked or length-less body can be
