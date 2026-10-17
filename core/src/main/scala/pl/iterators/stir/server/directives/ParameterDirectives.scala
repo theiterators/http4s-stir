@@ -2,7 +2,7 @@ package pl.iterators.stir.server.directives
 
 import cats.implicits._
 import cats.effect.IO
-import org.http4s.Query
+import org.http4s.{ Query, Uri }
 import pl.iterators.stir.common._
 import pl.iterators.stir.impl.util._
 import pl.iterators.stir.server._
@@ -14,8 +14,8 @@ import scala.util._
 trait ParameterDirectives extends ToNameReceptacleEnhancements with ParameterDirectivesInstances {
 
   /**
-   * Extracts the request's query parameters as a `Map[String, String]`; of a repeated parameter the last value is
-   * kept, a parameter without a value (`?flag`) is an empty string, as in Pekko.
+   * Extracts the request's query parameters as a `Map[String, String]`. If a parameter repeats, the last value is
+   * kept; a parameter without a value (`?flag`) maps to an empty string, as in Pekko.
    *
    * @group param
    */
@@ -45,18 +45,30 @@ trait ParameterDirectives extends ToNameReceptacleEnhancements with ParameterDir
   private val _parameterMultiMap: Directive1[Map[String, Seq[String]]] =
     extract { ctx =>
       queryPairs(ctx.request.uri.query).foldLeft(Map.empty[String, List[String]]) { case (map, (name, value)) =>
-        map.updated(name, map.getOrElse(name, Nil) :+ value)
-      }
+        map.updated(name, value :: map.getOrElse(name, Nil))
+      }.map { case (name, values) => name -> values.reverse }
     }
 
   private val _parameterSeq: Directive1[Seq[(String, String)]] =
     extract(ctx => queryPairs(ctx.request.uri.query))
 
-  /** The pairs in the order of the query string, a parameter without a value (`?flag`) with an empty value. */
-  private def queryPairs(query: Query): Vector[(String, String)] =
-    // http4s parses a bare `?` as one blank pair, Pekko as no parameters
-    if (query.pairs == Query.blank.pairs) Vector.empty
-    else query.pairs.map { case (name, value) => name -> value.getOrElse("") }
+  /**
+   * The pairs in the order of the query string, parsed as Pekko does: split on `&` only (http4s also splits on `;`),
+   * at the first `=`, with `+` and percent escapes decoded; a parameter without a value (`?flag`) has an empty value,
+   * an empty segment is a pair of empty strings, a bare `?` has no pairs.
+   */
+  private[directives] def queryPairs(query: Query): Vector[(String, String)] = {
+    val raw = query.renderString
+    if (raw.isEmpty) Vector.empty
+    else raw.split("&", -1).iterator.map { segment =>
+      segment.indexOf('=') match {
+        case -1    => decode(segment) -> ""
+        case index => decode(segment.substring(0, index)) -> decode(segment.substring(index + 1))
+      }
+    }.toVector
+  }
+
+  private def decode(encoded: String): String = Uri.decode(encoded, plusIsSpace = true)
 
   trait ParamSpec {
     type Out
@@ -130,15 +142,15 @@ trait ParameterDirectives extends ToNameReceptacleEnhancements with ParameterDir
 
     def filter[T](paramName: String, fsou: FSOU[T]): Directive1[T] =
       extractRequestContext.flatMap { ctx =>
-        Try(ctx.request.uri.query.params) match {
-          case Success(query) => handleParamResult(paramName, fsou(query.get(paramName)))
+        Try(firstValue(ctx.request.uri.query, paramName)) match {
+          case Success(value) => handleParamResult(paramName, fsou(value))
           case Failure(t)     => reject(MalformedRequestContentRejection("The request's query string is invalid.", t))
         }
       }
 
     def requiredFilter[T](paramName: String, fsou: FSOU[T], requiredValue: Any): Directive0 =
       extractRequestContext.flatMap { ctx =>
-        onComplete(fsou(ctx.request.uri.query.params.get(paramName))).flatMap {
+        onComplete(fsou(firstValue(ctx.request.uri.query, paramName))).flatMap {
           case Success(value) if value == requiredValue => pass
           case Success(value)                           =>
             reject(InvalidRequiredValueForQueryParamRejection(paramName, requiredValue.toString, value.toString))
@@ -149,8 +161,13 @@ trait ParameterDirectives extends ToNameReceptacleEnhancements with ParameterDir
     def repeatedFilter[T](paramName: String, fsu: FSU[T]): Directive1[Iterable[T]] =
       extractRequestContext.flatMap { ctx =>
         handleParamResult(paramName,
-          ctx.request.uri.query.multiParams.getOrElse(paramName, Seq.empty).map(fsu.apply).parSequence)
+          ParameterDirectives.queryPairs(ctx.request.uri.query).iterator.collect { case (`paramName`, value) => value }
+            .toList.map(fsu.apply).parSequence)
       }
+
+    /** The first value of the parameter, as Pekko's `Query.get`. */
+    def firstValue(query: Query, paramName: String): Option[String] =
+      ParameterDirectives.queryPairs(query).collectFirst { case (`paramName`, value) => value }
 
     def handleParamResult[T](paramName: String, result: IO[T]): Directive1[T] =
       onComplete(result).flatMap {

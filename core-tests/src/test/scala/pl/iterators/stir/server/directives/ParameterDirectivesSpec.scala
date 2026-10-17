@@ -424,9 +424,47 @@ class ParameterDirectivesSpec extends AnyFreeSpec with GenericRoutingSpec with I
         responseAs[String] shouldEqual "(a,1), (flag,)"
       }
     }
+    "let a later parameter without a value replace an earlier value" in {
+      Get("/?flag=on&flag") ~> completeAsMap ~> check {
+        responseAs[String] shouldEqual "(flag,)"
+      }
+    }
     "extract nothing from a bare question mark" in {
       Get("/?") ~> parameterMap(params => complete(params.size.toString)) ~> check {
         responseAs[String] shouldEqual "0"
+      }
+    }
+  }
+
+  "The query string" - {
+    val pairs = parameterSeq(params => complete(params.mkString(", ")))
+
+    "be split on '&' only, as in Pekko" in {
+      Get("/?a;b=c&d=1;e") ~> pairs                          ~> check { responseAs[String] shouldEqual "(a;b,c), (d,1;e)" }
+      Get("/?a;b=c")       ~> parameter("a;b")(echoComplete) ~> check { responseAs[String] shouldEqual "c" }
+    }
+    "keep empty segments and parameters without a name" in {
+      Get("/?a&") ~> pairs ~> check { responseAs[String] shouldEqual "(a,), (,)" }
+      Get("/?=x") ~> pairs ~> check { responseAs[String] shouldEqual "(,x)" }
+    }
+    "split a parameter at its first '=' and decode '+' and percent escapes" in {
+      Get("/?a=b=c&a+b=c%2Bd%26e") ~> pairs ~> check { responseAs[String] shouldEqual "(a,b=c), (a b,c+d&e)" }
+    }
+  }
+
+  "The 'parameter' directive on a parameter given more than once" - {
+    "extract the first occurrence, also when it has no value" in {
+      Get("/?x&x=1")   ~> parameter("x")(echoComplete) ~> check { responseAs[String] shouldEqual "" }
+      Get("/?x=1&x=2") ~> parameter("x")(echoComplete) ~> check { responseAs[String] shouldEqual "1" }
+    }
+    "check a required value against the first occurrence" in {
+      Get("/?x&x=1") ~> parameter("x".requiredValue("1"))(_ => completeOk) ~> check {
+        rejection shouldEqual InvalidRequiredValueForQueryParamRejection("x", "1", "")
+      }
+    }
+    "extract a parameter without a value as one empty value when repeated" in {
+      Get("/?flag&flag=on") ~> parameter("flag".repeated)(echoComplete) ~> check {
+        responseAs[String] shouldEqual "List(, on)"
       }
     }
   }

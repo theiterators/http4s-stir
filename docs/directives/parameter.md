@@ -77,7 +77,9 @@ val route: Route = path("items") {
 
 ## parameter (repeated)
 
-Extracts all occurrences of a query parameter using `.repeated` (or `.*`). Returns an `Iterable[T]`. If the parameter is absent, an empty collection is returned.
+Extracts all occurrences of a query parameter using `.repeated` (or `.*`). Returns an `Iterable[T]` in the order of
+the query string (Pekko returns them in reverse order). If the parameter is absent, an empty collection is returned;
+an occurrence without a value (`?tag`) is an empty string.
 
 ```scala
 val route: Route = path("filter") {

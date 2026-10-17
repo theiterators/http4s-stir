@@ -48,6 +48,7 @@ instead. Other differences that remain:
   `getResourceAsStream`).
 - An `Accept-Language` (or other) header that http4s cannot parse is ignored, where Pekko parses leniently: Pekko's
   `q=.5` is not a valid RFC 7231 q-value, so `selectPreferredLanguage` then picks the first language.
+- `parameter("x".repeated)` returns the values in the order of the query string; Pekko returns them reversed.
 - Content negotiation differs from Pekko for wildcard ranges with parameters: stir ignores `charset` on every range
   (Pekko only on `type/subtype` ranges, so its `text/*;charset=...` never matches) and does not count a wildcard
   range's parameters towards its specificity.
@@ -78,7 +79,11 @@ instead. Other differences that remain:
   `parameterSeq` includes a parameter without a value (`?flag`) as `("flag", "")` instead of dropping it.
 - `parameterMap` keeps the last value of a repeated parameter (`?x=1&x=2` gives `x -> 2`, was `1`) and
   `parameterMultiMap` lists a parameter without a value (`?flag`) with one empty value (was none), as Pekko does; a
-  bare `?` gives empty maps (was `Map("" -> "")` and `Map("" -> List())`).
+  bare `?` gives empty maps (was `Map("" -> "")` and `Map("" -> List())`). So `?flag=on&flag` now gives `flag -> ""`.
+- The parameter directives parse the query string themselves, as Pekko does, instead of through http4s' `Query`: `;`
+  no longer separates parameters (`?a;b=c` is the parameter `a;b`), `parameter("x")` takes the first occurrence even
+  when it has no value (`?x&x=1` gives `""`, was `"1"`), and `.repeated` lists an occurrence without a value as `""`
+  (was skipped).
 - The form directives parse url-encoded bodies themselves instead of through http4s' `UrlForm` decoder: `;` no
   longer separates fields (`a=1;b=2` is one field, as in Pekko) and characters that http4s rejected with a 400 when
   unencoded (spaces, quotes, brackets, non-ASCII) are accepted literally.
