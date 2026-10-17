@@ -8,9 +8,12 @@ import org.http4s.{ Headers, MediaType, Request, Response, Status }
 import org.http4s.headers.{ `Content-Disposition`, `Content-Type` }
 import org.http4s.multipart.{ Multipart, Multiparts, Part }
 import org.typelevel.ci._
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.time.{ Seconds, Span }
 import pl.iterators.stir.server._
 
 import java.io.File
+import scala.concurrent.duration._
 import java.util.concurrent.atomic.AtomicInteger
 import java.nio.file.{ Files => NioFiles }
 
@@ -87,6 +90,18 @@ class FileUploadDirectivesSpec extends RoutingSpec {
   }
 
   "fileUploadSpooled" should {
+    "delete its spooled files when the route is cancelled, e.g. by a request timeout" in {
+      val marker = "stir-spooled-cancel-" + java.util.UUID.randomUUID()
+      val tmp = new File(System.getProperty("java.io.tmpdir"))
+      def spooledWithMarker: List[File] =
+        Option(tmp.listFiles()).toList.flatten.filter(f => f.isFile && f.getName.endsWith(".tmp") && f.length < 1000000)
+          .filter(f => scala.util.Try(read(f).contains(marker)).getOrElse(false))
+      upload(textPart("file", "a.txt", marker + ("x" * 4096))) ~> withRequestTimeout(300.millis) {
+        fileUploadSpooled("file", 1024) { _ => complete(IO.never[String]) }
+      } ~> check { status shouldEqual Status.ServiceUnavailable }
+      eventually(timeout(Span(3, Seconds)))(spooledWithMarker shouldBe empty)
+    }
+
     "stream the first matching part while the inner route runs" in {
       upload(textPart("file", "a.txt", "first"), textPart("file", "b.txt", "second")) ~> fileUploadSpooled("file") {
         case (info, data) =>
