@@ -271,9 +271,14 @@ class FormFieldDirectivesSpec extends RoutingSpec {
   "The 'formFieldSeq' directive" should {
     val urlEncoded = `Content-Type`(MediaType.application.`x-www-form-urlencoded`)
     "extract all fields in the order of the body" in {
-      Post("/", "age=42&number=3&number=5") ~> addHeader(urlEncoded) ~> {
+      Post("/", "number=3&age=42&number=5") ~> addHeader(urlEncoded) ~> {
         formFieldSeq { echoComplete }
-      } ~> check { responseAs[String] shouldEqual "Vector((age,42), (number,3), (number,5))" }
+      } ~> check { responseAs[String] shouldEqual "Vector((number,3), (age,42), (number,5))" }
+    }
+    "take only '&' as a separator and accept unencoded characters literally" in {
+      Post("/", "a=1;b=2&c=<x y>") ~> addHeader(urlEncoded) ~> {
+        formFieldSeq { echoComplete }
+      } ~> check { responseAs[String] shouldEqual "Vector((a,1;b=2), (c,<x y>))" }
     }
     "decode plus and percent encoded fields" in {
       Post("/", "name=John+Doe&city=%C5%81%C3%B3d%C5%BA&empty=&flag") ~> addHeader(urlEncoded) ~> {

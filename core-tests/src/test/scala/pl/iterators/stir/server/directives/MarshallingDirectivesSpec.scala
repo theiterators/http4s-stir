@@ -9,6 +9,7 @@ import org.http4s.{
   DecodeFailure,
   DecodeResult,
   EntityDecoder,
+  HttpVersion,
   InvalidMessageBodyFailure,
   MediaRange,
   MediaType,
@@ -17,7 +18,7 @@ import org.http4s.{
   Status
 }
 import org.http4s.circe._
-import org.http4s.headers.{ `Content-Type`, Accept, MediaRangeAndQValue }
+import org.http4s.headers.{ `Content-Length`, `Content-Type`, Accept, MediaRangeAndQValue }
 import org.scalatest.Inside
 import pl.iterators.stir.common.EntityStreamingSupport
 import pl.iterators.stir.marshalling.{ ToResponseMarshallable, ToResponseMarshaller }
@@ -230,6 +231,12 @@ class MarshallingDirectivesSpec extends RoutingSpec with Inside {
     "prefer the UnsupportedRequestContentTypeRejection when an empty request has an unsupported Content-Type" in {
       Put() ~> addHeader(`Content-Type`(MediaType.text.plain)) ~> echoJson ~> check {
         rejection shouldBe an[UnsupportedRequestContentTypeRejection]
+      }
+    }
+    "report a malformed length-less HTTP/2 body as malformed, not as missing" in {
+      val http2 = Post("/", "nope").withHttpVersion(HttpVersion.`HTTP/2`).removeHeader[`Content-Length`]
+      http2 ~> addHeader(`Content-Type`(MediaType.application.json)) ~> echoJson ~> check {
+        rejection shouldBe a[MalformedRequestContentRejection]
       }
     }
     "decode a missing entity as an empty String" in {

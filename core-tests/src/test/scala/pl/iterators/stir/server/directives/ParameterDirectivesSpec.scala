@@ -399,6 +399,11 @@ class ParameterDirectivesSpec extends AnyFreeSpec with GenericRoutingSpec with I
         responseAs[String] shouldEqual "(flag,), (a,1)"
       }
     }
+    "extract nothing from a bare question mark" in {
+      Get("/?") ~> parameterSeq { params => complete(params.size.toString) } ~> check {
+        responseAs[String] shouldEqual "0"
+      }
+    }
   }
 
   "when used with 'as[A](constructor)' the parameter directive should" - {

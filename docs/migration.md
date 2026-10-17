@@ -61,6 +61,9 @@ size limits) is set per directive instead.
   still decodes it as `""`.
 - `parameterSeq` and `formFieldSeq` return the pairs in the order of the query string or body, as Pekko does, and
   `parameterSeq` includes a parameter without a value (`?flag`) as `("flag", "")` instead of dropping it.
+- The form directives parse url-encoded bodies themselves instead of through http4s' `UrlForm` decoder: `;` no
+  longer separates fields (`a=1;b=2` is one field, as in Pekko) and characters that http4s rejected with a 400 when
+  unencoded (spaces, quotes, brackets, non-ASCII) are accepted literally.
 - `complete` negotiates the response's `Content-Type` against the request's `Accept` header, as Pekko does: a
   representation the client does not accept is rejected with `UnacceptedResponseContentTypeRejection` (406 when sealed,
   "Resource representation is only available with these types:" followed by the types). Clients sending `*/*` or no

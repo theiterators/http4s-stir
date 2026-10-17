@@ -2,6 +2,7 @@ package pl.iterators.stir.server.directives
 
 import cats.implicits._
 import cats.effect.IO
+import org.http4s.Query
 import pl.iterators.stir.common._
 import pl.iterators.stir.impl.util._
 import pl.iterators.stir.server._
@@ -42,7 +43,12 @@ trait ParameterDirectives extends ToNameReceptacleEnhancements with ParameterDir
     extract(_.request.uri.query.multiParams)
 
   private val _parameterSeq: Directive1[Seq[(String, String)]] =
-    extract(_.request.uri.query.pairs.map { case (name, value) => name -> value.getOrElse("") })
+    extract { ctx =>
+      val query = ctx.request.uri.query
+      // http4s parses a bare `?` as one blank pair, Pekko as no parameters
+      if (query.pairs == Query.blank.pairs) Vector.empty
+      else query.pairs.map { case (name, value) => name -> value.getOrElse("") }
+    }
 
   trait ParamSpec {
     type Out

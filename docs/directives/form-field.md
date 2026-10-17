@@ -145,6 +145,11 @@ Extracts all form fields as a `Seq[(String, String)]` in the order of the body, 
 without a value (`flag` or `flag=`) is an empty string and a field without a name is dropped, as in Pekko. Both
 url-encoded bodies and the text parts of a `multipart/form-data` body keep their order.
 
+Every form directive parses an url-encoded body the same way: fields are separated by `&` only (a `;` is part of a
+value, as in Pekko and the WHATWG url-encoded format), the first `=` separates name and value, `+` is a space,
+percent sequences are decoded with the body's charset (UTF-8 by default), and any other character is taken
+literally. Pekko rejects unencoded characters outside the `token` set with a 400; stir accepts them.
+
 ```scala
 val route: Route = path("data") {
   post {
