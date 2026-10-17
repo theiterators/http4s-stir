@@ -48,6 +48,8 @@ instead. Other differences that remain:
   `getResourceAsStream`).
 - An `Accept-Language` (or other) header that http4s cannot parse is ignored, where Pekko parses leniently: Pekko's
   `q=.5` is not a valid RFC 7231 q-value, so `selectPreferredLanguage` then picks the first language.
+- `HeaderMagnet` and `ModeledCustomHeader` are not ported: `headerValueByType[T]` and `optionalHeaderValueByType[T]`
+  use http4s' `Header[T, _]` type class; define a custom header with `Header.create`.
 - `parameter("x".repeated)` returns the values in the order of the query string; Pekko returns them reversed.
 - Content negotiation differs from Pekko for wildcard ranges with parameters: stir ignores `charset` on every range
   (Pekko only on `type/subtype` ranges, so its `text/*;charset=...` never matches) and does not count a wildcard
@@ -124,6 +126,9 @@ instead. Other differences that remain:
   requests (206, 416) as Pekko does.
 - `getFromResource` rejects a directory entry inside a jar instead of serving it as an empty body.
 - `logRequestResultWith(show)` is new; a `show` that fails fails the request, as in Pekko.
+- `headerValueByType[T]` rejects with `MissingHeaderRejection` naming the header as its http4s `Header` instance does
+  (`X-Custom-Header`), as Pekko names a modeled custom header; it used the Scala class name (`XCustomHeader`), which
+  only matched for http4s' own header classes. It now needs a `Header[T, _]` instance instead of a `ClassTag`.
 - `complete` negotiates the response's `Content-Type` against the request's `Accept` header, as Pekko does: a
   representation the client does not accept is rejected with `UnacceptedResponseContentTypeRejection` (406 when sealed,
   "Resource representation is only available with these types:" followed by the types). Clients sending `*/*` or no
