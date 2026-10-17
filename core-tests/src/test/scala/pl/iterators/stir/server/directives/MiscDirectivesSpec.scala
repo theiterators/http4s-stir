@@ -89,6 +89,19 @@ class MiscDirectivesSpec extends RoutingSpec {
       preferred("de;q=0., en;q=1.") shouldEqual "en"
       preferred("de;q=0, en;q=0.0001") shouldEqual "en"
     }
+    "keep the header lines it can parse when another cannot be parsed" in {
+      Get()                                                                                               ~> addHeaders(Header.Raw(CIString("Accept-Language"), "en;q=0.1"),
+        Header.Raw(CIString("Accept-Language"), "xx;q=5"))                                                ~>
+      selectPreferredLanguage(LanguageTag("de"), LanguageTag("en")) { lang => complete(lang.primaryTag) } ~> check {
+        responseAs[String] shouldEqual "en"
+      }
+    }
+    "read a header with a long run of whitespace in linear time" in {
+      val start = System.nanoTime()
+      preferred("en;q=0.1" + " " * 200000 + "x, de") shouldEqual "de"
+      preferred("en" + " " * 200000 + ";q=.5") shouldEqual "en"
+      (System.nanoTime() - start).nanos should be < 5.seconds
+    }
     "fall back to the first language when Accept-Language cannot be parsed" in {
       preferred("en;q=2, de;q=0.1") shouldEqual "de"
       preferred("en;q=.") shouldEqual "de"

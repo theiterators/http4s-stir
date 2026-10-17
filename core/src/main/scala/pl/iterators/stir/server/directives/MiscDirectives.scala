@@ -256,26 +256,59 @@ object MiscDirectives extends MiscDirectives {
     knownEmpty.flatMap(if (_) reject(RequestEntityExpectedRejection) else pass)
 
   /**
-   * The `Accept-Language` header with its q-values read as Pekko reads them: http4s rejects `.5` and rounds
-   * `0.4999` up to `0.5`, so the values are rewritten to three truncated decimals before http4s parses them.
+   * The `Accept-Language` header with its q-values read as Pekko reads them: http4s rejects `.5` and spaces around
+   * `;` and `=`, and rounds `0.4999` up to `0.5`, so each q-value is rewritten to three truncated decimals before
+   * http4s parses the header. Each header line is parsed on its own and the lines it can parse are kept, as Pekko
+   * keeps the `Accept-Language` headers it parsed.
    */
   private def acceptLanguage(request: Request[IO]): Option[`Accept-Language`] =
     request.headers.get(CIString("Accept-Language")).flatMap { raw =>
-      `Accept-Language`.parse(raw.map(h => lenientQValues(h.value)).toList.mkString(", ")).toOption
+      raw.toList.flatMap(header => `Accept-Language`.parse(lenientQValues(header.value)).toOption)
+        .reduceOption((a, b) => `Accept-Language`(a.values.concatNel(b.values)))
     }
 
-  // Pekko's `CommonRules.qvalue`: "0" ["." *DIGIT] / "." 1*DIGIT / "1" ["." *"0"], with optional spaces around it
-  private val LenientQValue = """\s*;\s*q\s*=\s*(0(?:\.\d*)?|\.\d+|1(?:\.0*)?)(?=\s*(?:[,;]|$))""".r
-
-  // truncated to the three decimals http4s takes, which keeps the order against any such value; a positive q-value
-  // stays positive
+  // written without regular expressions: Scala Native's engine has no lookaround, and a backtracking pattern over
+  // a long run of whitespace takes quadratic time
   private def lenientQValues(value: String): String =
-    LenientQValue.replaceAllIn(value,
-      { m =>
-        val q = BigDecimal(if (m.group(1).startsWith(".")) "0" + m.group(1) else m.group(1).stripSuffix("."))
-        val truncated = q.setScale(3, BigDecimal.RoundingMode.DOWN)
-        ";q=" + (if (q > 0 && truncated == 0) BigDecimal("0.001") else truncated).toString
-      })
+    value.split(",", -1).map { element =>
+      val parameters = element.split(";", -1)
+      if (parameters.length < 2) element
+      else (trimEnd(parameters.head) +: parameters.tail.map(lenientQParameter)).mkString(";")
+    }.mkString(",")
+
+  private def lenientQParameter(parameter: String): String = {
+    val eq = parameter.indexOf('=')
+    if (eq < 0 || parameter.substring(0, eq).trim != "q") parameter
+    else canonicalQValue(parameter.substring(eq + 1).trim).fold(parameter)("q=" + _)
+  }
+
+  /**
+   * Pekko's `CommonRules.qvalue`, `"0" ["." *DIGIT] / "." 1*DIGIT / "1" ["." *"0"]`, as the three decimals http4s
+   * takes, truncated: that never inverts the order against another q-value (it may make two of them equal), and a
+   * positive q-value stays positive, as in Pekko.
+   */
+  private def canonicalQValue(text: String): Option[String] = {
+    val dot = text.indexOf('.')
+    val (whole, fraction) = if (dot < 0) (text, "") else (text.substring(0, dot), text.substring(dot + 1))
+    val valid = whole match {
+      case "0" => fraction.forall(_.isDigit)
+      case ""  => dot == 0 && fraction.nonEmpty && fraction.forall(_.isDigit)
+      case "1" => fraction.forall(_ == '0')
+      case _   => false
+    }
+    if (!valid) None
+    else if (whole == "1") Some("1.000")
+    else {
+      val decimals = (fraction + "000").substring(0, 3)
+      Some(if (decimals == "000" && fraction.exists(_ != '0')) "0.001" else "0." + decimals)
+    }
+  }
+
+  private def trimEnd(s: String): String = {
+    var end = s.length
+    while (end > 0 && s.charAt(end - 1).isWhitespace) end -= 1
+    s.substring(0, end)
+  }
 
   private val _rejectEmptyResponse: Directive0 =
     mapRouteResultPF {
