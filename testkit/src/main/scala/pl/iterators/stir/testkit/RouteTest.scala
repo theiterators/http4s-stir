@@ -216,8 +216,9 @@ private[stir] object RouteTest {
         authority = Some(Uri.Authority(None, host = Uri.Host.fromIp4sHost(ipv4"127.0.0.1"),
           port = Some(server.address.getPort)))))
       // read the body and the trailers while the client and the server are still alive: a chunked response
-      // cannot be read after the connection is closed
-      client.toHttpApp.run(updatedRequest).flatMap { response =>
+      // cannot be read after the connection is closed; `run(...).use` releases the connection even when the
+      // timeout cancels the read
+      client.run(updatedRequest).use { response =>
         response.body.compile.to(Chunk).flatMap { bytes =>
           response.trailerHeaders.map { trailers =>
             response.withBodyStream(Stream.chunk(bytes)).withTrailerHeaders(IO.pure(trailers))

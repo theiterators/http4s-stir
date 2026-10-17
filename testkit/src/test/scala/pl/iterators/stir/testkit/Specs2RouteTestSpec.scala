@@ -9,12 +9,24 @@ import pl.iterators.stir.server._
 import org.http4s.Status._
 import fs2._
 import org.http4s.Method.{ GET, PUT }
+import org.specs2.execute.FailureException
 import org.specs2.mutable.Specification
+
+import scala.concurrent.duration._
 
 class Specs2RouteTestSpec extends Specification with Specs2RouteTest {
   override implicit val runtime: IORuntime = IORuntime.global
 
   "The ScalatestRouteTest should support" should {
+
+    "failing a test whose route never completes once the route test timeout elapses" in {
+      implicit val timeout: RouteTestTimeout = RouteTestTimeout(300.millis)
+      val never: Route = _ => IO.never
+      (Get() ~> never ~> check { ko("the check block must not run") }) must throwA[FailureException].like {
+        case FailureException(failure) =>
+          failure.message must contain("Request was neither completed nor rejected within 300 milliseconds")
+      }
+    }
 
     "the most simple and direct route test" in {
       Get() ~> complete(Response[IO]()) ~> { rr => rr.response.status } shouldEqual Response[IO]().status
