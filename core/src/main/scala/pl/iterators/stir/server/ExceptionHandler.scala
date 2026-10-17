@@ -69,5 +69,5 @@ object ExceptionHandler {
    * is `null`.
    */
   def seal(handler: ExceptionHandler)(logAction: Option[(Throwable, String) => IO[Unit]] = None): ExceptionHandler =
-    if (handler ne null) handler.seal() else ExceptionHandler.default(logAction)
+    if (handler ne null) handler.seal(logAction) else ExceptionHandler.default(logAction)
 }

@@ -5,6 +5,7 @@ import cats.effect.unsafe.IORuntime
 import org.http4s.{ Response, Status }
 import pl.iterators.stir.server._
 
+import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
@@ -100,6 +101,27 @@ class ExecutionDirectivesSpec extends RoutingSpec {
 //        responseAs[String] shouldEqual "There was an internal server error."
 //      }
 //    }
+  }
+
+  "ExceptionHandler.seal(handler)(logAction)" should {
+    "log through the given logAction when the custom handler does not match" in {
+      val logged = new AtomicReference[Option[String]](None)
+      val sealedHandler = ExceptionHandler.seal(handler)(Some((_, message) => IO(logged.set(Some(message)))))
+      Get() ~> handleExceptions(sealedHandler) {
+        complete(IO.raiseError[String](new RuntimeException("unexpected boom")))
+      } ~> check {
+        status shouldEqual Status.InternalServerError
+        logged.get.getOrElse("") should include("unexpected boom")
+      }
+    }
+    "still use the custom handler when it matches" in {
+      val logged = new AtomicReference[Option[String]](None)
+      val sealedHandler = ExceptionHandler.seal(handler)(Some((_, message) => IO(logged.set(Some(message)))))
+      Get() ~> handleExceptions(sealedHandler) { throw MyException } ~> check {
+        responseAs[String] shouldEqual "Pling! Plong! Something went wrong!!!"
+        logged.get shouldEqual None
+      }
+    }
   }
 
   "The `handleRejections` directive" should {
