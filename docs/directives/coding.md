@@ -18,6 +18,14 @@ sealed) only when the client explicitly refuses `identity` as well. Responses th
 `Content-Encoding`, have no entity, or have a non-compressible media type are never touched. `Content-Length` is
 removed from an encoded response.
 
+Each chunk of the response is compressed and flushed as it is produced, as Pekko's encoders do, so a streamed
+response (server-sent events, a slow producer) reaches the client without waiting for the compressor to fill its
+buffer. Every flush costs a few bytes and resets the compressor's look-ahead, so a stream of small chunks compresses
+much worse: one chunk per line of JSON (about 50 bytes) came out nearly three times larger than one chunk, 16-byte
+chunks six times. Regroup small chunks before completing when size matters more than latency (`chunkMin`, or
+`groupWithin` to bound the delay). On Scala Native the flush is not applied (scala-native's `Deflater` ignores the
+flush mode), so the output is buffered as before.
+
 ```scala
 val route: Route = encodeResponse {
   complete("a large text body")

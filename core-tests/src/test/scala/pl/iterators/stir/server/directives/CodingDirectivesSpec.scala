@@ -2,16 +2,17 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import fs2.Stream
+import fs2.{ Pipe, Stream }
 import fs2.text.utf8
 import fs2.compression.{ Compression, DeflateParams, InflateParams, ZLibParams }
-import org.http4s.{ ContentCoding, HttpVersion, Method, QValue, Request, Status, TransferCoding }
+import org.http4s.{ ContentCoding, HttpVersion, MediaType, Method, QValue, Request, Response, Status, TransferCoding }
 import org.scalatest.Inside
-import org.http4s.headers.{ `Accept-Encoding`, `Content-Encoding`, `Transfer-Encoding` }
+import org.http4s.headers.{ `Accept-Encoding`, `Content-Encoding`, `Content-Type`, `Transfer-Encoding` }
 import pl.iterators.stir.server._
 
 import java.io.File
 import java.nio.file.{ Files => NioFiles }
+import scala.concurrent.duration._
 
 class CodingDirectivesSpec extends RoutingSpec with Inside {
   override implicit def runtime: IORuntime = IORuntime.global
@@ -190,6 +191,40 @@ class CodingDirectivesSpec extends RoutingSpec with Inside {
       Get() ~> addHeader(`Accept-Encoding`(ContentCoding.gzip)) ~> encodeResponse(preEncoded) ~> check {
         responseAs[String] shouldEqual "raw"
       }
+    }
+  }
+
+  "the encodeResponse directive on a streamed response" should {
+    // Pekko's encoders flush every chunk, so a reader gets each chunk's bytes as it is produced
+    def firstBytes(coding: ContentCoding, decode: Pipe[IO, Byte, Byte]): String = {
+      val slow = (Stream("hello") ++ Stream.sleep_[IO](10.seconds) ++ Stream("world")).through(utf8.encode)
+      Get() ~> addHeader(`Accept-Encoding`(coding)) ~> encodeResponseWith(coding) {
+        complete(Response[IO]().withBodyStream(slow).withContentType(`Content-Type`(MediaType.text.plain)))
+      } ~> check {
+        chunksStream.flatMap(Stream.chunk).through(decode).through(utf8.decode).take(1).compile.string
+          .timeout(3.seconds)
+          .unsafeRunSync()
+      }
+    }
+    "send a gzipped chunk without waiting for the rest of the stream" in {
+      firstBytes(ContentCoding.gzip, Compression[IO].gunzip().andThen(_.flatMap(_.content))) shouldEqual "hello"
+    }
+    "send all of a large chunk without waiting for the rest of the stream" in {
+      // a chunk whose compressed form exceeds the deflater's buffer is still flushed whole
+      val random = new scala.util.Random(7)
+      val big = Array.fill(60000)(('!' + random.nextInt(90)).toByte)
+      val slow = Stream.chunk(fs2.Chunk.array(big)) ++ Stream.sleep_[IO](10.seconds) ++ Stream.emit('!'.toByte)
+      Get() ~> addHeader(`Accept-Encoding`(ContentCoding.gzip)) ~> encodeResponseWith(ContentCoding.gzip) {
+        complete(Response[IO]().withBodyStream(slow).withContentType(`Content-Type`(MediaType.text.plain)))
+      } ~> check {
+        chunksStream.flatMap(Stream.chunk).through(Compression[IO].gunzip()).flatMap(_.content).take(60000L)
+          .compile.count.timeout(3.seconds).unsafeRunSync() shouldEqual 60000L
+      }
+    }
+    "send a deflated chunk without waiting for the rest of the stream" in {
+      firstBytes(ContentCoding.deflate,
+        Compression[IO].inflate(InflateParams(header = ZLibParams.Header.ZLIB))) shouldEqual
+      "hello"
     }
   }
 
