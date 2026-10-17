@@ -3,7 +3,7 @@ package pl.iterators.stir.server.directives
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import org.http4s.{ Charset, ContentCoding, EntityTag, Header, HttpDate, MediaType, RangeUnit, Response, Status, Uri }
-import org.http4s.headers.{ `Accept-Encoding`, `Accept-Ranges`, `Content-Encoding`, `Content-Range`, `Content-Type`, ETag, `If-Match`, `If-Modified-Since`, `If-None-Match`, `If-Unmodified-Since`, `Last-Modified`, Range }
+import org.http4s.headers.{ `Accept-Encoding`, `Accept-Ranges`, `Content-Encoding`, `Content-Range`, `Content-Type`, `If-Match`, `If-None-Match`, `If-Unmodified-Since`, `Last-Modified`, ETag, Range }
 import org.http4s.headers.Range.SubRange
 import org.typelevel.ci._
 import org.scalatest.{ Inside, Inspectors }
@@ -328,9 +328,9 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
           lastModified = header[`Last-Modified`].map(_.date)
           lastModified.get.epochSecond should be <= System.currentTimeMillis() / 1000
         }
-        Get() ~> addHeader(`If-Modified-Since`(lastModified.get)) ~> getFromFile(file) ~> check {
-          status shouldEqual Status.NotModified
-        }
+        // If-Modified-Since would race the clock (the clamped date moves every second); the ETag is stable
+        Get() ~> addHeader(`If-None-Match`(EntityTag(s"${file.lastModified.toHexString}-3"))) ~> getFromFile(file) ~>
+        check { status shouldEqual Status.NotModified }
       } finally {
         file.delete
         ()
@@ -572,6 +572,13 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
       Get() ~> getFromResource("sample.unknownext") ~> check {
         mediaType shouldEqual MediaType.application.`octet-stream`
         responseAs[String] shouldEqual "XyZ"
+      }
+    }
+    "serve the whole resource when If-Range does not match, even for an otherwise unsatisfiable range" in {
+      Get()                                      ~> addHeader(Range(100, 200)) ~> addHeader(Header.Raw(ci"If-Range", "\"stale\"")) ~>
+      Route.seal(getFromResource("sample.html")) ~> check {
+        status shouldEqual Status.Ok
+        header("Content-Range") shouldEqual None
       }
     }
     "carry an ETag and serve ranges, like files" in {

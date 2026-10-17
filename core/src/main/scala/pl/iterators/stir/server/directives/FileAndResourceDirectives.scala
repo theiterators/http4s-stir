@@ -153,17 +153,22 @@ trait FileAndResourceDirectives {
           case Some(probe) =>
             probe.body.take(1).compile.drain *> {
               val length = probe.contentLength
-              val lastModified = probe.headers.get[`Last-Modified`].map(_.date)
-              val tag = length.map(l => entityTag(l, lastModified.fold(0L)(_.epochSecond * 1000)))
+              val lastModifiedMillis = probe.headers.get[`Last-Modified`].map(_.date.epochSecond * 1000)
+              val tag = length.map(l => entityTag(l, lastModifiedMillis.getOrElse(0L)))
               val content =
                 open.map(found => contentType.fold(found)(found.withContentType).removeHeader[`Last-Modified`])
+              // the pre-check reads the request `conditional` hands down: an If-Range mismatch has removed Range
               val ranged: Route = length.filter(_ > 0) match {
-                case Some(l) =>
-                  unservableRanges(ctx.request, l).fold(withRangeSupport(serve(resourceName, gzipped, content)))(
-                    reject(_))
+                case Some(l) => extractRequest { request =>
+                    unservableRanges(request, l).fold(withRangeSupport(serve(resourceName, gzipped, content)))(
+                      reject(_))
+                  }
                 case None => serve(resourceName, gzipped, content)
               }
-              conditional(tag, lastModified)(ranged)(ctx)
+              // the clamped Last-Modified, as for files (Pekko's conditionalFor)
+              val clamped = lastModifiedMillis.map(millis =>
+                HttpDate.unsafeFromEpochSecond(math.min(millis, System.currentTimeMillis()) / 1000))
+              conditional(tag, clamped)(ranged)(ctx)
             }
         }
       }
