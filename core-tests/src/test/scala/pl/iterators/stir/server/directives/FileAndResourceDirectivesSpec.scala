@@ -661,6 +661,23 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
         ()
       }
     }
+    "reject a directory on a class-path folder whose path has a space or a non-ASCII character" in {
+      // http4s checks the percent-encoded `url.getFile` and misses the directory, which the JDK then lists
+      val root = NioFiles.createTempDirectory("stir class path späces")
+      val assets = NioFiles.createDirectory(root.resolve("assets"))
+      NioFiles.write(assets.resolve("app.js"), "js".getBytes("UTF-8"))
+      NioFiles.write(assets.resolve("secret-names.txt"), "secret".getBytes("UTF-8"))
+      val loader = new URLClassLoader(Array(root.toUri.toURL), null)
+      try {
+        Get()          ~> getFromResource("assets", loader)          ~> check { handled shouldEqual false }
+        Get()          ~> getFromResource("assets/", loader)         ~> check { handled shouldEqual false }
+        Get("/assets") ~> getFromResourceDirectory("", loader)       ~> check { handled shouldEqual false }
+        Get("/app.js") ~> getFromResourceDirectory("assets", loader) ~> check { responseAs[String] shouldEqual "js" }
+      } finally {
+        loader.close()
+        List(assets.resolve("app.js"), assets.resolve("secret-names.txt"), assets, root).foreach(NioFiles.delete)
+      }
+    }
     "serve a file of one jar although another jar has a directory of the same name" in {
       val dir = NioFiles.createTempDirectory("stirJars")
       val withFile = dir.resolve("a.jar")
