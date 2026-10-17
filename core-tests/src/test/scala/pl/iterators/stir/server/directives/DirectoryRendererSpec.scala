@@ -60,27 +60,30 @@ class DirectoryRendererSpec extends AnyWordSpec with Matchers {
         DirectoryListing("/x&y/", isRoot = false, List(Entry("""a&b<c>"d'.txt""", isDirectory = false, 3, 0L))),
         renderVanityFooter = false)
       html should include("<title>Index of /x&amp;y/</title>")
-      html should include("""<a href="/x&amp;y/a&amp;b&lt;c&gt;&quot;d&#39;.txt">a&amp;b&lt;c&gt;&quot;d&#39;.txt</a>""")
-      html should not include "<c>"
+      html should
+      include("""<a href="/x&amp;y/a&amp;b&lt;c&gt;&quot;d&#39;.txt">a&amp;b&lt;c&gt;&quot;d&#39;.txt</a>""")
+      (html should not).include("<c>")
     }
     "keep the first of several entries with the same name" in {
       val html = DirectoryRenderer.renderHtml(
-        DirectoryListing("/", isRoot = true, List(
-          Entry("same.txt", isDirectory = false, 3, 0L), Entry("same.txt", isDirectory = false, 1000, 0L))),
+        DirectoryListing("/", isRoot = true,
+          List(
+            Entry("same.txt", isDirectory = false, 3, 0L), Entry("same.txt", isDirectory = false, 1000, 0L))),
         renderVanityFooter = false)
       html.split("same.txt").length - 1 shouldEqual 2 // once in the href, once as the text
       html should include("3  B")
-      html should not include "1.0 kB"
+      (html should not).include("1.0 kB")
     }
     "list directories before files, each group sorted by name, and pad the names to one column" in {
       val html = DirectoryRenderer.renderHtml(
-        DirectoryListing("/", isRoot = true, List(
-          Entry("zeta.txt", isDirectory = false, 0, 0L), Entry("alpha", isDirectory = true, 0, 0L),
-          Entry("beta.txt", isDirectory = false, 0, 0L), Entry("omega", isDirectory = true, 0, 0L))),
+        DirectoryListing("/", isRoot = true,
+          List(
+            Entry("zeta.txt", isDirectory = false, 0, 0L), Entry("alpha", isDirectory = true, 0, 0L),
+            Entry("beta.txt", isDirectory = false, 0, 0L), Entry("omega", isDirectory = true, 0, 0L))),
         renderVanityFooter = false)
       val lines = html.linesIterator.filter(_.startsWith("<a href")).toList
       lines.map(_.takeWhile(_ != '>').drop("<a href=\"".length).init) shouldEqual
-        List("/alpha/", "/omega/", "/beta.txt", "/zeta.txt")
+      List("/alpha/", "/omega/", "/beta.txt", "/zeta.txt")
       // the dates line up in the rendered text, where the link markup is invisible
       lines.map(_.replaceAll("<[^>]*>", "").indexOf("1970-")).distinct shouldEqual List(16)
     }
