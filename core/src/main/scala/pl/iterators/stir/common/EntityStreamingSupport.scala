@@ -155,7 +155,10 @@ object EntityStreamingSupport {
                 current = Vector.empty
               } else {
                 current = current :+ byte
-                if (current.size > maxLineLength) error = Some(tooLong(maxLineLength))
+                // a trailing carriage return is not part of the line, so it may exceed the limit by one
+                val overLimit = current.size > maxLineLength &&
+                  !(byte == CarriageReturn && current.size == maxLineLength + 1)
+                if (overLimit) error = Some(tooLong(maxLineLength))
               }
               index += 1
             }

@@ -25,6 +25,8 @@ Both overloads accept a second `Content-Type` argument that replaces the content
 The content type is otherwise chosen by an implicit `ContentTypeResolver` (a `String => Option[Content-Type]` over the file name); the default, `ContentTypeResolver.Default`, returns `None` and leaves the choice to http4s' extension registry. `getFromResource`, `getFromDirectory`, `getFromResourceDirectory` and the browseable directory directives use the same resolver.
 
 ```scala
+import pl.iterators.stir.server.directives.ContentTypeResolver
+
 implicit val resolver: ContentTypeResolver =
   name => if (name.endsWith(".map")) Some(`Content-Type`(MediaType.application.json)) else None
 ```
@@ -121,13 +123,15 @@ val route: Route = (post & path("upload")) {
 
 ### fileUploadSpooled
 
-Like `fileUpload`, but decodes the body with http4s' mixed multipart decoder, which spools parts above 50 MiB to a temporary file, and keeps that decoder open while the inner route runs. Consume the part's stream inside the inner route (write it to disk, fold it, forward it and await the result); a response whose body still reads from the stream would find the spooled file gone.
+Like `fileUpload`, but decodes the body with http4s' mixed multipart decoder, which spools parts above 50 MiB (`fileUploadSpooled(field, maxSizeBeforeWrite)` changes the threshold) to a temporary file, and keeps that decoder and its files alive until the inner route has completed and the response body has been consumed. The part's stream can be read inside the route or streamed back as the response.
 
 ```scala
 val route: Route = (post & path("upload")) {
   fileUploadSpooled("document") { case (metadata, byteStream) =>
-    onSuccess(byteStream.through(fs2.io.file.Files[IO].writeAll(fs2.io.file.Path(s"/tmp/${metadata.fileName}"))).compile.drain) {
-      complete(s"Stored ${metadata.fileName}")
+    // never build the destination from the client-supplied file name
+    val destination = fs2.io.file.Path(java.io.File.createTempFile("upload-", ".bin").getAbsolutePath)
+    onSuccess(byteStream.through(fs2.io.file.Files[IO].writeAll(destination)).compile.drain) {
+      complete(s"Stored ${metadata.fileName} as $destination")
     }
   }
 }
