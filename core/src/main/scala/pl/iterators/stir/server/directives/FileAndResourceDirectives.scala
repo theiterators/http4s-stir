@@ -227,13 +227,14 @@ object FileAndResourceDirectives extends FileAndResourceDirectives {
     }
 
   /**
-   * A `.gz` or `.svgz` file is gzipped content of the resolved type (`app.js.gz` is JavaScript), unless the resolver
-   * typed it as an archive (`application/gzip`), in which case the bytes are served as they are.
+   * Whether a file is gzipped content of its resolved type, as Pekko's `Gzipped` media types: a `.svgz`, or a
+   * `name.ext.gz` with an inner extension (`app.js.gz` is JavaScript). A bare `data.gz` or a file typed as an archive
+   * (`application/gzip`, `x-gzip`) is served as it is, without `Content-Encoding`.
    */
   private[stir] def isPrecompressed(name: String, contentType: Option[`Content-Type`]): Boolean = {
     val lower = name.toRootLowerCase
-    (lower.endsWith(".gz") || lower.endsWith(".svgz")) &&
-    contentType.exists(ct => ct.mediaType.subType != "gzip" && ct.mediaType.subType != "x-gzip")
+    val gzippedName = lower.endsWith(".svgz") || (lower.endsWith(".gz") && lower.dropRight(3).contains('.'))
+    gzippedName && contentType.exists(ct => ct.mediaType.subType != "gzip" && ct.mediaType.subType != "x-gzip")
   }
 
   /**

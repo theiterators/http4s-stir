@@ -166,6 +166,59 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
       }
     }
 
+    "mark a .svgz file gzip-encoded without withPrecompressedMediaTypeSupport, like Pekko" in {
+      val file = File.createTempFile("pekkoHttpTest", ".svgz")
+      try {
+        writeAllText("123", file)
+        Get() ~> getFromFile(file) ~> check {
+          mediaType shouldEqual MediaType.image.`svg+xml`
+          header[`Content-Encoding`] shouldEqual Some(`Content-Encoding`(ContentCoding.gzip))
+        }
+      } finally {
+        file.delete
+        ()
+      }
+    }
+    "serve a .gz file without an inner extension as an unmarked octet-stream, like Pekko" in {
+      val file = File.createTempFile("pekkoHttpTest", ".gz")
+      try {
+        writeAllText("123", file)
+        Get() ~> getFromFile(file) ~> check {
+          mediaType shouldEqual MediaType.application.`octet-stream`
+          header[`Content-Encoding`] shouldEqual None
+        }
+      } finally {
+        file.delete
+        ()
+      }
+    }
+    "serve archive.tar.gz as a gzip-encoded tar" in {
+      val file = File.createTempFile("pekkoHttpTest", ".tar.gz")
+      try {
+        writeAllText("123", file)
+        Get() ~> getFromFile(file) ~> check {
+          mediaType shouldEqual MediaType.application.`x-tar`
+          header[`Content-Encoding`] shouldEqual Some(`Content-Encoding`(ContentCoding.gzip))
+        }
+      } finally {
+        file.delete
+        ()
+      }
+    }
+    "never mark a file served explicitly as application/gzip, even under withPrecompressedMediaTypeSupport" in {
+      val file = File.createTempFile("pekkoHttpTest", ".js.gz")
+      try {
+        writeAllText("123", file)
+        val archive = `Content-Type`(MediaType.application.gzip)
+        Get() ~> withPrecompressedMediaTypeSupport(getFromFile(file, archive)) ~> check {
+          mediaType shouldEqual MediaType.application.gzip
+          header[`Content-Encoding`] shouldEqual None
+        }
+      } finally {
+        file.delete
+        ()
+      }
+    }
     "support files with registered MediaType and .gz suffix" in {
       val file = File.createTempFile("pekkoHttpTest", ".js.gz")
       try {
@@ -195,6 +248,8 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
       ContentTypeResolver.Default("app.js.gz") shouldEqual
       Some(`Content-Type`(MediaType.application.javascript, Charset.`UTF-8`))
       ContentTypeResolver.Default("data.gz") shouldEqual Some(`Content-Type`(MediaType.application.`octet-stream`))
+      FileAndResourceDirectives.isPrecompressed("data.gz", ContentTypeResolver.Default("data.gz")) shouldEqual false
+      FileAndResourceDirectives.isPrecompressed("app.js.gz", ContentTypeResolver.Default("app.js.gz")) shouldEqual true
     }
     "use the given charset for text files with withDefaultCharset" in {
       ContentTypeResolver.withDefaultCharset(Charset.`ISO-8859-1`)("a.txt") shouldEqual

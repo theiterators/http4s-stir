@@ -107,15 +107,18 @@ trait CodingDirectives {
 
   /**
    * Inspects the response and adds a `Content-Encoding: gzip` header if it was served by `getFromFile`,
-   * `getFromDirectory`, `getFromResource` or `getFromResourceDirectory` from a `.svgz` or `.gz` file and no
-   * `Content-Encoding` is present yet. Those directives already do this when their [[ContentTypeResolver]] typed the
-   * file, so this is only needed around a file served with an explicit content type.
+   * `getFromDirectory`, `getFromResource` or `getFromResourceDirectory` from a `.svgz` or `name.ext.gz` file whose
+   * content type is not an archive (`application/gzip`) and no `Content-Encoding` is present yet. Those directives
+   * already do this when their [[ContentTypeResolver]] typed the file, so this is only needed around a file served
+   * with an explicit content type (for example `logo.svgz` as `image/svg+xml`).
    *
    * @group coding
    */
   def withPrecompressedMediaTypeSupport: Directive0 =
     mapResponse { response =>
-      if (isPrecompressed(response) && response.headers.get[`Content-Encoding`].isEmpty)
+      val servedGzipped = response.attributes.lookup(FileAndResourceDirectives.ServedNameKey)
+        .exists(name => FileAndResourceDirectives.isPrecompressed(name, response.contentType))
+      if (servedGzipped && response.headers.get[`Content-Encoding`].isEmpty)
         response.putHeaders(`Content-Encoding`(ContentCoding.gzip))
       else response
     }
