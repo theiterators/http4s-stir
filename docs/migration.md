@@ -82,8 +82,6 @@ instead. Other differences that remain:
   than an empty body; match on the option and complete explicitly.
 - `extractUri` gives the request URI as received (relative under HTTP/1); Pekko gives the effective, absolute URI.
 - An empty file is served with the `Content-Type` of its extension; Pekko sends an empty entity without one.
-- Over Ember's HTTP/2 the host directives see no host (`extractHost` gives `""`, `host(...)` rejects): Ember 0.23.36
-  drops the `:authority` pseudo-header, and HTTP/2 brings no `Host` header.
 - Over Ember's HTTP/2 a request carrying its host only in `:authority` (prior knowledge, HTTP/2 over TLS) has no host
   for the host directives (`extractHost` gives `""`, `host(...)` rejects): Ember 0.23.36 drops `:authority`.
 - A request whose URI authority and `Host` header disagree is answered 400 by Pekko; stir names no host for it

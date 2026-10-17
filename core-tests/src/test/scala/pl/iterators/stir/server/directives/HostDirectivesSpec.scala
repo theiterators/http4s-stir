@@ -71,6 +71,12 @@ class HostDirectivesSpec extends AnyFreeSpec with GenericRoutingSpec {
         responseAs[String] shouldEqual "example.com"
       }
     }
+    "drop a scheme's default port before comparing, wss and a missing scheme included" in {
+      Get("/x").withUri(Uri.unsafeFromString("wss://example.com:443/x")) ~> addHeader(Host("example.com")) ~>
+      extractHost(echoComplete)                                          ~> check { responseAs[String] shouldEqual "example.com" }
+      Get("/x").withUri(Uri.unsafeFromString("//example.com:80/x"))      ~> addHeader(Host("example.com")) ~>
+      extractHost(echoComplete)                                          ~> check { responseAs[String] shouldEqual "example.com" }
+    }
     "lowercase a host name, as Pekko's URI parser does" in {
       Get("http://Example.COM/x") ~> host("example.com")(completeOk) ~> check { status shouldEqual Status.Ok }
       Get("/x")                   ~> addHeader(Host("Example.COM"))  ~> extractHost(echoComplete) ~> check {
