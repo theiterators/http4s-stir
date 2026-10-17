@@ -119,8 +119,8 @@ trait HeaderDirectives {
   /**
    * Extract the header value of the optional HTTP request header with the given type.
    *
-   * Custom headers will only be matched by this directive if an http4s `Header[T, _]` instance is in scope; the
-   * rejection names the header as that instance does (`X-Custom-Header`), as Pekko's names a modeled custom header.
+   * Custom headers will only be matched by this directive if an http4s `Header.Select[T]` is in scope (any
+   * `Header[T, _]` instance, such as one made with `Header.create`, provides it).
    *
    * @group header
    */
