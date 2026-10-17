@@ -139,6 +139,13 @@ instead. Other differences that remain:
   `IllegalStateException` ("The request entity was read partway before ...") instead of waiting on the connection
   until the idle timeout, as Pekko fails the second materialization of a streamed entity. A body read to the end is
   readable again as before; `toHttpRoutes` hands the next routes the request as received and is not covered.
+- Under `toHttpApp` and the testkit a request body that cannot be handed out again fails a later read at once with an
+  `IllegalStateException` ("The request entity was read before ...") instead of waiting on the connection until the
+  idle timeout, as Pekko fails the second materialization of a streamed entity: a chunked or length-less body can be
+  read once, and a body of known length cannot be read again after a read that stopped partway (it failed
+  mid-stream, or the reader stopped before asking for the end). A body of known length read to its end is readable
+  again as before. This applies to in-memory test bodies too (a body built with `withBodyStream` has no length, so it
+  can be read once); `toHttpRoutes` hands the next routes the request as received and is not covered.
 
 ## Testkit differences
 

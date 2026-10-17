@@ -7,6 +7,7 @@ import org.http4s.{ MediaType, Request, Status, UrlForm }
 import org.http4s.headers.`Content-Type`
 import org.http4s.multipart.{ Multiparts, Part }
 import pl.iterators.stir.server.{
+  Directive0,
   ExceptionHandler,
   IllegalRequestException,
   MalformedRequestContentRejection,
@@ -23,22 +24,58 @@ class BodyRereadGuardSpec extends RoutingSpec {
   val readFully: Route = extractRequest { request => onSuccess(request.body.compile.drain)(reject) }
   val echo: Route = entity(as[String])(s => complete("read:" + s))
 
+  // the failing read surfaces as an exception, or as a rejection where entity rejects every failure (#74)
+  val surfaced: Directive0 =
+    handleExceptions(ExceptionHandler { case e: IllegalStateException => complete(e.getMessage) }) &
+    handleRejections(RejectionHandler.newBuilder().handle {
+      case MalformedRequestContentRejection(text, _) => complete(text)
+    }.result())
+
+  def multipart: Request[IO] = {
+    val parts = Vector(Part.fileData[IO]("file", "big.txt",
+      Stream.emits(("y" * (1024 * 1024)).getBytes("UTF-8")).covary[IO], `Content-Type`(MediaType.text.plain)))
+    val body = Multiparts.forSync[IO].flatMap(_.multipart(parts)).unsafeRunSync()
+    Post("/", body).transformHeaders(_ ++ body.headers)
+  }
+
   "a request body read partly" should {
     "fail a later read at once instead of handing it a body that cannot be read again" in {
-      // the failing read surfaces as an exception, or as a rejection where entity rejects every failure (#74)
-      val message = handleExceptions(ExceptionHandler { case e: IllegalStateException => complete(e.getMessage) }) &
-        handleRejections(RejectionHandler.newBuilder().handle {
-          case MalformedRequestContentRejection(text, _) => complete(text)
-        }.result())
-      Post("/", "abc") ~> message(readPartly ~ echo) ~> check {
+      Post("/", "abc") ~> surfaced(readPartly ~ echo) ~> check {
         responseAs[String] shouldEqual MiscDirectives.RereadMessage
       }
     }
   }
 
-  "a request body read fully" should {
+  "a request body of known length read fully" should {
     "stay readable in memory, as before" in {
       Post("/", "abc") ~> (readFully ~ echo) ~> check { responseAs[String] shouldEqual "read:abc" }
+    }
+    "count a reader stopping at its declared length without asking for the end as stopping partway" in {
+      val toLength: Route = extractRequest { request => onSuccess(request.body.take(3).compile.drain)(reject) }
+      Post("/", "abc") ~> surfaced(toLength ~ echo) ~> check {
+        responseAs[String] shouldEqual MiscDirectives.RereadMessage
+      }
+    }
+  }
+
+  "a chunked or length-less request body" should {
+    def streamed = Post().withBodyStream(Stream.emits("abc".getBytes("UTF-8")).covary[IO])
+    "be readable once" in {
+      streamed ~> echo ~> check { responseAs[String] shouldEqual "read:abc" }
+    }
+    "fail a second read even after the first read it to the end" in {
+      streamed ~> surfaced(readFully ~ echo) ~> check { responseAs[String] shouldEqual MiscDirectives.RereadMessage }
+    }
+    "be answered over a real server when an alternative reads it again after entity" in {
+      val chunked = Stream.emits(("w" * (300 * 1024)).getBytes("UTF-8")).covary[IO].chunkN(8192).flatMap(Stream.chunk)
+      Post().withBodyStream(chunked) ~!> {
+        entity(as[String])(_ => reject) ~ echo
+      } ~> check { status.isSuccess shouldBe false }
+    }
+    "be answered over a real server when an alternative reads it again after fileUpload" in {
+      multipart ~!> {
+        fileUpload("file") { case (_, bytes) => onSuccess(bytes.compile.drain)(reject) } ~ echo
+      } ~> check { status.isSuccess shouldBe false }
     }
   }
 
@@ -61,12 +98,6 @@ class BodyRereadGuardSpec extends RoutingSpec {
     val failingAfter64KiB = mapRequest(request =>
       request.withBodyStream(request.body.take(64 * 1024L) ++
         Stream.raiseError[IO](new IllegalStateException("broken upstream"))))
-    def multipart: Request[IO] = {
-      val parts = Vector(Part.fileData[IO]("file", "big.txt",
-        Stream.emits(("y" * (1024 * 1024)).getBytes("UTF-8")).covary[IO], `Content-Type`(MediaType.text.plain)))
-      val body = Multiparts.forSync[IO].flatMap(_.multipart(parts)).unsafeRunSync()
-      Post("/", body).transformHeaders(_ ++ body.headers)
-    }
     "be answered after formFieldSeq" in {
       Post("/", UrlForm("field" -> ("z" * (1024 * 1024)))) ~!> {
         failingAfter64KiB(formFieldSeq(fields => complete(fields.size.toString))) ~ echo
