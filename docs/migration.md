@@ -49,8 +49,10 @@ instead. Other differences that remain:
 - An `Accept-Language` (or other) header that http4s cannot parse is ignored, where Pekko parses leniently: Pekko's
   `q=.5` is not a valid RFC 7231 q-value, so `selectPreferredLanguage` then picks the first language.
 - `parameter("x".repeated)` returns the values in the order of the query string; Pekko returns them reversed.
-- Over Ember's HTTP/2 the host directives see no host (`extractHost` gives `""`, `host(...)` rejects): Ember 0.23.36
-  drops the `:authority` pseudo-header, and HTTP/2 brings no `Host` header.
+- Over Ember's HTTP/2 a request carrying its host only in `:authority` (prior knowledge, HTTP/2 over TLS) has no host
+  for the host directives (`extractHost` gives `""`, `host(...)` rejects): Ember 0.23.36 drops `:authority`.
+- A request whose URI authority and `Host` header disagree is answered 400 by Pekko; stir names no host for it
+  (`extractHost` gives `""`, so `host(...)` rejects).
 - Content negotiation differs from Pekko for wildcard ranges with parameters: stir ignores `charset` on every range
   (Pekko only on `type/subtype` ranges, so its `text/*;charset=...` never matches) and does not count a wildcard
   range's parameters towards its specificity.
@@ -134,8 +136,9 @@ instead. Other differences that remain:
   accepts, as Pekko sends them through an opaque fallback, and exception and rejection handlers are exempt. To keep the old behaviour for a
   route, wrap it in `mapRequestContext(_.withAcceptAll)`; see "Content negotiation" in the marshalling directives.
 - `extractHost` and `host` read the authority of the request URI first, then the `Host` header, as Pekko reads the
-  effective URI: an absolute-form request is matched by its URI's host (it used to need a `Host` header, which
-  absolute-form requests may differ from), and an IPv6 host comes without brackets (`::1`, was `[::1]`).
+  effective URI: an absolute-form request is matched by its URI's host (when its `Host` header disagrees, no host
+  is named), a host name is lowercased (`Example.COM` matches `host("example.com")`), and an IPv6 host comes
+  without brackets (`::1`, was `[::1]`).
 
 ## Testkit differences
 
