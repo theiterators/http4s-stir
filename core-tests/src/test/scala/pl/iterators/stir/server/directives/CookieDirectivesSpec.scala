@@ -1,7 +1,8 @@
 package pl.iterators.stir.server.directives
 
+import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import org.http4s.{ HttpDate, RequestCookie, ResponseCookie, Status }
+import org.http4s.{ HttpDate, RequestCookie, Response, ResponseCookie, Status }
 import org.http4s.headers.{ `Set-Cookie`, Cookie }
 import pl.iterators.stir.server._
 
@@ -86,6 +87,30 @@ class CookieDirectivesSpec extends RoutingSpec {
         status shouldEqual Status.Ok
         headers.get[`Set-Cookie`].get.toList shouldEqual List(
           `Set-Cookie`(ResponseCookie("myCookie", "test.com")), `Set-Cookie`(ResponseCookie("myCookie2", "foobar.com")))
+      }
+    }
+    "set the cookies of nested setCookie directives" in {
+      Get() ~> {
+        setCookie(ResponseCookie("a", "1")) { setCookie(ResponseCookie("b", "2")) { completeOk } }
+      } ~> check {
+        headers.get[`Set-Cookie`].get.toList.map(_.cookie.name) shouldEqual List("a", "b")
+      }
+    }
+    "keep a cookie the inner route already set" in {
+      Get() ~> {
+        setCookie(ResponseCookie("a", "1")) {
+          complete(Response[IO](Status.Ok).putHeaders(`Set-Cookie`(ResponseCookie("b", "2"))))
+        }
+      } ~> check {
+        headers.get[`Set-Cookie`].get.toList.map(_.cookie.name) shouldEqual List("a", "b")
+      }
+    }
+    "delete the cookies of nested deleteCookie directives" in {
+      Get() ~> {
+        deleteCookie("a") { deleteCookie("b") { completeOk } }
+      } ~> check {
+        headers.get[`Set-Cookie`].get.toList.map(c => c.cookie.name -> c.cookie.content) shouldEqual
+        List("a" -> "deleted", "b" -> "deleted")
       }
     }
   }
