@@ -1,10 +1,12 @@
+import cats.data.NonEmptyList
 import cats.effect.{ IO, SyncIO }
 import cats.effect.unsafe.IORuntime
 import fs2.Stream
 import io.circe.Codec
 import io.circe.generic.semiauto._
 import io.circe.parser.decode
-import org.http4s.{ ContentCoding, EntityEncoder, EntityTag, HttpDate, MediaType, Status, Uri }
+import org.http4s.{ ContentCoding, EntityEncoder, EntityTag, Header, HttpDate, MediaType, Protocol, Status, Uri }
+import org.http4s.circe.jsonEncoderOf
 import org.http4s.headers._
 import org.http4s.headers.Range.SubRange
 import org.scalatest.matchers.should.Matchers
@@ -70,7 +72,7 @@ class DirectiveExamplesSpec extends AnyWordSpec with Matchers with ScalatestRout
     implicit val measurementUnmarshaller: Unmarshaller[String, Measurement] =
       Unmarshaller.strict(json => decode[Measurement](json).fold(throw _, identity))
     implicit val jsonStreaming: EntityStreamingSupport = EntityStreamingSupport.json()
-    implicit val measurementEncoder: EntityEncoder[IO, Measurement] = org.http4s.circe.jsonEncoderOf[IO, Measurement]
+    implicit val measurementEncoder: EntityEncoder[IO, Measurement] = jsonEncoderOf[IO, Measurement]
 
     val sum: Route = post {
       entity(asSourceOf[Measurement]) { measurements =>
@@ -105,7 +107,7 @@ class DirectiveExamplesSpec extends AnyWordSpec with Matchers with ScalatestRout
     val allowed = Origin.Host(Uri.Scheme.https, Uri.RegName("example.com"), None)
     val route: Route = checkSameOrigin(allowed) { complete("same origin") }
     "pass the allowed origin" in {
-      Get() ~> addHeader(Origin.HostList(cats.data.NonEmptyList.one(allowed)): Origin) ~> route ~> check {
+      Get() ~> addHeader(Origin.HostList(NonEmptyList.one(allowed)): Origin) ~> route ~> check {
         responseAs[String] shouldEqual "same origin"
       }
     }
@@ -131,9 +133,9 @@ class DirectiveExamplesSpec extends AnyWordSpec with Matchers with ScalatestRout
     "recognise the headers the docs tell you to send" in {
       val upgrade = addHeaders(
         Connection(ci"Upgrade"),
-        org.http4s.headers.Upgrade(org.http4s.Protocol(ci"websocket", None)),
-        org.http4s.Header.Raw(ci"Sec-WebSocket-Version", "13"),
-        org.http4s.Header.Raw(ci"Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ=="))
+        Upgrade(Protocol(ci"websocket", None)),
+        Header.Raw(ci"Sec-WebSocket-Version", "13"),
+        Header.Raw(ci"Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ=="))
       Get("/ws") ~> upgrade ~> extractOfferedWsProtocols { offered => complete(offered.size.toString) } ~> check {
         responseAs[String] shouldEqual "0"
       }

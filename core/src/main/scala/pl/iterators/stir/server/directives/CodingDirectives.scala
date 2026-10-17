@@ -3,6 +3,7 @@ package pl.iterators.stir.server.directives
 import cats.effect.IO
 import fs2.Stream
 import fs2.compression.{ Compression, DeflateParams, InflateParams, ZLibParams }
+import fs2.io.compression.fs2ioCompressionForIO
 import org.http4s.{ ContentCoding, EntityBody, MalformedMessageBodyFailure, QValue, Request, Response, TransferCoding }
 import org.http4s.headers.{ `Accept-Encoding`, `Content-Encoding`, `Content-Length`, `Transfer-Encoding` }
 import pl.iterators.stir.server._
@@ -127,7 +128,7 @@ object CodingDirectives extends CodingDirectives {
   private val DefaultEncodeResponseEncoders =
     Seq(ContentCoding.identity, ContentCoding.gzip, ContentCoding.deflate)
 
-  private val compression: Compression[IO] = fs2.io.compression.fs2ioCompressionForIO
+  private val compression: Compression[IO] = fs2ioCompressionForIO
 
   private val GzipParams = DeflateParams(header = ZLibParams.Header.GZIP)
   private val DeflateZlibParams = DeflateParams(header = ZLibParams.Header.ZLIB)

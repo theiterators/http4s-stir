@@ -6,6 +6,7 @@ import org.http4s.{ Response, Status }
 import fs2.{ text, Stream }
 import pl.iterators.stir.server.{ ExceptionHandler, Route, RouteResult }
 
+import scala.collection.mutable.ListBuffer
 import scala.concurrent.duration._
 
 class BasicDirectivesSpec extends RoutingSpec {
@@ -252,7 +253,7 @@ class BasicDirectivesSpec extends RoutingSpec {
       }
     }
     "log the size exception as a message without a stack trace" in {
-      val lines = scala.collection.mutable.ListBuffer.empty[String]
+      val lines = ListBuffer.empty[String]
       val handler = ExceptionHandler.default(Some((_, message) => IO(lines += message).void))
       Post("/", "0123456789") ~> handleExceptions(handler)(toStrictEntity(1.second, maxBytes = 5) { completeOk }) ~>
       check {

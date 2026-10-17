@@ -3,10 +3,14 @@ package pl.iterators.stir.server.directives
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import fs2.Stream
+import fs2.text.utf8
 import fs2.compression.{ Compression, DeflateParams, InflateParams, ZLibParams }
 import org.http4s.{ ContentCoding, QValue, Status }
 import org.http4s.headers.{ `Accept-Encoding`, `Content-Encoding` }
 import pl.iterators.stir.server._
+
+import java.io.File
+import java.nio.file.{ Files => NioFiles }
 
 class CodingDirectivesSpec extends RoutingSpec {
   override implicit def runtime: IORuntime = IORuntime.global
@@ -28,11 +32,11 @@ class CodingDirectivesSpec extends RoutingSpec {
 
   def gunzipped: String =
     responseEntity.through(Compression[IO].gunzip()).flatMap(_.content)
-      .through(fs2.text.utf8.decode).compile.string.unsafeRunSync()
+      .through(utf8.decode).compile.string.unsafeRunSync()
 
   def inflated: String =
     responseEntity.through(Compression[IO].inflate(InflateParams(header = ZLibParams.Header.ZLIB)))
-      .through(fs2.text.utf8.decode).compile.string.unsafeRunSync()
+      .through(utf8.decode).compile.string.unsafeRunSync()
 
   val refuseIdentity = `Accept-Encoding`(ContentCoding.identity.withQValue(QValue.Zero))
 
@@ -72,9 +76,9 @@ class CodingDirectivesSpec extends RoutingSpec {
       }
     }
     "not encode a precompressed svgz file whatever the nesting" in {
-      val file = java.io.File.createTempFile("stirHttpTest", ".svgz")
+      val file = File.createTempFile("stirHttpTest", ".svgz")
       try {
-        java.nio.file.Files.write(file.toPath, "123".getBytes("UTF-8"))
+        NioFiles.write(file.toPath, "123".getBytes("UTF-8"))
         Get() ~> addHeader(`Accept-Encoding`(ContentCoding.gzip)) ~> {
           withPrecompressedMediaTypeSupport { encodeResponse { getFromFile(file) } }
         } ~> check {

@@ -126,11 +126,14 @@ val route: Route = (post & path("upload")) {
 Like `fileUpload`, but decodes the body with http4s' mixed multipart decoder, which spools parts above 50 MiB (`fileUploadSpooled(field, maxSizeBeforeWrite)` changes the threshold) to a temporary file, and keeps that decoder and its files alive until the inner route has completed and the response body has been consumed. The part's stream can be read inside the route or streamed back as the response.
 
 ```scala
+import fs2.io.file.{ Files, Path }
+import java.io.File
+
 val route: Route = (post & path("upload")) {
   fileUploadSpooled("document") { case (metadata, byteStream) =>
     // never build the destination from the client-supplied file name
-    val destination = fs2.io.file.Path(java.io.File.createTempFile("upload-", ".bin").getAbsolutePath)
-    onSuccess(byteStream.through(fs2.io.file.Files[IO].writeAll(destination)).compile.drain) {
+    val destination = Path(File.createTempFile("upload-", ".bin").getAbsolutePath)
+    onSuccess(byteStream.through(Files[IO].writeAll(destination)).compile.drain) {
       complete(s"Stored ${metadata.fileName} as $destination")
     }
   }

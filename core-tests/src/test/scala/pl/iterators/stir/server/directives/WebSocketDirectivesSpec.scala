@@ -2,11 +2,12 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import fs2.Pipe
+import fs2.{ Pipe, Stream }
 import org.http4s.{ Header, Protocol, Status }
 import org.http4s.headers.{ Connection, Upgrade }
 import org.http4s.server.websocket.WebSocketBuilder2
 import org.http4s.websocket.WebSocketFrame
+import org.scalatest.exceptions.TestFailedException
 import org.typelevel.ci._
 import pl.iterators.stir.server._
 
@@ -47,7 +48,7 @@ class WebSocketDirectivesSpec extends RoutingSpec {
       }
     }
     "reject a plain request with the send/receive overload too" in {
-      Get("/ws") ~> handleWebSocketMessages(ws, fs2.Stream.empty, _.drain) ~> check {
+      Get("/ws") ~> handleWebSocketMessages(ws, Stream.empty, _.drain) ~> check {
         rejection shouldEqual ExpectedWebSocketRequestRejection
       }
     }
@@ -128,7 +129,7 @@ class WebSocketDirectivesSpec extends RoutingSpec {
     }
     "fail expectWebSocketUpgradeWithProtocol when no protocol was selected" in {
       Get("/ws") ~> upgradeHeaders ~> handleWebSocketMessages(ws, echo) ~> check {
-        an[org.scalatest.exceptions.TestFailedException] should be thrownBy
+        an[TestFailedException] should be thrownBy
         expectWebSocketUpgradeWithProtocol { _ => () }
       }
     }
