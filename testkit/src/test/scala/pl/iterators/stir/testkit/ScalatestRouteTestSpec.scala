@@ -14,6 +14,8 @@ import fs2._
 import org.http4s.Method.{ GET, PUT }
 import org.http4s.headers.`X-Forwarded-Proto`
 
+import scala.concurrent.duration._
+
 class ScalatestRouteTestSpec extends AnyFreeSpec with Matchers with ScalatestRouteTest {
   override implicit val runtime: IORuntime = IORuntime.global
 
@@ -46,6 +48,56 @@ class ScalatestRouteTestSpec extends AnyFreeSpec with Matchers with ScalatestRou
         trailer shouldEqual Headers.empty
         responseAs[String] shouldEqual "abc"
       }
+    }
+
+    "failing a test whose route never completes once the route test timeout elapses" in {
+      implicit val timeout: RouteTestTimeout = RouteTestTimeout(300.millis)
+      val never: Route = _ => IO.never
+      val failure = the[TestFailedException] thrownBy {
+        Get() ~> never ~> check { fail("the check block must not run") }
+      }
+      failure.getMessage should include("Request was neither completed nor rejected within 300 milliseconds")
+    }
+
+    "failing a test whose response body never ends once the route test timeout elapses" in {
+      implicit val timeout: RouteTestTimeout = RouteTestTimeout(300.millis)
+      val endless = Stream.repeatEval(IO.sleep(10.millis).as(1.toByte))
+      val failure = the[TestFailedException] thrownBy {
+        Get() ~> complete(Response[IO]().withBodyStream(endless)) ~> check { responseAs[String]; () }
+      }
+      failure.getMessage should include("within 300 milliseconds")
+    }
+
+    "propagating a failure of the response body instead of turning it into a timeout" in {
+      val failing = Stream.raiseError[IO](new IllegalStateException("body boom"))
+      val failure = the[IllegalStateException] thrownBy {
+        Get() ~> complete(Response[IO]().withBodyStream(failing)) ~> check { responseAs[String]; () }
+      }
+      failure.getMessage shouldEqual "body boom"
+    }
+
+    "failing a test whose route never completes over a real server within the timeout, not Ember's shutdown grace" in {
+      implicit val timeout: RouteTestTimeout = RouteTestTimeout(500.millis)
+      val never: Route = _ => IO.never
+      val started = System.nanoTime()
+      val failure = the[TestFailedException] thrownBy {
+        Get() ~!> never ~> check { fail("the check block must not run") }
+      }
+      failure.getMessage should include("Request was neither completed nor rejected within 500 milliseconds")
+      (System.nanoTime() - started) should be < 10.seconds.toNanos
+    }
+
+    "honouring a longer route test timeout for a slow route, also over a real server" in {
+      implicit val timeout: RouteTestTimeout = RouteTestTimeout(5.seconds)
+      Get()                                                ~> complete(IO.sleep(1200.millis).as("slow")) ~> check { responseAs[String] shouldEqual "slow" }
+      Get() ~!> complete(IO.sleep(1200.millis).as("slow")) ~> check { responseAs[String] shouldEqual "slow" }
+    }
+
+    "failing a slow route under the default one second timeout" in {
+      val failure = the[TestFailedException] thrownBy {
+        Get() ~> complete(IO.sleep(2.seconds).as("slow")) ~> check { fail("the check block must not run") }
+      }
+      failure.getMessage should include("Request was neither completed nor rejected within 1 second")
     }
 
     "the most simple and direct route test" in {

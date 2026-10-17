@@ -12,6 +12,7 @@ import org.typelevel.ci.CIString
 import pl.iterators.stir.server._
 
 import scala.annotation.unused
+import scala.concurrent.duration.{ Duration, FiniteDuration }
 import scala.reflect.ClassTag
 import scala.util.DynamicVariable
 
@@ -41,7 +42,8 @@ trait RouteTest extends RequestBuilding with RouteTestResultComponent
    * The chunks of the response body as the route produced them (one `fs2.Chunk` per emitted chunk). Consumes the
    * raw body: for a one-shot body use either `chunks` / `chunksStream` or `response` / `responseAs`, not both.
    */
-  def chunks: Seq[Chunk[Byte]] = rawResponse.body.chunks.compile.toList.unsafeRunSync()
+  def chunks: Seq[Chunk[Byte]] =
+    result.awaitWithinTimeout(rawResponse.body.chunks.compile.toList, "Response chunks were not read")
 
   /** The response body as a stream of chunks; see `chunks` for the consumption caveat. */
   def chunksStream: Stream[IO, Chunk[Byte]] = rawResponse.body.chunks
@@ -52,7 +54,7 @@ trait RouteTest extends RequestBuilding with RouteTestResultComponent
    */
   def trailer: Headers = {
     val _ = responseEntity
-    rawResponse.trailerHeaders.unsafeRunSync()
+    result.awaitWithinTimeout(rawResponse.trailerHeaders, "Response trailers were not read")
   }
   def entityAs[T](implicit um: EntityDecoder[IO, T], cls: ClassTag[T]): T = {
     def msg(e: Throwable) =
@@ -144,7 +146,8 @@ trait RouteTest extends RequestBuilding with RouteTestResultComponent
       type Out = Request[IO]
       def apply(request: Request[IO], f: Request[IO] => Request[IO]) = f(request)
     }
-    implicit def injectIntoRoute: TildeArrow[RequestContext, IO[RouteResult]] { type Out = RouteTestResult } =
+    implicit def injectIntoRoute(implicit timeout: RouteTestTimeout)
+        : TildeArrow[RequestContext, IO[RouteResult]] { type Out = RouteTestResult } =
       new TildeArrow[RequestContext, IO[RouteResult]] {
         type Out = RouteTestResult
         def apply(request: Request[IO], route: Route): Out = {
@@ -157,7 +160,7 @@ trait RouteTest extends RequestBuilding with RouteTestResultComponent
 //          val routingSettings = RoutingSettings(system)
 //          val routingLog = RoutingLog(system.classicSystem.log)
 
-          val routeTestResult = new RouteTestResult()
+          val routeTestResult = new RouteTestResult(timeout)
           val effectiveRequest = request
           val ctx = RequestContext(effectiveRequest)
 
@@ -166,7 +169,8 @@ trait RouteTest extends RequestBuilding with RouteTestResultComponent
           val semiSealedRoute = // sealed for exceptions but not for rejections
             Directives.handleExceptions(sealedExceptionHandler)(route)
           val deferrableRouteResult = semiSealedRoute(ctx)
-          deferrableRouteResult.map(routeTestResult.handleResult).unsafeRunSync()
+          routeTestResult.awaitWithinTimeout(deferrableRouteResult.map(routeTestResult.handleResult),
+            "Request was neither completed nor rejected")
           routeTestResult
         }
       }
@@ -178,42 +182,49 @@ trait RouteTest extends RequestBuilding with RouteTestResultComponent
   }
 
   object TildeBangArrow {
-    implicit def injectIntoRoute: TildeBangArrow[RequestContext, IO[RouteResult]] { type Out = RouteTestResult } =
+    implicit def injectIntoRoute(implicit timeout: RouteTestTimeout)
+        : TildeBangArrow[RequestContext, IO[RouteResult]] { type Out = RouteTestResult } =
       new TildeBangArrow[RequestContext, IO[RouteResult]] {
         type Out = RouteTestResult
         def apply(request: Request[IO], route: Route): Out = {
-          val routeTestResult = new RouteTestResult()
-          val responseF = RouteTest.runRouteClientServer(request, route).unsafeRunSync()
-          routeTestResult.handleResponse(responseF)
+          val routeTestResult = new RouteTestResult(timeout)
+          // the server and client start outside the bound; the request and the body read are bounded inside
+          val response = routeTestResult.failOnTimeout(RouteTest.runRouteClientServer(request, route, timeout.duration),
+            "Request was neither completed nor rejected")
+          routeTestResult.handleResponse(response)
           routeTestResult
         }
       }
   }
 }
 private[stir] object RouteTest {
-  def runRouteClientServer(request: Request[IO], route: Route): IO[Response[IO]] = {
-    (for {
+  def runRouteClientServer(request: Request[IO], route: Route, timeout: FiniteDuration): IO[Response[IO]] = {
+    val resources = for {
       server <- EmberServerBuilder
         .default[IO]
         .withHost(ipv4"127.0.0.1")
         .withPort(port"0")
         .withHttpApp(route.toHttpApp)
+        .withShutdownTimeout(Duration.Zero) // a hanging route must not hold the test for the graceful-shutdown period
         .build
       client <- EmberClientBuilder
         .default[IO]
         .build
-      updatedRequest = request.withUri(request.uri.copy(scheme = Some(Uri.Scheme.http),
+    } yield (server, client)
+    resources.use { case (server, client) =>
+      val updatedRequest = request.withUri(request.uri.copy(scheme = Some(Uri.Scheme.http),
         authority = Some(Uri.Authority(None, host = Uri.Host.fromIp4sHost(ipv4"127.0.0.1"),
           port = Some(server.address.getPort)))))
-      response <- client.run(updatedRequest)
-    } yield response).use { response =>
       // read the body and the trailers while the client and the server are still alive: a chunked response
-      // cannot be read after the connection is closed
-      response.body.compile.to(Chunk).flatMap { bytes =>
-        response.trailerHeaders.map { trailers =>
-          response.withBodyStream(Stream.chunk(bytes)).withTrailerHeaders(IO.pure(trailers))
+      // cannot be read after the connection is closed; `run(...).use` releases the connection even when the
+      // timeout cancels the read
+      client.run(updatedRequest).use { response =>
+        response.body.compile.to(Chunk).flatMap { bytes =>
+          response.trailerHeaders.map { trailers =>
+            response.withBodyStream(Stream.chunk(bytes)).withTrailerHeaders(IO.pure(trailers))
+          }
         }
-      }
+      }.timeout(timeout)
     }
   }
 }

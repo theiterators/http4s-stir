@@ -71,6 +71,28 @@ Get("/hello") ~!> route ~> check {
 }
 ```
 
+## Timeouts
+
+`~>` and `~!>` wait at most one second for the route to complete or reject, and reading the response body in
+`response`, `responseAs`, `chunks` or `trailer` is bounded the same way (Pekko's `pekko.http.testkit.routes.timeout`).
+A route that hangs fails the test with "Request was neither completed nor rejected within 1 second" instead of
+hanging the suite, and an endless body fails with "Response entity was not read within 1 second" under `~>`. With
+`~!>` the server and client start outside the bound; the request and the body read are inside it as one step (so an
+endless body is reported as the request not completing), and the test server shuts down at once, so a hanging route
+fails within the timeout rather than after Ember's graceful-shutdown period. Declare
+an implicit `RouteTestTimeout` in the suite to change the bound, which tests about time (slow routes, request
+timeouts) must do:
+
+```scala
+import pl.iterators.stir.testkit.RouteTestTimeout
+import scala.concurrent.duration._
+
+implicit val routeTestTimeout: RouteTestTimeout = RouteTestTimeout(5.seconds)
+```
+
+The bound relies on cancellation: work the route runs in an uncancelable region (for example a blocking call inside
+`IO.blocking` that never returns) still has to finish before the failure is reported.
+
 ## The `check` Block
 
 Inside a `check { }` block, the following members are available for assertions:
