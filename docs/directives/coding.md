@@ -75,15 +75,18 @@ absent) matches the given coding.
 
 ## withPrecompressedMediaTypeSupport
 
-Adds `Content-Encoding: gzip` to a response that one of the static file directives served from a `.svgz` file
-(the only precompressed media type Pekko recognises) when no `Content-Encoding` is set yet. http4s media types
-carry no "gzipped" flag, so the directive looks at the served file name instead. `encodeResponse` never compresses
-such a response, so the two directives can be nested in either order.
+Adds `Content-Encoding: gzip` to a response that one of the static file directives served from a `.svgz` or
+`name.ext.gz` file (Pekko's `Gzipped` media types) when the response's content type is not an archive
+(`application/gzip`) and no `Content-Encoding` is set yet. http4s media types carry no "gzipped" flag, so the
+directive looks at the served file name and the final content type instead. The static file directives already add
+the header when their `ContentTypeResolver` typed the file, so the wrapper is only needed around a file served with
+an explicit content type. `encodeResponse` never compresses such a response, so the two directives can be nested
+in either order.
 
 ```scala
-val route: Route = pathPrefix("static") {
+val route: Route = path("logo.svg") {
   withPrecompressedMediaTypeSupport {
-    getFromDirectory("/var/www/static")
+    getFromFile("/var/www/static/logo.svgz", `Content-Type`(MediaType.image.`svg+xml`))
   }
 }
 ```

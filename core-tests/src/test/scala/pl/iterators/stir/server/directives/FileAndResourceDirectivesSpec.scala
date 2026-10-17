@@ -3,7 +3,7 @@ package pl.iterators.stir.server.directives
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import org.http4s.{ Charset, ContentCoding, Header, HttpDate, MediaType, Response, Status, Uri }
-import org.http4s.headers.{ `Content-Encoding`, `Content-Type`, `Last-Modified` }
+import org.http4s.headers.{ `Accept-Encoding`, `Content-Encoding`, `Content-Type`, `Last-Modified` }
 import org.typelevel.ci._
 import org.scalatest.{ Inside, Inspectors }
 import pl.iterators.stir.impl.util._
@@ -63,6 +63,7 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
       try {
         writeAllText("Some content", file)
         Get() ~> getFromFile(file) ~> check {
+          mediaType shouldEqual MediaType.application.`octet-stream`
           responseAs[String] shouldEqual "Some content"
         }
       } finally {
@@ -165,18 +166,108 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
       }
     }
 
+    "mark a .svgz file gzip-encoded without withPrecompressedMediaTypeSupport, like Pekko" in {
+      val file = File.createTempFile("pekkoHttpTest", ".svgz")
+      try {
+        writeAllText("123", file)
+        Get() ~> getFromFile(file) ~> check {
+          mediaType shouldEqual MediaType.image.`svg+xml`
+          header[`Content-Encoding`] shouldEqual Some(`Content-Encoding`(ContentCoding.gzip))
+        }
+      } finally {
+        file.delete
+        ()
+      }
+    }
+    "serve a .gz file without an inner extension as an unmarked octet-stream, like Pekko" in {
+      val file = File.createTempFile("pekkoHttpTest", ".gz")
+      try {
+        writeAllText("123", file)
+        Get() ~> getFromFile(file) ~> check {
+          mediaType shouldEqual MediaType.application.`octet-stream`
+          header[`Content-Encoding`] shouldEqual None
+        }
+      } finally {
+        file.delete
+        ()
+      }
+    }
+    "serve archive.tar.gz as a gzip-encoded tar" in {
+      val file = File.createTempFile("pekkoHttpTest", ".tar.gz")
+      try {
+        writeAllText("123", file)
+        Get() ~> getFromFile(file) ~> check {
+          mediaType shouldEqual MediaType.application.`x-tar`
+          header[`Content-Encoding`] shouldEqual Some(`Content-Encoding`(ContentCoding.gzip))
+        }
+      } finally {
+        file.delete
+        ()
+      }
+    }
+    "never mark a file served explicitly as application/gzip, even under withPrecompressedMediaTypeSupport" in {
+      val file = File.createTempFile("pekkoHttpTest", ".js.gz")
+      try {
+        writeAllText("123", file)
+        val archive = `Content-Type`(MediaType.application.gzip)
+        Get() ~> withPrecompressedMediaTypeSupport(getFromFile(file, archive)) ~> check {
+          mediaType shouldEqual MediaType.application.gzip
+          header[`Content-Encoding`] shouldEqual None
+        }
+      } finally {
+        file.delete
+        ()
+      }
+    }
+    "mark a .gz resource served through getFromResourceDirectory and never re-compress it" in {
+      Get("/app.js.gz") ~> getFromResourceDirectory("precompressed") ~> check {
+        mediaType shouldEqual MediaType.application.javascript
+        header[`Content-Encoding`] shouldEqual Some(`Content-Encoding`(ContentCoding.gzip))
+      }
+      Get("/app.js.gz")                                         ~> addHeader(`Accept-Encoding`(ContentCoding.gzip)) ~>
+      encodeResponse(getFromResourceDirectory("precompressed")) ~> check {
+        header[`Content-Encoding`] shouldEqual Some(`Content-Encoding`(ContentCoding.gzip))
+        responseAs[String] shouldEqual "gzipped bytes"
+      }
+    }
     "support files with registered MediaType and .gz suffix" in {
       val file = File.createTempFile("pekkoHttpTest", ".js.gz")
       try {
         writeAllText("456", file)
         Get() ~> getFromFile(file) ~> check {
-          mediaType shouldEqual MediaType.parse("application/gzip").getOrElse(fail("Media type could not be parsed"))
-//          header[`Content-Encoding`] shouldEqual Some(`Content-Encoding`(HttpEncodings.gzip))
+          mediaType shouldEqual MediaType.application.javascript
+          header[`Content-Encoding`] shouldEqual Some(`Content-Encoding`(ContentCoding.gzip))
           responseAs[String] shouldEqual "456"
         }
       } finally {
         file.delete
         ()
+      }
+    }
+  }
+
+  "ContentTypeResolver.Default and withDefaultCharset" should {
+    "give text files the UTF-8 charset and binary files none" in {
+      ContentTypeResolver.Default("a.txt") shouldEqual Some(`Content-Type`(MediaType.text.plain, Charset.`UTF-8`))
+      ContentTypeResolver.Default("a.png") shouldEqual Some(`Content-Type`(MediaType.image.png))
+    }
+    "fall back to application/octet-stream for unknown or missing extensions" in {
+      ContentTypeResolver.Default("a.unknownext") shouldEqual Some(`Content-Type`(MediaType.application.`octet-stream`))
+      ContentTypeResolver.Default("README") shouldEqual Some(`Content-Type`(MediaType.application.`octet-stream`))
+    }
+    "resolve a .gz file to the type of the inner extension" in {
+      ContentTypeResolver.Default("app.js.gz") shouldEqual
+      Some(`Content-Type`(MediaType.application.javascript, Charset.`UTF-8`))
+      ContentTypeResolver.Default("data.gz") shouldEqual Some(`Content-Type`(MediaType.application.`octet-stream`))
+      FileAndResourceDirectives.isPrecompressed("data.gz", ContentTypeResolver.Default("data.gz")) shouldEqual false
+      FileAndResourceDirectives.isPrecompressed("app.js.gz", ContentTypeResolver.Default("app.js.gz")) shouldEqual true
+    }
+    "use the given charset for text files with withDefaultCharset" in {
+      ContentTypeResolver.withDefaultCharset(Charset.`ISO-8859-1`)("a.txt") shouldEqual
+      Some(`Content-Type`(MediaType.text.plain, Charset.`ISO-8859-1`))
+      Get("fileA.txt")                                                ~> getFromDirectory(testRoot.getCanonicalPath + "/someDir")(
+        ContentTypeResolver.withDefaultCharset(Charset.`ISO-8859-1`)) ~> check {
+        charsetOption shouldEqual Some(Charset.`ISO-8859-1`)
       }
     }
   }
@@ -253,7 +344,7 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
     "return the file content with the MediaType matching the file extension" in {
       Get("fileA.txt") ~> _getFromDirectory("someDir") ~> check {
         mediaType shouldEqual MediaType.parse("text/plain").getOrElse(fail("Media type could not be parsed"))
-//        charsetOption shouldEqual Some(Charset.`UTF-8`)
+        charsetOption shouldEqual Some(Charset.`UTF-8`)
         responseAs[String] shouldEqual "123"
         val lastModified = new File(testRoot, "someDir/fileA.txt").lastModified()
         headers.get[`Last-Modified`] should contain(
@@ -372,8 +463,8 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
       }
     }
     "return the file content with MediaType 'application/octet-stream' on unknown file extensions" in {
-      Get() ~> getFromResource("sample.xyz") ~> check {
-//        mediaType shouldEqual `application/octet-stream`
+      Get() ~> getFromResource("sample.unknownext") ~> check {
+        mediaType shouldEqual MediaType.application.`octet-stream`
         responseAs[String] shouldEqual "XyZ"
       }
     }
