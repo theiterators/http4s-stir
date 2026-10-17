@@ -116,6 +116,36 @@ complete(Status.NoContent)
 complete(IO.pure("Async result"))
 ```
 
+## Content negotiation
+
+`complete` negotiates the produced `Content-Type` against the request's `Accept` header the way Pekko's marshallers
+do: without an `Accept` header everything is acceptable; otherwise the most specific matching media range decides, a
+quality of `0` meaning "not acceptable". A representation the client does not accept is rejected with an
+`UnacceptedResponseContentTypeRejection` (406 when sealed, listing the types the route can produce), so a later
+alternative that produces an accepted type can still complete the request:
+
+```scala
+val route: Route = complete(user) ~ complete(user.toString) // JSON, or plain text for `Accept: text/plain`
+```
+
+Only the marshallers built on an `EntityEncoder` negotiate (`complete(value)`, `complete(status, value)`,
+`complete(status, headers, value)`, streams); an explicit `Response[IO]` or a bare `Status` is sent as it is. A custom
+`ToResponseMarshaller` is opaque unless it overrides `negotiable` to `true`, or is built with
+`ToResponseMarshaller.negotiated(...)`. `Accept-Charset` is not negotiated: http4s encoders have a fixed charset.
+Exception and rejection handlers run with the `Accept` header removed (Pekko's `withAcceptAll`), so their responses
+always reach the client.
+
+## completeWith
+
+Uses the marshaller for the given type to produce a completion function that is passed to the inner block, as Pekko's
+`completeWith`. The function may be called from any thread, once:
+
+```scala
+val route: Route = completeWith(instanceOf[String]) { send =>
+  send("done")
+}
+```
+
 ## ToResponseMarshallable
 
 `ToResponseMarshallable` is a wrapper that pairs a value with its `ToResponseMarshaller` instance. The `complete` directive accepts `ToResponseMarshallable`, and any type `T` with a `ToResponseMarshaller[T]` in scope is implicitly converted to `ToResponseMarshallable`.

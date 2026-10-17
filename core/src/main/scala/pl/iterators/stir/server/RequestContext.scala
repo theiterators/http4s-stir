@@ -3,7 +3,8 @@ package pl.iterators.stir.server
 import cats.effect.IO
 import org.http4s.{ Request, Response, Status, Uri }
 import org.http4s.Uri.Path
-import pl.iterators.stir.marshalling.ToResponseMarshallable
+import org.http4s.headers.Accept
+import pl.iterators.stir.marshalling.{ ContentNegotiation, ToResponseMarshallable }
 
 case class RequestContext(request: Request[IO], unmatchedPath: Path) {
 
@@ -11,7 +12,19 @@ case class RequestContext(request: Request[IO], unmatchedPath: Path) {
    * Completes the request with the given ToResponseMarshallable.
    */
   def complete(obj: ToResponseMarshallable): IO[RouteResult] =
-    obj.marshaller.toResponse(obj.value).map(RouteResult.Complete(_))
+    obj.marshaller.toResponse(obj.value).map { response =>
+      response.contentType match {
+        case Some(contentType) if obj.marshaller.negotiable && !ContentNegotiation.isAcceptable(request, contentType) =>
+          RouteResult.Rejected(UnacceptedResponseContentTypeRejection(Set(contentType)) :: Nil)
+        case _ => RouteResult.Complete(response)
+      }
+    }
+
+  /**
+   * Returns a copy of this context without the request's `Accept` header, so that whatever is completed with it is
+   * acceptable to the client: Pekko's `withAcceptAll`, used for the responses of exception and rejection handlers.
+   */
+  def withAcceptAll: RequestContext = copy(request = request.removeHeader[Accept])
 
   /**
    * Rejects the request with the given rejections.

@@ -1,7 +1,7 @@
 package pl.iterators.stir.server
 
 import org.http4s.{ Challenge, ContentCoding, MediaRange, MediaType, Method }
-import org.http4s.headers.{ Origin, Range }
+import org.http4s.headers.{ `Content-Type`, Origin, Range }
 import org.typelevel.vault.Key
 
 trait Rejection
@@ -161,6 +161,13 @@ final case class InvalidOriginRejection(allowedOrigins: Seq[Origin.Host]) extend
  * Signals that the request was rejected because an entity was expected but not supplied.
  */
 case object RequestEntityExpectedRejection extends Rejection
+
+/**
+ * Rejection created by marshallers.
+ * Signals that the request was rejected because the service is not capable of producing a response entity whose
+ * content type is accepted by the client (`Accept`).
+ */
+final case class UnacceptedResponseContentTypeRejection(supported: Set[`Content-Type`]) extends Rejection
 
 /**
  * Rejection created by encoding filters.
