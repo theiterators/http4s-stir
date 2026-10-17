@@ -4,16 +4,6 @@ title: Migration from Pekko/Akka HTTP
 sidebar_position: 26
 ---
 
-- WebSocket: the directives take the server's `WebSocketBuilder2[IO]` and work on http4s `WebSocketFrame`s
-  (`handleWebSocketMessages(ws, pipe)`); `extractWebSocketUpgrade` is replaced by the builder.
-- Security: authenticators receive stir's `CredentialsHelper` (wrapping http4s' `Credentials`) where Pekko passes its
-  `Credentials`.
-- Debugging: `logRequest`, `logResult` and `logRequestResult` take named options (`logHeaders`, `logBody`,
-  `redactHeadersWhen`, `maxBodyBytes`, `logAction`, `redaction`) instead of Pekko's `LoggingMagnet` (a marker string
-  and log level), so `logRequest("marker")` does not compile (see the debugging directives).
-- `listDirectoryContents` takes stir's implicit `DirectoryRenderer`, not Pekko's `DirectoryRenderer` marshaller.
-- **Synchronous execution**: all test assertions run synchronously; there is no async test support. `~>` waits for the
-  route, so `~> runRoute` does not separate running the route from checking it as Pekko's does.
 # Migration from Pekko/Akka HTTP
 
 This guide covers the key differences between Pekko HTTP (or Akka HTTP) and http4s-stir, and lists the directives and features that are not yet implemented.
@@ -39,7 +29,18 @@ Most directives have the **same names and signatures** as their Pekko HTTP count
 - `complete(IO(...))` replaces `complete(Future(...))`
 - `entity(as[T])` works identically, using http4s `EntityDecoder` instead of Akka `Unmarshaller`
 
-Path directives, method directives, parameter directives, header directives, and most other directive categories are API-compatible. Code migration typically involves updating imports and replacing `Future` with `IO`.
+Path directives, method directives, parameter directives, header directives, and most other directive categories are
+API-compatible. Code migration typically involves updating imports and replacing `Future` with `IO`. The exceptions
+whose signatures differ:
+
+- WebSocket: the directives take the server's `WebSocketBuilder2[IO]` and work on http4s `WebSocketFrame`s
+  (`handleWebSocketMessages(ws, pipe)`); `extractWebSocketUpgrade` is replaced by the builder.
+- Security: authenticators receive stir's `CredentialsHelper` (wrapping http4s' `Credentials`) where Pekko passes its
+  `Credentials`.
+- Debugging: `logRequest`, `logResult` and `logRequestResult` take named options (`logHeaders`, `logBody`,
+  `redactHeadersWhen`, `maxBodyBytes`, `logAction`, `redaction`) instead of Pekko's `LoggingMagnet` (a marker string
+  and log level), so `logRequest("marker")` does not compile (see the debugging directives).
+- `listDirectoryContents` takes stir's implicit `DirectoryRenderer`, not Pekko's `DirectoryRenderer` marshaller.
 
 ## What is not implemented
 
@@ -203,13 +204,6 @@ instead. Other differences that remain:
   directive read the body anew each, so wrap them in `toStrictEntity` to let several of them read a streamed body.
   This applies to in-memory test bodies too (a body built with `withBodyStream` has no length, so it can be read
   once); `toHttpRoutes` hands the next routes the request as received and is not covered.
-- Under `toHttpApp` and the testkit a request body that cannot be handed out again fails a later read at once with an
-  `IllegalStateException` ("The request entity was read before ...") instead of waiting on the connection until the
-  idle timeout, as Pekko fails the second materialization of a streamed entity: a chunked or length-less body can be
-  read once, and a body of known length cannot be read again after a read that stopped partway (it failed
-  mid-stream, or the reader stopped before asking for the end). A body of known length read to its end is readable
-  again as before. This applies to in-memory test bodies too (a body built with `withBodyStream` has no length, so it
-  can be read once); `toHttpRoutes` hands the next routes the request as received and is not covered.
 - `extractHost` and `host` read the authority of the request URI first, then the `Host` header, as Pekko reads the
   effective URI: an absolute-form request is matched by its URI's host (when its `Host` header disagrees, no host
   is named), a host name is lowercased (`Example.COM` matches `host("example.com")`), and an IPv6 host comes
@@ -222,6 +216,8 @@ instead. Other differences that remain:
 
 The http4s-stir testkit differs from the Pekko HTTP testkit in the following ways:
 
+- **Synchronous execution**: all test assertions run synchronously; there is no async test support. `~>` waits for the
+  route, so `~> runRoute` does not separate running the route from checking it as Pekko's does.
 - **Chunk inspection**: `chunks`, `chunksStream` and `trailer` expose the body chunks and trailer headers; there is no `ChunkStreamPart` model.
 - **Limited request building**: some minor header convenience methods available in the Pekko HTTP testkit are missing.
 - **WebSocket testing**: `WS(uri, probe, subprotocols*)` and `WSProbe` exchange frames with the handler in memory, as in Pekko, but the probe talks to the handler as the directive received it (no ping/pong filtering or defragmentation) and over `~!>` no frames are exchanged. `isWebSocketUpgrade` and `expectWebSocketUpgradeWithProtocol` work as in Pekko.
