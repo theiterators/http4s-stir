@@ -281,6 +281,31 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
     }
   }
 
+  "an implicit ContentTypeResolver" should {
+    implicit val xyzIsText: ContentTypeResolver =
+      fileName => if (fileName.endsWith(".xyz")) Some(`Content-Type`(MediaType.text.plain)) else None
+
+    "override the content type derived from the file name in getFromDirectory" in {
+      Get("sample.xyz") ~> getFromDirectory(testRoot.getCanonicalPath) ~> check {
+        mediaType shouldEqual MediaType.text.plain
+        responseAs[String] shouldEqual "XyZ"
+      }
+    }
+    "override the content type in getFromResource" in {
+      Get() ~> getFromResource("sample.xyz") ~> check { mediaType shouldEqual MediaType.text.plain }
+    }
+    "leave other files to http4s" in {
+      Get() ~> getFromResource("sample.html") ~> check {
+        mediaType shouldEqual MediaType.parse("text/html").getOrElse(fail("Media type could not be parsed"))
+      }
+    }
+    "lose against an explicit content type" in {
+      Get() ~> getFromResource("sample.xyz", `Content-Type`(MediaType.application.xml)) ~> check {
+        mediaType shouldEqual MediaType.application.xml
+      }
+    }
+  }
+
   "getFromResource" should {
     "reject non-GET requests" in {
       Put() ~> getFromResource("some") ~> check { handled shouldEqual false }
