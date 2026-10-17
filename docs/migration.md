@@ -140,6 +140,8 @@ instead. Other differences that remain:
 - `selectPreferredLanguage` reads `Accept-Language` q-values as leniently as Pekko: `q=.5` and spaces around `;` and
   `=` are accepted (the header used to be ignored, picking the first language), and a q-value with more than three
   decimals is truncated instead of rounded (`q=0.4999` now ranks below `q=0.5`).
+- `encodeResponse` / `encodeResponseWith` flush every chunk they compress, as Pekko does: a streamed response used to be
+  held back until 32 KiB of compressed output had accumulated (or the stream ended).
 
 ## Testkit differences
 

@@ -2,7 +2,7 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import fs2.Stream
+import fs2.{ Pipe, Stream }
 import fs2.text.utf8
 import fs2.compression.{ Compression, DeflateParams, InflateParams, ZLibParams }
 import org.http4s.{
@@ -25,6 +25,7 @@ import pl.iterators.stir.server._
 
 import java.io.File
 import java.nio.file.{ Files => NioFiles }
+import scala.concurrent.duration._
 
 class CodingDirectivesSpec extends RoutingSpec with Inside {
   override implicit def runtime: IORuntime = IORuntime.global
@@ -203,6 +204,28 @@ class CodingDirectivesSpec extends RoutingSpec with Inside {
       Get() ~> addHeader(`Accept-Encoding`(ContentCoding.gzip)) ~> encodeResponse(preEncoded) ~> check {
         responseAs[String] shouldEqual "raw"
       }
+    }
+  }
+
+  "the encodeResponse directive on a streamed response" should {
+    // Pekko's encoders flush every chunk, so a reader gets each chunk's bytes as it is produced
+    def firstBytes(coding: ContentCoding, decode: Pipe[IO, Byte, Byte]): String = {
+      val slow = (Stream("hello") ++ Stream.sleep_[IO](10.seconds) ++ Stream("world")).through(utf8.encode)
+      Get() ~> addHeader(`Accept-Encoding`(coding)) ~> encodeResponseWith(coding) {
+        complete(Response[IO]().withBodyStream(slow).withContentType(`Content-Type`(MediaType.text.plain)))
+      } ~> check {
+        chunksStream.flatMap(Stream.chunk).through(decode).through(utf8.decode).take(1).compile.string
+          .timeout(3.seconds)
+          .unsafeRunSync()
+      }
+    }
+    "send a gzipped chunk without waiting for the rest of the stream" in {
+      firstBytes(ContentCoding.gzip, Compression[IO].gunzip().andThen(_.flatMap(_.content))) shouldEqual "hello"
+    }
+    "send a deflated chunk without waiting for the rest of the stream" in {
+      firstBytes(ContentCoding.deflate,
+        Compression[IO].inflate(InflateParams(header = ZLibParams.Header.ZLIB))) shouldEqual
+      "hello"
     }
   }
 
