@@ -61,8 +61,10 @@ ended with the headers), which http4s does not expose, so stir answers the same 
 of the body: `toHttpApp` and the testkit route a length-less HTTP/2 request with a body that reads its first chunk
 once, on demand, and hands the reader (one of the alternatives of a route, `entity`, `decodeRequest`, ...) the whole
 body. So `requestEntityEmpty` on such a request waits until the client sends its first bytes or ends the stream. A
-network body cannot be replayed, so it can be read once: a second read (an alternative after a rejection) fails at
-once with an `IllegalStateException` instead of getting a truncated body. A
+network body cannot be replayed, so a body with bytes can be read once: a second read (an alternative after a
+rejection, or a second alternative running a form directive, as each buffers the body anew) fails at once with an
+`IllegalStateException` (a 400 rejection under `decodeRequest` or `entity`) instead of getting a truncated body; wrap
+the route in `toStrictEntity` to let several alternatives read it. A
 body that a directive replaced (`mapRequest`, `toStrictEntity`, ...) is judged by its headers, a length-less one
 taken as present, as is a length-less HTTP/2 body under `toHttpRoutes` (a request it rejects goes on to the next
 routes, which must get the body untouched) or on a hand-built `RequestContext`. The look is released when the
