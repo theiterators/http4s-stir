@@ -33,16 +33,12 @@ Path directives, method directives, parameter directives, header directives, and
 
 ## What is not implemented
 
-The following directive categories and individual directives are **not available** in http4s-stir:
-
-### Unimplemented directive categories
-
-| Category | Status |
-|---|---|
-
-### Unimplemented individual directives
-
-- **FileAndResourceDirectives**: directory listing is not supported
+Every Pekko HTTP directive category has a counterpart in http4s-stir. The few directives without one are tied to
+the Pekko runtime and have no meaning on http4s: `withExecutionContext` / `extractExecutionContext`,
+`withMaterializer` / `extractMaterializer`, `extractActorSystem`, `withLog` / `extractLog`, `withSettings` /
+`mapSettings` / `extractSettings` / `extractParserSettings`, `onCompleteWithBreaker` (needs a circuit breaker) and
+`completeWith` (promise based; use `complete(io)`). Settings-driven behaviour (range limits, strict form timeout,
+size limits) is set per directive instead.
 
 ## Behaviour changes in 0.7
 

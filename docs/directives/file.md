@@ -8,8 +8,6 @@ sidebar_position: 17
 
 File and upload directives serve static files from the filesystem or classpath, and handle multipart file uploads. These directives wrap http4s `StaticFile` utilities and multipart parsing into the stir DSL.
 
-Note: directory listing is not supported. Requests to directory paths are rejected.
-
 ## File Serving
 
 ### getFromFile
@@ -67,6 +65,31 @@ val route: Route = pathPrefix("assets") {
   getFromResourceDirectory("public")
 }
 // GET /assets/js/app.js -> serves classpath resource public/js/app.js
+```
+
+### listDirectoryContents
+
+Completes GET requests to a directory below one of the given directories with an HTML index of its contents
+(Pekko's layout: directories first, then files with modification time and size), rendered by the in-scope
+`DirectoryRenderer`. The default renderer has no footer; `DirectoryRenderer.withVanityFooter` adds Pekko's
+"rendered by ... on ..." line, and any `DirectoryListing => Response[IO]` can replace the HTML. Requests to
+files, missing or unreadable directories, and path traversal attempts are rejected.
+
+```scala
+val route: Route = pathPrefix("browse") {
+  listDirectoryContents("/var/www/static")
+}
+```
+
+### getFromBrowseableDirectory
+
+Serves files from the directory like `getFromDirectory` and lists directories like `listDirectoryContents`.
+`getFromBrowseableDirectories(dirs: _*)` merges several directories.
+
+```scala
+val route: Route = pathPrefix("files") {
+  getFromBrowseableDirectory("/var/www/static")
+}
 ```
 
 ## File Uploads

@@ -2,11 +2,13 @@ package pl.iterators.stir.server.directives
 
 import cats.data.OptionT
 import cats.effect.{ IO, SyncIO }
+import cats.syntax.all._
+import fs2.io.file.Files
 import fs2.io.file.Path
 import org.http4s.{ Response, StaticFile, Uri }
 import org.http4s.headers.`Content-Type`
 import org.typelevel.vault.Key
-import pl.iterators.stir.server.{ Route, RouteResult }
+import pl.iterators.stir.server.{ Route, RouteConcatenation, RouteResult }
 
 import java.io.{ File, IOException }
 
@@ -17,6 +19,7 @@ import java.io.{ File, IOException }
 trait FileAndResourceDirectives {
   import MethodDirectives._
   import FileAndResourceDirectives._
+  import IODirectives._
   import RouteDirectives._
   import BasicDirectives._
 
@@ -93,6 +96,58 @@ trait FileAndResourceDirectives {
     else reject // don't serve the content of resource "directories"
 
   /**
+   * Completes GET requests to a directory below one of the given directories with a listing of its contents,
+   * rendered by the in-scope [[DirectoryRenderer]] (Pekko's HTML index page by default). The listings of several
+   * directories are merged. Requests to files, to missing or unreadable directories, and path traversal attempts
+   * are rejected.
+   *
+   * @group fileandresource
+   */
+  def listDirectoryContents(directories: String*)(implicit renderer: DirectoryRenderer): Route =
+    get {
+      extractRequestContext { ctx =>
+        extractMatchedPath { matched =>
+          val prefixPath = matched.toString
+          val remainingPath = ctx.unmatchedPath
+          val pathString = withTrailingSlash(safeJoinPaths("/", remainingPath, '/'))
+          val candidates = directories.toList.flatMap { dir =>
+            safeDirectoryChildPath(withTrailingSlash(dir), remainingPath) match {
+              case ""       => None
+              case fileName => Some(Path(fileName))
+            }
+          }
+          onSuccess(readableDirectories(candidates)) { dirs =>
+            if (dirs.isEmpty) reject
+            else
+              onSuccess(directoryEntries(dirs)) { entries =>
+                complete(renderer.render(DirectoryListing(prefixPath + pathString, isRoot = pathString == "/",
+                  entries)))
+              }
+          }
+        }
+      }
+    }
+
+  /**
+   * Same as `getFromBrowseableDirectories` with only one directory.
+   *
+   * @group fileandresource
+   */
+  def getFromBrowseableDirectory(directory: String)(implicit renderer: DirectoryRenderer): Route =
+    getFromBrowseableDirectories(directory)
+
+  /**
+   * Serves the content of the given directories as a file system browser, i.e. files are sent and directories
+   * served as browseable listings.
+   *
+   * @group fileandresource
+   */
+  def getFromBrowseableDirectories(directories: String*)(implicit renderer: DirectoryRenderer): Route = {
+    import RouteConcatenation._
+    directories.map(getFromDirectory).reduceLeft(_ ~ _) ~ listDirectoryContents(directories: _*)
+  }
+
+  /**
    * Completes GET requests with the content of a file underneath the given directory.
    * If the file cannot be read the Route rejects the request.
    *
@@ -127,6 +182,19 @@ trait FileAndResourceDirectives {
 
 object FileAndResourceDirectives extends FileAndResourceDirectives {
   private def withTrailingSlash(path: String): String = if (path.endsWith("/")) path else path + '/'
+
+  private def readableDirectories(paths: List[Path]): IO[List[Path]] =
+    paths.filterA(path =>
+      Files[IO].isDirectory(path).flatMap(dir => if (dir) Files[IO].isReadable(path) else IO.pure(false)))
+
+  private def directoryEntries(directories: List[Path]): IO[List[DirectoryListing.Entry]] =
+    directories.flatTraverse { directory =>
+      Files[IO].list(directory).evalMap { child =>
+        Files[IO].getBasicFileAttributes(child).map(attributes =>
+          DirectoryListing.Entry(child.fileName.toString, attributes.isDirectory, attributes.size,
+            attributes.lastModifiedTime.toMillis))
+      }.compile.toList
+    }
 
   /** The file or resource name a response was served from, for `withPrecompressedMediaTypeSupport`. */
   private[stir] val ServedNameKey: Key[String] = Key.newKey[SyncIO, String].unsafeRunSync()
