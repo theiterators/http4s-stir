@@ -105,13 +105,17 @@ class RangeDirectivesSpec extends RoutingSpec {
         body.indexOf("bytes 8-9/10") shouldEqual -1
       }
     }
-    "serve the whole response when its length is unknown" in {
+    "reject a ranged request when the response length is unknown, as Pekko does" in {
       val streamed = complete(Response[IO]().withBodyStream(Stream.emits(bytes(10)).covary[IO]))
       Get() ~> addHeader(Range(0, 1)) ~> withRangeSupport(streamed) ~> check {
-        status shouldEqual Status.Ok
+        rejection shouldEqual UnsatisfiableRangeRejection(SubRange(0L, 1L) :: Nil, -1)
+      }
+    }
+    "omit Content-Range from the 416 when the entity length is unknown" in {
+      val streamed = complete(Response[IO]().withBodyStream(Stream.emits(bytes(10)).covary[IO]))
+      Get() ~> addHeader(Range(0, 1)) ~> Route.seal(withRangeSupport(streamed)) ~> check {
+        status shouldEqual Status.RangeNotSatisfiable
         header("Content-Range") shouldEqual None
-        header[`Accept-Ranges`] shouldEqual Some(`Accept-Ranges`.bytes)
-        responseAs[Array[Byte]] shouldEqual bytes(10)
       }
     }
     "ignore a Range header whose byte range ends before it starts" in {
