@@ -2,11 +2,13 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import org.http4s.{ Charset, ContentCoding, Header, HttpDate, MediaType, Response, Status, Uri }
-import org.http4s.headers.{ `Accept-Encoding`, `Content-Encoding`, `Content-Type`, `Last-Modified` }
+import org.http4s.{ Charset, ContentCoding, EntityTag, Header, HttpDate, MediaType, RangeUnit, Response, Status, Uri }
+import org.http4s.headers.{ `Accept-Encoding`, `Accept-Ranges`, `Content-Encoding`, `Content-Range`, `Content-Type`, `If-Match`, `If-None-Match`, `If-Unmodified-Since`, `Last-Modified`, ETag, Range }
+import org.http4s.headers.Range.SubRange
 import org.typelevel.ci._
 import org.scalatest.{ Inside, Inspectors }
 import pl.iterators.stir.impl.util._
+import pl.iterators.stir.server.{ Route, UnsatisfiableRangeRejection }
 
 import java.io.File
 import java.nio.file.{ Files => NioFiles, Paths }
@@ -72,35 +74,79 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
       }
     }
 
-//    "return a single range from a file" in {
-//      val file = File.createTempFile("pekkoHttpTest", null)
-//      try {
-//        writeAllText("ABCDEFGHIJKLMNOPQRSTUVWXYZ", file)
-//        Get() ~> addHeader(Range(ByteRange(0, 10))) ~> getFromFile(file) ~> check {
-//          status shouldEqual StatusCodes.PartialContent
-//          headers should contain(`Content-Range`(ContentRange(0, 10, 26)))
-//          responseAs[String] shouldEqual "ABCDEFGHIJK"
-//        }
-//      } finally file.delete
-//    }
-//
-//    "return multiple ranges from a file at once" in {
-//      val file = File.createTempFile("pekkoHttpTest", null)
-//      try {
-//        writeAllText("ABCDEFGHIJKLMNOPQRSTUVWXYZ", file)
-//        val rangeHeader = Range(ByteRange(1, 10), ByteRange.suffix(10))
-//        Get() ~> addHeader(rangeHeader) ~> getFromFile(file, ContentTypes.`text/plain(UTF-8)`) ~> check {
-//          status shouldEqual StatusCodes.PartialContent
-//          header[`Content-Range`] shouldEqual None
-//          mediaType.withParams(Map.empty) shouldEqual `multipart/byteranges`
-//
-//          val parts =
-//            responseAs[Multipart.ByteRanges].toStrict(1.second.dilated).awaitResult(3.seconds.dilated).strictParts
-//          parts.map(_.entity.data.utf8String) should contain theSameElementsAs List("BCDEFGHIJK", "QRSTUVWXYZ")
-//        }
-//      } finally file.delete
-//    }
-//
+    "return a single range from a file" in {
+      val file = File.createTempFile("pekkoHttpTest", null)
+      try {
+        writeAllText("ABCDEFGHIJKLMNOPQRSTUVWXYZ", file)
+        Get() ~> addHeader(Range(0, 10)) ~> getFromFile(file) ~> check {
+          status shouldEqual Status.PartialContent
+          header[`Content-Range`] shouldEqual Some(`Content-Range`(RangeUnit.Bytes, SubRange(0L, 10L), Some(26L)))
+          header("Content-Length").map(_.value) shouldEqual Some("11")
+          responseAs[String] shouldEqual "ABCDEFGHIJK"
+        }
+      } finally {
+        file.delete
+        ()
+      }
+    }
+
+    "return multiple ranges from a file at once" in {
+      val file = File.createTempFile("pekkoHttpTest", null)
+      try {
+        // Pekko's test lowers range-coalescing-threshold to 1; with the default 80 the ranges must lie further apart
+        writeAllText("ABCDEFGHIJKLMNOPQRSTUVWXYZ" * 8, file)
+        val rangeHeader = Range(SubRange(1L, 10L), SubRange(-10L, None))
+        Get() ~> addHeader(rangeHeader) ~> getFromFile(file, `Content-Type`(MediaType.text.plain, Charset.`UTF-8`)) ~>
+        check {
+          status shouldEqual Status.PartialContent
+          header[`Content-Range`] shouldEqual None
+          mediaType.withExtensions(Map.empty) shouldEqual MediaType.multipart.byteranges
+          val body = responseAs[String]
+          body should include("Content-Range: bytes 1-10/208\r\n\r\nBCDEFGHIJK")
+          body should include("Content-Range: bytes 198-207/208\r\n\r\nQRSTUVWXYZ")
+        }
+      } finally {
+        file.delete
+        ()
+      }
+    }
+
+    "answer 412 to an If-Match that does not match, like Pekko's conditional" in {
+      val file = File.createTempFile("pekkoHttpTest", null)
+      try {
+        writeAllText("123", file)
+        Get() ~> addHeader(`If-Match`(EntityTag("nope"))) ~> Route.seal(getFromFile(file)) ~> check {
+          status shouldEqual Status.PreconditionFailed
+        }
+        Get()                         ~> addHeader(`If-Unmodified-Since`(HttpDate.unsafeFromEpochSecond(0L))) ~>
+        Route.seal(getFromFile(file)) ~>
+        check { status shouldEqual Status.PreconditionFailed }
+      } finally {
+        file.delete
+        ()
+      }
+    }
+
+    "answer 304 carrying the validators to a matching If-None-Match" in {
+      val file = File.createTempFile("pekkoHttpTest", null)
+      try {
+        writeAllText("123", file)
+        var tag: Option[EntityTag] = None
+        Get() ~> getFromFile(file) ~> check {
+          tag = header[ETag].map(_.tag)
+          tag shouldBe defined
+        }
+        Get() ~> addHeader(`If-None-Match`(tag.get)) ~> getFromFile(file) ~> check {
+          status shouldEqual Status.NotModified
+          header[ETag].map(_.tag) shouldEqual tag
+          header[`Last-Modified`] shouldBe defined
+        }
+      } finally {
+        file.delete
+        ()
+      }
+    }
+
     "use the given content type instead of the one derived from the file name" in {
       val file = File.createTempFile("stirHttpTest", ".svgz")
       try {
@@ -228,6 +274,66 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
       encodeResponse(getFromResourceDirectory("precompressed")) ~> check {
         header[`Content-Encoding`] shouldEqual Some(`Content-Encoding`(ContentCoding.gzip))
         responseAs[String] shouldEqual "gzipped bytes"
+      }
+    }
+    "advertise Accept-Ranges on a plain 200 and reject a wholly unsatisfiable range" in {
+      val file = File.createTempFile("pekkoHttpTest", null)
+      try {
+        writeAllText("123", file)
+        Get() ~> getFromFile(file)          ~> check { header[`Accept-Ranges`] shouldEqual Some(`Accept-Ranges`.bytes) }
+        Get() ~> addHeader(Range(100, 200)) ~> getFromFile(file) ~> check {
+          rejection shouldEqual UnsatisfiableRangeRejection(SubRange(100L, 200L) :: Nil, 3)
+        }
+        Get() ~> addHeader(Range(100, 200)) ~> Route.seal(getFromFile(file)) ~> check {
+          status shouldEqual Status.RangeNotSatisfiable
+        }
+      } finally {
+        file.delete
+        ()
+      }
+    }
+    "serve the whole file when If-Range does not match the ETag" in {
+      val file = File.createTempFile("pekkoHttpTest", null)
+      try {
+        writeAllText("ABCDEFGHIJ", file)
+        Get() ~> addHeader(Range(0, 1)) ~> addHeader(Header.Raw(ci"If-Range", "\"stale\"")) ~> getFromFile(file) ~>
+        check {
+          status shouldEqual Status.Ok
+          responseAs[String] shouldEqual "ABCDEFGHIJ"
+        }
+      } finally {
+        file.delete
+        ()
+      }
+    }
+    "serve an empty file in full whatever the Range header, like Pekko" in {
+      val file = File.createTempFile("pekkoHttpTest", null)
+      try {
+        Get() ~> addHeader(Range(0, 1)) ~> getFromFile(file) ~> check {
+          status shouldEqual Status.Ok
+          responseAs[Array[Byte]].length shouldEqual 0
+        }
+      } finally {
+        file.delete
+        ()
+      }
+    }
+    "report the clamped Last-Modified on the 200 that the 304 later confirms" in {
+      val file = File.createTempFile("pekkoHttpTest", null)
+      try {
+        writeAllText("123", file)
+        file.setLastModified(System.currentTimeMillis() + 3600000L) // a modification time in the future
+        var lastModified: Option[HttpDate] = None
+        Get() ~> getFromFile(file) ~> check {
+          lastModified = header[`Last-Modified`].map(_.date)
+          lastModified.get.epochSecond should be <= System.currentTimeMillis() / 1000
+        }
+        // If-Modified-Since would race the clock (the clamped date moves every second); the ETag is stable
+        Get() ~> addHeader(`If-None-Match`(EntityTag(s"${file.lastModified.toHexString}-3"))) ~> getFromFile(file) ~>
+        check { status shouldEqual Status.NotModified }
+      } finally {
+        file.delete
+        ()
       }
     }
     "support files with registered MediaType and .gz suffix" in {
@@ -466,6 +572,28 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
       Get() ~> getFromResource("sample.unknownext") ~> check {
         mediaType shouldEqual MediaType.application.`octet-stream`
         responseAs[String] shouldEqual "XyZ"
+      }
+    }
+    "serve the whole resource when If-Range does not match, even for an otherwise unsatisfiable range" in {
+      Get()                                      ~> addHeader(Range(100, 200)) ~> addHeader(Header.Raw(ci"If-Range", "\"stale\"")) ~>
+      Route.seal(getFromResource("sample.html")) ~> check {
+        status shouldEqual Status.Ok
+        header("Content-Range") shouldEqual None
+      }
+    }
+    "carry an ETag and serve ranges, like files" in {
+      var tag: Option[EntityTag] = None
+      Get() ~> getFromResource("sample.html") ~> check {
+        tag = header[ETag].map(_.tag)
+        tag shouldBe defined
+      }
+      Get() ~> addHeader(`If-None-Match`(tag.get)) ~> getFromResource("sample.html") ~> check {
+        status shouldEqual Status.NotModified
+        header[ETag].map(_.tag) shouldEqual tag
+      }
+      Get() ~> addHeader(Range(0, 1)) ~> getFromResource("sample.html") ~> check {
+        status shouldEqual Status.PartialContent
+        responseAs[Array[Byte]].length shouldEqual 2
       }
     }
     "properly handle zero-byte files" in {

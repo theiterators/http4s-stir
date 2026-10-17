@@ -5,11 +5,33 @@ import cats.effect.{ IO, SyncIO }
 import cats.syntax.all._
 import fs2.io.file.Files
 import fs2.io.file.Path
-import org.http4s.{ Charset, ContentCoding, MediaType, Response, StaticFile, Uri }
-import org.http4s.headers.{ `Content-Encoding`, `Content-Type` }
+import cats.data.NonEmptyList
+import org.http4s.{
+  Charset,
+  ContentCoding,
+  EntityTag,
+  HttpDate,
+  MediaType,
+  Method,
+  RangeUnit,
+  Request,
+  Response,
+  StaticFile,
+  Status,
+  Uri
+}
+import org.http4s.headers.{ `Content-Encoding`, `Content-Type`, `Last-Modified`, Range }
 import org.typelevel.vault.Key
 import pl.iterators.stir.impl.util._
-import pl.iterators.stir.server.{ Route, RouteConcatenation, RouteResult }
+import pl.iterators.stir.server.{
+  Directive0,
+  Rejection,
+  Route,
+  RouteConcatenation,
+  RouteResult,
+  TooManyRangesRejection,
+  UnsatisfiableRangeRejection
+}
 
 import java.io.{ File, IOException }
 
@@ -23,6 +45,8 @@ trait FileAndResourceDirectives {
   import IODirectives._
   import RouteDirectives._
   import BasicDirectives._
+  import CacheConditionDirectives._
+  import RangeDirectives._
 
   /**
    * Completes GET requests with the content of the given file, typed by the in-scope [[ContentTypeResolver]]
@@ -61,13 +85,38 @@ trait FileAndResourceDirectives {
 
   private def serveFile(file: File, contentType: Option[`Content-Type`], gzipped: Boolean): Route =
     get {
-      if (file.isFile && file.canRead)
-        extractRequest { request =>
-          serve(file.getName, gzipped,
-            StaticFile.fromPath(Path(file.getAbsolutePath), Some(request)).map(response =>
-              contentType.fold(response)(response.withContentType)))
+      if (file.isFile && file.canRead) {
+        val length = file.length
+        val lastModified = file.lastModified
+        val tag = entityTag(length, lastModified)
+        val path = Path(file.getAbsolutePath)
+        val etagCalculator: Path => IO[String] = _ => IO.pure(tag.tag)
+        // `conditional` adds the clamped Last-Modified and the ETag itself
+        def typed(response: Response[IO]): Response[IO] =
+          contentType.fold(response)(response.withContentType).removeHeader[`Last-Modified`]
+        def whole = StaticFile.fromPath(path, StaticFile.DefaultBufferSize, None, etagCalculator).map(typed)
+        // conditional outside, ranges inside, as Pekko's getFromFile; http4s is given no request so that it does
+        // not run its own If-None-Match / If-Modified-Since check with a different ETag
+        conditionalFor(tag, lastModified) {
+          rangeSupportFor(length) {
+            extractRequest { request =>
+              singleSatisfiableRange(request, length) match {
+                case Some(range) => // one range: seek instead of reading and discarding the bytes before it
+                  serve(file.getName, gzipped,
+                    StaticFile.fromPath(path, range.start, range.end, StaticFile.DefaultBufferSize, None,
+                      etagCalculator).flatMap { response =>
+                      // the file may have shrunk since its length was read; then let withRangeSupport decide
+                      if (response.contentLength.contains(range.length))
+                        OptionT.pure[IO](
+                          typed(response).withStatus(Status.PartialContent).putHeaders(range.contentRange(length)))
+                      else whole
+                    })
+                case None => serve(file.getName, gzipped, whole)
+              }
+            }
+          }
         }
-      else reject
+      } else reject
     }
 
   /**
@@ -93,11 +142,34 @@ trait FileAndResourceDirectives {
 
   private def serveResource(resourceName: String, contentType: Option[`Content-Type`], gzipped: Boolean): Route =
     if (!resourceName.endsWith("/"))
-      get {
-        extractRequest { request =>
-          serve(resourceName, gzipped,
-            StaticFile.fromResource(resourceName, Some(request)).map(response =>
-              contentType.fold(response)(response.withContentType)))
+      get { ctx =>
+        // http4s opens the resource's stream as soon as it builds the response, so the first response is only a
+        // probe for the validators and is released at once; the content is opened again inside the inner route,
+        // after `conditional` and the range pre-checks have decided that a body will be sent. http4s is given no
+        // request so that it does not run its own If-None-Match / If-Modified-Since check.
+        def open = StaticFile.fromResource[IO](resourceName, None)
+        open.value.flatMap {
+          case None        => IO.pure(RouteResult.Rejected(Nil))
+          case Some(probe) =>
+            probe.body.take(1).compile.drain *> {
+              val length = probe.contentLength
+              val lastModifiedMillis = probe.headers.get[`Last-Modified`].map(_.date.epochSecond * 1000)
+              val tag = length.map(l => entityTag(l, lastModifiedMillis.getOrElse(0L)))
+              val content =
+                open.map(found => contentType.fold(found)(found.withContentType).removeHeader[`Last-Modified`])
+              // the pre-check reads the request `conditional` hands down: an If-Range mismatch has removed Range
+              val ranged: Route = length.filter(_ > 0) match {
+                case Some(l) => extractRequest { request =>
+                    unservableRanges(request, l).fold(withRangeSupport(serve(resourceName, gzipped, content)))(
+                      reject(_))
+                  }
+                case None => serve(resourceName, gzipped, content)
+              }
+              // the clamped Last-Modified, as for files (Pekko's conditionalFor)
+              val clamped = lastModifiedMillis.map(millis =>
+                HttpDate.unsafeFromEpochSecond(math.min(millis, System.currentTimeMillis()) / 1000))
+              conditional(tag, clamped)(ranged)(ctx)
+            }
         }
       }
     else reject // don't serve the content of resource "directories"
@@ -190,6 +262,10 @@ trait FileAndResourceDirectives {
 }
 
 object FileAndResourceDirectives extends FileAndResourceDirectives {
+  import BasicDirectives._
+  import CacheConditionDirectives._
+  import RangeDirectives._
+
   private def withTrailingSlash(path: String): String = if (path.endsWith("/")) path else path + '/'
 
   private def readableDirectories(paths: List[Path]): IO[List[Path]] =
@@ -208,6 +284,40 @@ object FileAndResourceDirectives extends FileAndResourceDirectives {
 
   /** The file or resource name a response was served from, for `withPrecompressedMediaTypeSupport`. */
   private[stir] val ServedNameKey: Key[String] = Key.newKey[SyncIO, String].unsafeRunSync()
+
+  /** Pekko's `conditionalFor`: an ETag from length and modification time, and a `Last-Modified` not in the future. */
+  private def conditionalFor(tag: EntityTag, lastModified: Long): Directive0 =
+    conditional(tag, HttpDate.unsafeFromEpochSecond(math.min(lastModified, System.currentTimeMillis()) / 1000))
+
+  /** http4s' ETag format for a file (`lastModifiedHex-sizeHex`), so both layers agree on the validator. */
+  private def entityTag(length: Long, lastModified: Long): EntityTag =
+    EntityTag(s"${lastModified.toHexString}-${length.toHexString}")
+
+  /** Pekko serves an empty file without range support; a `Range` on it would otherwise be unsatisfiable. */
+  private def rangeSupportFor(length: Long): Directive0 = if (length > 0) withRangeSupport else pass
+
+  /**
+   * The rejection `withRangeSupport` would produce for the request without looking at the response: too many ranges,
+   * or no satisfiable one. Decided before a resource stream is opened, so a rejected request never leaks one.
+   */
+  private def unservableRanges(request: Request[IO], length: Long): Option[Rejection] =
+    if (request.method != Method.GET) None
+    else request.headers.get[Range].flatMap {
+      case Range(unit, ranges) if unit == RangeUnit.Bytes && ranges.forall(isValid) =>
+        if (ranges.size > DefaultRangeCountLimit) Some(TooManyRangesRejection(DefaultRangeCountLimit))
+        else if (ranges.exists(isSatisfiable(length))) None
+        else Some(UnsatisfiableRangeRejection(ranges.toList, length))
+      case _ => None
+    }
+
+  /** The one byte range of a GET that can be served by seeking, when the header holds exactly one valid satisfiable range. */
+  private def singleSatisfiableRange(request: Request[IO], length: Long): Option[IndexRange] =
+    if (request.method != Method.GET) None
+    else request.headers.get[Range].collect {
+      case Range(unit, NonEmptyList(single, Nil))
+          if unit == RangeUnit.Bytes && isValid(single) && isSatisfiable(length)(single) =>
+        indexRange(length)(single)
+    }
 
   /**
    * Completes with the static content when http4s found it and rejects (with no rejections) otherwise. A
