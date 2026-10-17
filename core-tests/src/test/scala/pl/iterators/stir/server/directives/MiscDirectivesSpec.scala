@@ -13,7 +13,7 @@ import org.http4s.headers.{ `Content-Length`, `X-Forwarded-For` }
 import org.typelevel.ci.CIString
 import pl.iterators.stir.server._
 
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.{ AtomicBoolean, AtomicInteger }
 import scala.concurrent.duration._
 
 class MiscDirectivesSpec extends RoutingSpec {
@@ -197,6 +197,29 @@ class MiscDirectivesSpec extends RoutingSpec {
     }
     "hand the whole body to an alternative that reads it without these directives" in {
       http2(Post().withBodyStream(oneShot)) ~> emptyOrEntity ~> check { responseAs[String] shouldEqual "body:abc" }
+    }
+    def bracketed(open: AtomicBoolean, released: AtomicInteger): Stream[IO, Byte] =
+      Stream.bracket(IO(open.set(true)))(_ => IO { open.set(false); released.incrementAndGet(); () }).flatMap { _ =>
+        Stream("ab", "c").through(fs2.text.utf8.encode)
+      }
+    "release the body it looked at when the route does not read it" in {
+      val (open, released) = (new AtomicBoolean(false), new AtomicInteger(0))
+      http2(Post().withBodyStream(bracketed(open, released))) ~> requestEntityPresent { complete("ignored") } ~> check {
+        responseAs[String] shouldEqual "ignored"
+      }
+      (open.get, released.get) shouldEqual ((false, 1))
+      http2(Post().withBodyStream(bracketed(open, released))) ~> requestEntityEmpty { completeOk } ~> check {
+        rejections shouldEqual Nil
+      }
+      (open.get, released.get) shouldEqual ((false, 2))
+    }
+    "answer for the body a directive replaced it with" in {
+      http2(Post("/", "abc")) ~> mapRequest(_.withEntity("")) {
+        requestEntityEmpty { complete("empty") } ~ complete("present")
+      }                                          ~> check { responseAs[String] shouldEqual "empty" }
+      http2(Post().withBodyStream(Stream.empty)) ~> mapRequest(_.withBodyStream(Stream.emits("abc".getBytes))) {
+        requestEntityEmpty { complete("empty") } ~ complete("present")
+      } ~> check { responseAs[String] shouldEqual "present" }
     }
     "keep the resources of the body open until the route has read it" in {
       val open = new AtomicBoolean(false)

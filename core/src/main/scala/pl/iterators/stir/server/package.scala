@@ -15,7 +15,7 @@ package object server {
           .tapply(_ => route)
       }
       Kleisli[IO, Request[IO], Response[IO]](req =>
-        RequestContext.forRequest(req).flatMap(sealedRoute).map {
+        RequestContext.run(req)(sealedRoute).map {
           case RouteResult.Complete(response) => response
           case RouteResult.Rejected(_)        =>
             throw new IllegalStateException("RouteResult.Rejected should not be returned from a sealed route")
@@ -24,7 +24,7 @@ package object server {
 
     def toHttpRoutes: HttpRoutes[IO] = {
       Kleisli(req =>
-        OptionT(RequestContext.forRequest(req).flatMap(route).map {
+        OptionT(RequestContext.run(req)(route).map {
           case RouteResult.Complete(response) => Some(response)
           case _                              => None
         }))

@@ -61,8 +61,9 @@ ended with the headers), which http4s does not expose, so stir answers the same 
 of the body: `toHttpApp`, `toHttpRoutes` and the testkit route a length-less HTTP/2 request with a body that reads
 its first chunk once, on demand, and hands every reader (the alternatives of a route, `entity`, `decodeRequest`,
 ...) the whole body. So `requestEntityEmpty` on such a request waits until the client sends its first bytes or ends
-the stream. A route run on a hand-built `RequestContext` does not get that body, and the directives then take a
-length-less HTTP/2 body as present.
+the stream. Reading the body a second time gives only its first chunk, as a network body cannot be replayed. A
+body that a directive replaced (`mapRequest`, `toStrictEntity`, ...) is judged by its headers, a length-less one
+taken as present, as is a length-less HTTP/2 body on a hand-built `RequestContext`.
 
 ```scala
 val route: Route = post {

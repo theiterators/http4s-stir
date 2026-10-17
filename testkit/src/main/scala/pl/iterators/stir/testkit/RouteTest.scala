@@ -183,7 +183,7 @@ trait RouteTest extends RequestBuilding with WSTestRequestBuilding with RouteTes
 
           val semiSealedRoute = // sealed for exceptions but not for rejections
             Directives.handleExceptions(sealedExceptionHandler)(route)
-          val deferrableRouteResult = RequestContext.forRequest(effectiveRequest).flatMap(semiSealedRoute).flatTap {
+          val deferrableRouteResult = RequestContext.run(effectiveRequest)(semiSealedRoute).flatTap {
             case RouteResult.Complete(response) => connectWebSocketProbe(effectiveRequest, response)
             case _                              => IO.unit
           }
