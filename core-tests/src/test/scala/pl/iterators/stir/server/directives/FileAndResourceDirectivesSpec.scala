@@ -586,13 +586,24 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
       val dir = NioFiles.createTempDirectory("stirResources")
       NioFiles.write(dir.resolve("only-here.txt"), "from the extra loader".getBytes("UTF-8"))
       val loader = new URLClassLoader(Array(dir.toUri.toURL), null)
-      Get() ~> getFromResource("only-here.txt")                                               ~> check { handled shouldEqual false }
-      Get() ~> getFromResource("only-here.txt", `Content-Type`(MediaType.text.plain), loader) ~> check {
-        responseAs[String] shouldEqual "from the extra loader"
-        mediaType shouldEqual MediaType.text.plain
-      }
-      Get("/only-here.txt") ~> getFromResourceDirectory("", loader) ~> check {
-        responseAs[String] shouldEqual "from the extra loader"
+      try {
+        Get() ~> getFromResource("only-here.txt")                                               ~> check { handled shouldEqual false }
+        Get() ~> getFromResource("only-here.txt", `Content-Type`(MediaType.text.plain), loader) ~> check {
+          responseAs[String] shouldEqual "from the extra loader"
+          mediaType shouldEqual MediaType.text.plain
+        }
+        Get() ~> getFromResource("only-here.txt", loader) ~> check {
+          responseAs[String] shouldEqual "from the extra loader"
+          charsetOption shouldEqual Some(Charset.`UTF-8`) // typed by the resolver, like the one-argument form
+        }
+        Get("/only-here.txt") ~> getFromResourceDirectory("", loader) ~> check {
+          responseAs[String] shouldEqual "from the extra loader"
+        }
+      } finally {
+        loader.close()
+        NioFiles.deleteIfExists(dir.resolve("only-here.txt"))
+        NioFiles.deleteIfExists(dir)
+        ()
       }
     }
     "carry an ETag and serve ranges, like files" in {

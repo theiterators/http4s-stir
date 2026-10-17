@@ -154,6 +154,14 @@ trait FileAndResourceDirectives {
   def getFromResource(resourceName: String, contentType: `Content-Type`, classLoader: ClassLoader): Route =
     serveResource(resourceName, Some(contentType), gzipped = false, classLoader = Some(classLoader))
 
+  /**
+   * Completes GET requests with the content of the given class-path resource looked up through the given class
+   * loader and typed by the in-scope [[ContentTypeResolver]].
+   *
+   * @group fileandresource
+   */
+  def getFromResource(resourceName: String, classLoader: ClassLoader)(implicit resolver: ContentTypeResolver): Route =
+    getFromResource(resourceName, Some(classLoader))(resolver)
   private def serveResource(resourceName: String, contentType: Option[`Content-Type`], gzipped: Boolean,
       classLoader: Option[ClassLoader]): Route =
     if (!resourceName.endsWith("/"))
