@@ -4,6 +4,20 @@ import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import org.http4s.{ Charset, ContentCoding, EntityTag, Header, HttpDate, MediaType, RangeUnit, Response, Status, Uri }
 import org.http4s.headers.{ `Accept-Encoding`, `Accept-Ranges`, `Content-Encoding`, `Content-Range`, `Content-Type`, `If-Match`, `If-None-Match`, `If-Unmodified-Since`, `Last-Modified`, ETag, Range }
+import org.http4s.headers.{
+  `Accept-Encoding`,
+  `Accept-Ranges`,
+  `Content-Encoding`,
+  `Content-Range`,
+  `Content-Type`,
+  `If-Match`,
+  `If-Modified-Since`,
+  `If-None-Match`,
+  `If-Unmodified-Since`,
+  `Last-Modified`,
+  ETag,
+  Range
+}
 import org.http4s.headers.Range.SubRange
 import org.typelevel.ci._
 import org.scalatest.{ Inside, Inspectors }
