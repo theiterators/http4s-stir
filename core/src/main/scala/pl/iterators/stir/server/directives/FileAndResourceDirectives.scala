@@ -34,6 +34,7 @@ import pl.iterators.stir.server.{
 }
 
 import java.io.{ File, IOException }
+import java.net.URLDecoder
 
 /**
  * @groupname fileandresource File and resource directives
@@ -307,7 +308,8 @@ object FileAndResourceDirectives extends FileAndResourceDirectives {
   private def withTrailingSlash(path: String): String = if (path.endsWith("/")) path else path + '/'
 
   /**
-   * Whether the resource is a directory, as Pekko checks: a `file:` URL whose decoded path is a directory, or a
+   * Whether the resource is a directory, as Pekko checks: a `file:` URL whose percent-decoded path is a directory (the
+   * file the JDK would open; Pekko's `new File(url.toURI)` fails on an unencoded URL), or a
    * `jar:` URL whose name with a trailing slash resolves to the same entry of the same jar (Pekko's
    * `JarEntry.isDirectory`; on the file system, and with some custom loaders, a trailing slash resolves for plain
    * files too). Other protocols are left to http4s. The name is normalised as http4s normalises it, and the default
@@ -321,7 +323,8 @@ object FileAndResourceDirectives extends FileAndResourceDirectives {
         url.getProtocol match {
           // decoded, as Pekko does: http4s checks the percent-encoded `url.getFile`, which misses a directory whose
           // path has a space or a non-ASCII character, and the JDK then serves a listing of it
-          case "file" => new File(url.toURI).isDirectory
+          // the file the JDK's file: URL connection opens: the path percent-decoded, raw characters as they are
+          case "file" => new File(URLDecoder.decode(url.getPath.replace("+", "%2B"), "UTF-8")).isDirectory
           case "jar"  => Option(loader.getResource(normalized + "/")).exists(_.toString == url.toString + "/")
           case _      => false
         }
