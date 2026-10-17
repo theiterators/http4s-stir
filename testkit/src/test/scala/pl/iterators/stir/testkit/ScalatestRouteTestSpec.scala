@@ -76,6 +76,17 @@ class ScalatestRouteTestSpec extends AnyFreeSpec with Matchers with ScalatestRou
       failure.getMessage shouldEqual "body boom"
     }
 
+    "failing a test whose route never completes over a real server within the timeout, not Ember's shutdown grace" in {
+      implicit val timeout: RouteTestTimeout = RouteTestTimeout(500.millis)
+      val never: Route = _ => IO.never
+      val started = System.nanoTime()
+      val failure = the[TestFailedException] thrownBy {
+        Get() ~!> never ~> check { fail("the check block must not run") }
+      }
+      failure.getMessage should include("Request was neither completed nor rejected within 500 milliseconds")
+      (System.nanoTime() - started) should be < 10.seconds.toNanos
+    }
+
     "honouring a longer route test timeout for a slow route, also over a real server" in {
       implicit val timeout: RouteTestTimeout = RouteTestTimeout(5.seconds)
       Get()                                                ~> complete(IO.sleep(1200.millis).as("slow")) ~> check { responseAs[String] shouldEqual "slow" }

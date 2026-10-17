@@ -18,12 +18,17 @@ trait RouteTestResultComponent {
   class RouteTestResult(timeout: RouteTestTimeout) {
     private[this] var result: Option[Either[Seq[Rejection], Response[IO]]] = None
 
-    /** Runs `io`, failing the test with `what` + " within <timeout>" when it does not finish in time. */
+    /** Runs `io` under the route test timeout, failing the test with `what` + " within <timeout>" when it elapses. */
     private[testkit] def awaitWithinTimeout[A](io: IO[A], what: String)(implicit runtime: IORuntime): A =
-      io.timeout(timeout.duration).handleErrorWith {
-        case _: TimeoutException => IO(failTest(what + " within " + timeout.duration))
-        case other               => IO.raiseError(other)
-      }.unsafeRunSync()
+      failOnTimeout(io.timeout(timeout.duration), what)
+
+    /** Runs `io`; a `TimeoutException` fails the test on the test thread (so the failure keeps its location). */
+    private[testkit] def failOnTimeout[A](io: IO[A], what: String)(implicit runtime: IORuntime): A =
+      io.attempt.unsafeRunSync() match {
+        case Right(value)              => value
+        case Left(_: TimeoutException) => failTest(what + " within " + timeout.duration)
+        case Left(error)               => throw error
+      }
 
     def handled: Boolean = synchronized { result.isDefined && result.get.isRight }
 
