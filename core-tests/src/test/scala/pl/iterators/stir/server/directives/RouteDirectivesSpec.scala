@@ -13,6 +13,14 @@ import java.util.concurrent.atomic.AtomicReference
 class RouteDirectivesSpec extends AnyWordSpec with GenericRoutingSpec {
   override implicit def runtime: IORuntime = IORuntime.global
 
+  "ValidationRejection" should {
+    "take its cause as optional, as Pekko's does" in {
+      Get() ~> reject(ValidationRejection("Invalid input")) ~> check {
+        rejection shouldEqual ValidationRejection("Invalid input", None)
+      }
+    }
+  }
+
   "The `complete` directive" should {
     "send no entity for a status that allows none, with or without headers, as Pekko" in {
       val custom = Headers(Header.Raw(CIString("X-A"), "a"))

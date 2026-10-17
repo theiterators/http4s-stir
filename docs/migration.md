@@ -4,6 +4,14 @@ title: Migration from Pekko/Akka HTTP
 sidebar_position: 26
 ---
 
+- WebSocket: the directives take the server's `WebSocketBuilder2[IO]` and work on http4s `WebSocketFrame`s
+  (`handleWebSocketMessages(ws, pipe)`); `extractWebSocketUpgrade` is replaced by the builder.
+- Security: authenticators receive stir's `CredentialsHelper` (wrapping http4s' `Credentials`) where Pekko passes its
+  `Credentials`.
+- Debugging: `logRequest`, `logResult` and `logRequestResult` take named options (`logHeaders`, `logBody`,
+  `redactHeadersWhen`, `maxBodyBytes`, `logAction`, `redaction`) instead of Pekko's `LoggingMagnet` (a marker string
+  and log level), so `logRequest("marker")` does not compile (see the debugging directives).
+- `listDirectoryContents` takes stir's implicit `DirectoryRenderer`, not Pekko's `DirectoryRenderer` marshaller.
 - **Synchronous execution**: all test assertions run synchronously; there is no async test support. `~>` waits for the
   route, so `~> runRoute` does not separate running the route from checking it as Pekko's does.
 # Migration from Pekko/Akka HTTP
@@ -65,6 +73,23 @@ instead. Other differences that remain:
   does the default exception handler's 500; Pekko sends the status's default message as `text/plain` (for example
   "The requested resource could not be found." for 404, "There was an internal server error." for 500).
 - `parameter("x".repeated)` returns the values in the order of the query string; Pekko returns them reversed.
+- There is no default request-body size limit (Pekko: `max-content-length`, 8 MiB): `entity(as[String])` reads a body
+  of any size. Wrap the routes that read bodies, or the whole route, in `withSizeLimit`
+  (`withSizeLimit(8L * 1024 * 1024)(route).toHttpApp`).
+- `extractClientIP` also reads a client-sent `Remote-Address` header (after `X-Forwarded-For` and `X-Real-Ip`);
+  Pekko ignores that header and falls back to the connection address its server records. Like `X-Forwarded-For`,
+  it is only trustworthy behind a proxy that sets or strips it.
+- The testkit's `~>` sends the request URI as given, with no default host (Pekko's testkit uses
+  `http://example.com`): `extractUri` is relative and `host(...)` needs the request to name its host.
+- `withRequestTimeout` cancels the inner route when it fires and its default answer is an empty 503; Pekko keeps the
+  route running and answers with a text body.
+- The CSV framing of `EntityStreamingSupport.csv()` drops empty lines, strips a `\r` before `\n` and accepts a last
+  line without a newline; Pekko's line framing does none of these.
+- stir has no `Option`, `Either` or `Try` marshallers. With circe's codecs in scope `complete(option)` still compiles
+  but sends `null` with 200 where Pekko answers 404 for `None`, and `as[Option[T]]` decodes a JSON `null` rather
+  than an empty body; match on the option and complete explicitly.
+- `extractUri` gives the request URI as received (relative under HTTP/1); Pekko gives the effective, absolute URI.
+- An empty file is served with the `Content-Type` of its extension; Pekko sends an empty entity without one.
 - Over Ember's HTTP/2 a request carrying its host only in `:authority` (prior knowledge, HTTP/2 over TLS) has no host
   for the host directives (`extractHost` gives `""`, `host(...)` rejects): Ember 0.23.36 drops `:authority`.
 - A request whose URI authority and `Host` header disagree is answered 400 by Pekko; stir names no host for it

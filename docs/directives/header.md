@@ -101,7 +101,9 @@ As with `headerValueByType`, the inner type depends on the header kind: `F[T] = 
 import org.http4s.headers.`Content-Type`
 
 val route: Route = path("check") {
-  optionalHeaderValueByType[`Content-Type`] {
+  // the directive takes implicit parameters, so apply it through a value (or combine it, e.g. `& get`)
+  val contentType = optionalHeaderValueByType[`Content-Type`]
+  contentType {
     case Some(ct) => complete(s"Content-Type: $ct")
     case None     => complete("No Content-Type header found.")
   }

@@ -101,10 +101,8 @@ val route: Route = path("items") {
 - **`Response[IO]`** -- a raw http4s `Response[IO]` is passed through directly.
 
 ```scala
-import org.http4s.Status
-import org.http4s.Headers
-import org.http4s.headers.`Content-Type`
-import org.http4s.MediaType
+import org.http4s.{ Header, Headers, Status }
+import org.typelevel.ci._
 
 // Complete with just a body (200 OK)
 complete("Hello, world!")
@@ -112,8 +110,9 @@ complete("Hello, world!")
 // Complete with a status code and body
 complete((Status.Created, """{"id": 1}"""))
 
-// Complete with status, headers, and body
-complete((Status.Ok, Headers(`Content-Type`(MediaType.application.json)), """{"ok": true}"""))
+// Complete with status, headers, and body (the encoder's `Content-Type` replaces one given in the headers: a String
+// is sent as text/plain, so complete a JSON value with a JSON encoder to send JSON)
+complete((Status.Ok, Headers(Header.Raw(ci"X-Request-Id", "42")), "ok"))
 
 // Complete with just a status code
 complete(Status.NoContent)

@@ -26,9 +26,8 @@ trait MiscDirectives {
     Directive { inner => if (check) inner(()) else reject(ValidationRejection(errorMsg, None)) }
 
   /**
-   * Extracts the client's IP from either the X-Forwarded-For, Remote-Address, X-Real-IP header
-   * or the TCP connection the request was received from
-   * (in that order of priority).
+   * Extracts the client's IP from the X-Forwarded-For, X-Real-Ip or Remote-Address header, or the TCP connection the
+   * request was received from (in that order of priority).
    *
    * @group misc
    */

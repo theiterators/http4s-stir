@@ -49,8 +49,8 @@ sent and the response body fails instead. An element the `Unmarshaller` cannot d
 unmarshaller's own exception (a 500 under the default handler); throw an `IllegalRequestException` from the
 unmarshaller to answer with a 400.
 
-`asSourceOf[T](support)` takes the support explicitly. Combine with `withoutSizeLimit` or a generous
-`withSizeLimit` for unbounded uploads.
+`asSourceOf[T](support)` takes the support explicitly. stir sets no default size limit on request bodies (the
+framing bounds each element), so bound a streamed upload as a whole with `withSizeLimit` where that matters.
 
 ## Completing with a stream
 
