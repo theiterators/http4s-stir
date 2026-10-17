@@ -82,7 +82,7 @@ class DirectiveExamplesSpec extends AnyWordSpec with Matchers with ScalatestRout
     }
     "sum a streamed array" in {
       Post("/", """[{"id":"a","value":1.0},{"id":"b","value":2.5}]""") ~>
-      addHeader(`Content-Type`(MediaType.application.json)) ~> sum ~> check {
+      addHeader(`Content-Type`(MediaType.application.json))            ~> sum ~> check {
         responseAs[String] shouldEqual "Total: 3.5"
       }
     }

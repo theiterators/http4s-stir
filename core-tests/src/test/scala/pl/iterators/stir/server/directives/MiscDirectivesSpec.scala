@@ -3,7 +3,7 @@ package pl.iterators.stir.server.directives
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import com.comcast.ip4s._
-import org.http4s.{ Header, Request, Status, UrlForm }
+import org.http4s.{ Header, HttpVersion, Request, Status, UrlForm }
 import org.http4s.headers.`X-Forwarded-For`
 import org.typelevel.ci.CIString
 import pl.iterators.stir.server._
@@ -91,6 +91,15 @@ class MiscDirectivesSpec extends RoutingSpec {
         status shouldEqual Status.BadRequest
         responseAs[String] shouldEqual "Request entity expected but not supplied"
       }
+    }
+  }
+
+  "the requestEntityEmpty directive on HTTP/2" should {
+    "treat a length-less body as empty but record a warning" in {
+      val before = MiscDirectives.lengthlessHttp2Warnings.get
+      Post("/", "abc")                  ~> removeHeader("Content-Length") ~> ((_: Request[IO]).withHttpVersion(HttpVersion.`HTTP/2`)) ~>
+      requestEntityEmpty { completeOk } ~> check { status shouldEqual Status.Ok }
+      MiscDirectives.lengthlessHttp2Warnings.get should be > before
     }
   }
 
