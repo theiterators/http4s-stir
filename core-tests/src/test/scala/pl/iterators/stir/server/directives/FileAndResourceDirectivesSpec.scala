@@ -1,7 +1,8 @@
 package pl.iterators.stir.server.directives
 
+import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import org.http4s.{ ContentCoding, Header, HttpDate, MediaType, Uri }
+import org.http4s.{ Charset, ContentCoding, Header, HttpDate, MediaType, Response, Status, Uri }
 import org.http4s.headers.{ `Content-Encoding`, `Content-Type`, `Last-Modified` }
 import org.typelevel.ci._
 import org.scalatest.{ Inside, Inspectors }
@@ -592,6 +593,58 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
         responseAs[String] should include("""<a href="/fileA.txt">fileA.txt</a>""")
       }
     }
+    "list a directory requested without a trailing slash as if it had one" in {
+      Get("/sub") ~> listDirectoryContents(base + "/someDir") ~> check {
+        val body = responseAs[String]
+        body should include("<title>Index of /sub/</title>")
+        body should include("""<a href="/">../</a>""")
+        body should include("""<a href="/sub/file.html">file.html</a>""")
+      }
+    }
+    "reject requests to a missing directory" in {
+      Get() ~> listDirectoryContents(base + "/doesNotExist") ~> check { handled shouldEqual false }
+    }
+    "render non-ASCII names and declare the UTF-8 charset" in {
+      Get("/") ~> listDirectoryContents(base) ~> check {
+        header[`Content-Type`].flatMap(_.charset) shouldEqual Some(Charset.`UTF-8`)
+        responseAs[String] should include("""<a href="/sübdir/">sübdir/</a>""")
+      }
+      Get("/s%C3%BCbdir/") ~> listDirectoryContents(base) ~> check {
+        responseAs[String] should include("""<a href="/sübdir/sample späce.PDF">sample späce.PDF</a>""")
+      }
+    }
+    "escape file names in the links and the text" in {
+      val dir = NioFiles.createTempDirectory("stirListing")
+      NioFiles.write(dir.resolve("""a&b<c>"d.txt"""), "123".getBytes("UTF-8"))
+      Get("/") ~> listDirectoryContents(dir.toString) ~> check {
+        responseAs[String] should include(
+          """<a href="/a&amp;b&lt;c&gt;&quot;d.txt">a&amp;b&lt;c&gt;&quot;d.txt</a>""")
+      }
+    }
+    "list a dangling symlink as a file instead of failing" in {
+      val dir = NioFiles.createTempDirectory("stirListing")
+      NioFiles.createSymbolicLink(dir.resolve("dangling"), dir.resolve("nowhere"))
+      NioFiles.write(dir.resolve("real.txt"), "123".getBytes("UTF-8"))
+      Get("/") ~> listDirectoryContents(dir.toString) ~> check {
+        status shouldEqual Status.Ok
+        val body = responseAs[String]
+        body should include("""<a href="/dangling">dangling</a>""")
+        body should include("""<a href="/real.txt">real.txt</a>""")
+      }
+    }
+    "render through a custom renderer" in {
+      implicit val plainText: DirectoryRenderer = listing =>
+        Response[IO]().withEntity(listing.files.sortBy(_.name).map { entry =>
+          if (entry.isDirectory) entry.name + "/" else s"${entry.name}:${entry.size}"
+        }.mkString(listing.path + "\n", "\n", ""))
+      Get("/sub/") ~> listDirectoryContents(base + "/someDir") ~> check {
+        mediaType shouldEqual MediaType.text.plain
+        responseAs[String] shouldEqual "/sub/\nfile.html:0"
+      }
+      Get() ~> listDirectoryContents(base + "/someDir") ~> check {
+        responseAs[String] shouldEqual "/\nfileA.txt:3\nfileB.xml:0\nsub/"
+      }
+    }
   }
 
   "getFromBrowseableDirectory" should {
@@ -605,6 +658,18 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
       Get("/sub/") ~> getFromBrowseableDirectory(base + "/someDir") ~> check {
         responseAs[String] should include("""<a href="/sub/file.html">file.html</a>""")
       }
+    }
+    "serve files and merge listings from several directories" in {
+      val route = getFromBrowseableDirectories(base + "/someDir", base + "/subDirectory")
+      Get("/fileB.xml") ~> route ~> check { status shouldEqual Status.Ok }
+      Get("/empty.pdf") ~> route ~> check { responseAs[Array[Byte]].length shouldEqual 3 }
+      Get("/")          ~> route ~> check {
+        val body = responseAs[String]
+        body should include("""<a href="/sub/">sub/</a>""")
+        body should include("""<a href="/emptySub/">emptySub/</a>""")
+        body should include("""<a href="/empty.pdf">empty.pdf</a>""")
+      }
+      Get("/missing/") ~> route ~> check { handled shouldEqual false }
     }
   }
 
