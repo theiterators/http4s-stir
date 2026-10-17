@@ -5,6 +5,7 @@ import org.scalatest.wordspec.AnyWordSpec
 import pl.iterators.stir.server.directives.DirectoryListing.Entry
 
 import java.time.{ Instant, ZoneOffset }
+import java.util.Locale
 import java.time.format.DateTimeFormatter
 import scala.util.Random
 
@@ -51,6 +52,23 @@ class DirectoryRendererSpec extends AnyWordSpec with Matchers {
       cases.foreach { case (bytes, expected) =>
         withClue(s"$bytes: ") { DirectoryRenderer.humanReadableByteCount(bytes) shouldEqual expected }
       }
+    }
+  }
+
+  "the formatters under a foreign default locale" should {
+    def withDefaultLocale[A](tag: String)(body: => A): A = {
+      val previous = Locale.getDefault
+      Locale.setDefault(Locale.forLanguageTag(tag))
+      try body
+      finally Locale.setDefault(previous)
+    }
+    "still use a decimal point for sizes under tr-TR" in withDefaultLocale("tr-TR") {
+      DirectoryRenderer.humanReadableByteCount(1500000L) shouldEqual "1.5 MB"
+      DirectoryRenderer.humanReadableByteCount(1234L) shouldEqual "1.2 kB"
+    }
+    "still use ASCII digits for dates under ar-EG" in withDefaultLocale("ar-EG") {
+      DirectoryRenderer.isoLikeDateTime(0L) shouldEqual "1970-01-01 00:00:00"
+      DirectoryRenderer.isoLikeDateTime(1709164800000L) shouldEqual "2024-02-29 00:00:00"
     }
   }
 

@@ -4,6 +4,8 @@ import cats.effect.IO
 import org.http4s.{ Charset, MediaType, Response }
 import org.http4s.headers.`Content-Type`
 
+import java.util.Locale
+
 /**
  * The contents of one or more directories, to be rendered by a [[DirectoryRenderer]].
  *
@@ -111,7 +113,7 @@ object DirectoryRenderer {
     if (bytes >= 1000) {
       val exp = (math.log(bytes.toDouble) / math.log(1000)).toInt
       val prefix = "kMGTPE".charAt(exp - 1)
-      f"${bytes / math.pow(1000, exp.toDouble)}%.1f ${prefix}B"
+      "%.1f %sB".formatLocal(Locale.ROOT, bytes / math.pow(1000, exp.toDouble), prefix) // not the default locale
     } else s"$bytes  B"
 
   /** `yyyy-MM-dd HH:mm:ss` in UTC, computed without java.time so it works on every platform. */
@@ -129,6 +131,7 @@ object DirectoryRenderer {
     val day = dayOfYear - (153 * mp + 2) / 5 + 1
     val month = if (mp < 10) mp + 3 else mp - 9
     val year = yearOfEra + era * 400 + (if (month <= 2) 1 else 0)
-    f"$year%04d-$month%02d-$day%02d ${seconds / 3600}%02d:${seconds % 3600 / 60}%02d:${seconds % 60}%02d"
+    "%04d-%02d-%02d %02d:%02d:%02d".formatLocal(Locale.ROOT, year, month, day, seconds / 3600, seconds % 3600 / 60,
+      seconds % 60) // Locale.ROOT: %d digits would otherwise follow the default locale (Arabic-Indic, Thai)
   }
 }

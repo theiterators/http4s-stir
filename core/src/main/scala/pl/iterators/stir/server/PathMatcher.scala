@@ -300,28 +300,30 @@ trait ImplicitPathMatcherConstruction {
     regex.pattern.matcher("").groupCount() match {
       case 0 => new PathMatcher1[String] {
           def apply(path: Path) = path.segments match {
-            case segment +: tail => regex.findPrefixOf(segment.decoded()) match {
+            case segment +: tail if !path.absolute =>
+              regex.findPrefixOf(segment.decoded()) match {
                 case Some(m) if segment.decoded().substring(m.length).nonEmpty =>
                   Matched(pathWithSegments(path, Path.Segment(segment.decoded().substring(m.length)) +: tail),
                     Tuple1(m))
                 case Some(m) => Matched(pathWithSegments(path.toAbsolute, tail), Tuple1(m))
                 case None    => Unmatched
               }
-            case _ if path.isEmpty && matchesEmptyPath => PathMatcher.EmptyMatch
-            case _                                     => Unmatched
+            case _ if !path.absolute && path.isEmpty && matchesEmptyPath => PathMatcher.EmptyMatch
+            case _                                                       => Unmatched
           }
         }
       case 1 => new PathMatcher1[String] {
           def apply(path: Path) = path.segments match {
-            case segment +: tail => regex.findPrefixMatchOf(segment.decoded()) match {
+            case segment +: tail if !path.absolute =>
+              regex.findPrefixMatchOf(segment.decoded()) match {
                 case Some(m) if segment.decoded().substring(m.end).nonEmpty =>
                   Matched(pathWithSegments(path, Path.Segment(segment.decoded().substring(m.end)) +: tail),
                     Tuple1(m.group(1)))
                 case Some(m) => Matched(pathWithSegments(path.toAbsolute, tail), Tuple1(m.group(1)))
                 case None    => Unmatched
               }
-            case _ if path.isEmpty && matchesEmptyPath => PathMatcher.EmptyMatch
-            case _                                     => Unmatched
+            case _ if !path.absolute && path.isEmpty && matchesEmptyPath => PathMatcher.EmptyMatch
+            case _                                                       => Unmatched
           }
         }
       case _ => throw new IllegalArgumentException("Path regex '" + regex.pattern.pattern +
@@ -473,7 +475,7 @@ trait PathMatchers {
     val maxDivBase = max / base
 
     def apply(path: Path) = path.segments match {
-      case s +: tail =>
+      case s +: tail if !path.absolute =>
         val segment = s.decoded()
         @tailrec def digits(ix: Int = 0, value: T = minusOne): Matching[Tuple1[T]] = {
           val a = if (ix < segment.length) fromChar(segment.charAt(ix)) else minusOne

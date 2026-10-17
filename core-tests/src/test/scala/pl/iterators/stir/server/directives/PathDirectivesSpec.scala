@@ -336,6 +336,28 @@ class PathDirectivesSpec extends RoutingSpec with Inside {
     })
     "accept [/orders/123] and leave the trailing slash".inThe(test("123:/orders/"))
     "reject [/orders/abc]".inThe(test())
+    "reject [/orders/123/]".inThe(test())
+  }
+
+  "rawPathPrefix(IntNumber)" should {
+    val test = testFor(rawPathPrefix(IntNumber) {
+      echoCaptureAndUnmatchedPath
+    })
+    "reject [/23] because the leading slash is not consumed".inThe(test())
+  }
+
+  """rawPathPrefix("\\d+".r)""" should {
+    val test = testFor(rawPathPrefix("\\d+".r) {
+      echoCaptureAndUnmatchedPath
+    })
+    "reject [/23] because the leading slash is not consumed".inThe(test())
+  }
+
+  """rawPathPrefix(".*".r)""" should {
+    val test = testFor(rawPathPrefix(".*".r) {
+      echoCaptureAndUnmatchedPath
+    })
+    "reject [/] because the slash is not consumed".inThe(test())
   }
 
   "pathPrefix(CustomShortNumber)" should {

@@ -9,6 +9,8 @@ import org.scalatest.Inside
 import org.typelevel.ci.CIString
 import pl.iterators.stir.server._
 
+import java.util.Locale
+
 class HeaderDirectivesSpec extends RoutingSpec with Inside {
   override implicit def runtime: IORuntime = IORuntime.global
   "The headerValuePF directive" should {
@@ -75,6 +77,19 @@ class HeaderDirectivesSpec extends RoutingSpec with Inside {
 //        }
 //      }
 //    }
+  }
+
+  "The headerValueByName directive under a Turkish default locale" should {
+    "extract a header whose name contains a capital I" in {
+      val previous = Locale.getDefault
+      Locale.setDefault(Locale.forLanguageTag("tr-TR"))
+      try {
+        Get("abc")                                                 ~> addHeader(Header.Raw(CIString("If-Match"), "\"xyzzy\"")) ~>
+        headerValueByName("If-Match") { value => complete(value) } ~> check {
+          responseAs[String] shouldEqual "\"xyzzy\""
+        }
+      } finally Locale.setDefault(previous)
+    }
   }
 
   "The headerValueByName directive" should {
