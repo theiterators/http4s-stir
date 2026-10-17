@@ -243,11 +243,41 @@ object MiscDirectives extends MiscDirectives {
 
   private[stir] val SharedBodyKey: Key[SharedBody] = Key.newKey[SyncIO, SharedBody].unsafeRunSync()
 
-  /** Prepares a request for routing: a length-less HTTP/2 request gets its body through a [[SharedBody]]. */
+  /**
+   * Prepares a request for routing: a length-less HTTP/2 request gets its body through a [[SharedBody]], any other
+   * body through [[guardRereads]].
+   */
   private[stir] def prepare(request: Request[IO]): IO[Request[IO]] =
-    if (!lengthlessHttp2(request)) IO.pure(request)
-    else
+    if (lengthlessHttp2(request))
       SharedBody(request.body).map(shared => request.withAttribute(SharedBodyKey, shared).withBodyStream(shared.body))
+    else if (request.body eq EmptyBody) IO.pure(request)
+    else
+      guardRereads(request.body, singleRead = request.isChunked || request.contentLength.isEmpty)
+        .map(request.withBodyStream)
+
+  /**
+   * The body, failing at once when it is read again where the server cannot hand it out again: a server hands a
+   * network body out once, and read again Ember's HTTP/1 body re-emits what it buffered and then waits on the socket
+   * for bytes that were already taken, so an alternative re-reading it would hang until the idle timeout instead of
+   * being answered (Pekko fails the second materialization of a streamed entity the same way).
+   *
+   *  - A chunked or length-less body (`singleRead`) can be read once: any later read fails.
+   *  - A body of known length fails a later read after a read that stopped partway (an error, a cancellation, a
+   *    reader that stopped before asking for the end); one read to its end stays readable as before.
+   */
+  private[stir] def guardRereads(body: EntityBody[IO], singleRead: Boolean): IO[EntityBody[IO]] =
+    (Ref.of[IO, Boolean](false), Ref.of[IO, Boolean](false)).mapN { (started, readPartly) =>
+      Stream.eval((started.getAndSet(true), readPartly.get, Ref.of[IO, Boolean](false)).tupled).flatMap {
+        case (wasStarted, partly, ended) =>
+          if (partly || (singleRead && wasStarted)) Stream.raiseError[IO](new IllegalStateException(RereadMessage))
+          // a reader stopping early closes the stream normally, so whether the body reached its end is recorded
+          // here; a reader that stops after the last byte without asking for more counts as stopping early
+          else (body ++ Stream.exec(ended.set(true))).onFinalize(ended.get.flatMap(readPartly.set(true).unlessA(_)))
+      }
+    }
+
+  private[stir] val RereadMessage: String =
+    "The request entity was read before (by an earlier route) and cannot be read again"
 
   private val _requestEntityEmpty: Directive0 =
     knownEmpty.flatMap(if (_) pass else reject)
