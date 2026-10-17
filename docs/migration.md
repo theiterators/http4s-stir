@@ -131,6 +131,8 @@ instead. Other differences that remain:
   of the text. Error responses (4xx, 5xx: `complete(Status.NotFound, "not found")`) are sent whatever the client
   accepts, as Pekko sends them through an opaque fallback, and exception and rejection handlers are exempt. To keep the old behaviour for a
   route, wrap it in `mapRequestContext(_.withAcceptAll)`; see "Content negotiation" in the marshalling directives.
+- `encodeResponse` / `encodeResponseWith` flush every chunk they compress, as Pekko does: a streamed response used to be
+  held back until 32 KiB of compressed output had accumulated (or the stream ended).
 
 ## Testkit differences
 
