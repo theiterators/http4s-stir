@@ -5,6 +5,7 @@ import org.http4s.Method._
 import org.http4s.headers.Authorization
 import org.http4s.{ Credentials, EmptyBody, EntityBody, EntityEncoder, Header, Headers, Method, Request, Uri }
 import org.typelevel.ci.CIString
+import org.typelevel.vault.Key
 import pl.iterators.stir.server.directives.MethodDirectives.QUERY
 
 trait RequestBuilding {
@@ -71,6 +72,9 @@ trait RequestBuilding {
     _.filterHeaders(header => !names.map(CIString(_)).contains(header.name))
 
   def addCredentials(credentials: Credentials) = addHeader(Authorization(credentials))
+
+  /** Sets a request attribute, as Pekko's `addAttribute`; read it in a route with `attribute(key)`. */
+  def addAttribute[T](key: Key[T], value: T): RequestTransformer = _.withAttribute(key, value)
 //
 //  def logRequest(log: LoggingAdapter, level: Logging.LogLevel = Logging.DebugLevel) = logValue[HttpRequest](log, level)
 //

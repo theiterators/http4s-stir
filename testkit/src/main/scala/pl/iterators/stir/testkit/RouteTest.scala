@@ -10,19 +10,35 @@ import org.http4s.ember.server._
 import org.http4s.headers.{ `Content-Type`, Upgrade }
 import org.typelevel.ci.CIString
 import pl.iterators.stir.server._
+import pl.iterators.stir.server.directives.WebSocketDirectives.WebSocketHandlerKey
 
+import java.util.concurrent.ConcurrentLinkedQueue
 import scala.annotation.unused
 import scala.concurrent.duration.{ Duration, FiniteDuration }
 import scala.reflect.ClassTag
 import scala.util.DynamicVariable
 
-trait RouteTest extends RequestBuilding with RouteTestResultComponent
+trait RouteTest extends RequestBuilding with WSTestRequestBuilding with RouteTestResultComponent
     with MarshallingTestUtils {
   this: TestFrameworkInterface =>
 
   implicit def runtime: IORuntime
 
-  def cleanUp(): Unit = ()
+  /** Cancels the WebSocket handlers still running from this suite's `WS(...)` requests; called from `afterAll`. */
+  def cleanUp(): Unit = closeWebSocketProbes()
+
+  private val connectedProbes = new ConcurrentLinkedQueue[WSProbe]()
+
+  /** Wires the probe a `WS(...)` request carries to the handler the route upgraded with, when both are present. */
+  private def connectWebSocketProbe(request: Request[IO], response: Response[IO]): IO[Unit] =
+    (request.attributes.lookup(WSProbe.RequestKey), response.attributes.lookup(WebSocketHandlerKey)) match {
+      case (Some(probe), Some(handler)) => probe.connect(handler) *> IO(connectedProbes.add(probe)).void
+      case _                            => IO.unit
+    }
+
+  /** Cancels every handler a probe of this suite is still running. */
+  protected def closeWebSocketProbes(): Unit =
+    Iterator.continually(connectedProbes.poll()).takeWhile(_ != null).foreach(_.close().unsafeRunSync())
 
   private val dynRR = new DynamicVariable[RouteTestResult](null)
   private def result =
@@ -168,7 +184,10 @@ trait RouteTest extends RequestBuilding with RouteTestResultComponent
 
           val semiSealedRoute = // sealed for exceptions but not for rejections
             Directives.handleExceptions(sealedExceptionHandler)(route)
-          val deferrableRouteResult = semiSealedRoute(ctx)
+          val deferrableRouteResult = semiSealedRoute(ctx).flatTap {
+            case RouteResult.Complete(response) => connectWebSocketProbe(effectiveRequest, response)
+            case _                              => IO.unit
+          }
           routeTestResult.awaitWithinTimeout(deferrableRouteResult.map(routeTestResult.handleResult),
             "Request was neither completed nor rejected")
           routeTestResult
@@ -198,6 +217,7 @@ trait RouteTest extends RequestBuilding with RouteTestResultComponent
   }
 }
 private[stir] object RouteTest {
+
   def runRouteClientServer(request: Request[IO], route: Route, timeout: FiniteDuration): IO[Response[IO]] = {
     val resources = for {
       server <- EmberServerBuilder
