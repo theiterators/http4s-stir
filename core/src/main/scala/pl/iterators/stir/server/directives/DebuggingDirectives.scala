@@ -3,7 +3,7 @@ package pl.iterators.stir.server.directives
 import cats.effect.IO
 import cats.effect.std.Console
 import fs2.Pull
-import org.http4s.Headers
+import org.http4s.{ Headers, Request }
 import org.typelevel.ci.CIString
 import pl.iterators.stir.server.{ Directive, Directive0, RouteResult }
 
@@ -105,6 +105,28 @@ trait DebuggingDirectives {
     logResult(logHeaders, logBody, redactHeadersWhen, maxBodyBytes, logAction, redaction) &
     logRequest(logHeaders, logBody, redactHeadersWhen, maxBodyBytes, logAction, redaction)
   }
+
+  /**
+   * Produces a log entry for the [[RouteResult]]s the given function chooses to describe, with the request at hand:
+   * Pekko's `logRequestResult(show: HttpRequest => RouteResult => Option[LogEntry])`, so that for instance only
+   * rejections are logged. `show` runs after the inner route and may read the response body (the body is a
+   * re-runnable stream for `complete`d values; a one-shot stream would be consumed). A `None`, a failing `show` or a
+   * failing `logAction` never affects the result.
+   *
+   * @group debugging
+   */
+  def logRequestResultWith(show: Request[IO] => RouteResult => IO[Option[String]],
+      logAction: Option[String => IO[Unit]] = None): Directive0 =
+    Directive { inner => ctx =>
+      val log = DebuggingDirectives.safeLog(logAction)
+      val showResult = show(ctx.request)
+      inner(())(ctx).flatTap { result =>
+        IO.defer(showResult(result)).attempt.flatMap {
+          case Right(Some(line)) => log(line)
+          case _                 => IO.unit
+        }
+      }
+    }
 }
 
 object DebuggingDirectives extends DebuggingDirectives {

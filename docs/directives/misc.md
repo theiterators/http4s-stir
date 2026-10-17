@@ -169,6 +169,26 @@ val route: Route = logRequestResult(logAction = Some(msg => Logger[IO].info(msg)
 }
 ```
 
+### logRequestResultWith
+
+Logs what a function of the request and the `RouteResult` returns, when it returns `Some`, as Pekko's
+`logRequestResult(show)` with an `Option[LogEntry]`. The function runs after the inner route, so it can look at the
+response or the rejections, and may read a `complete`d response's body (the stream is re-runnable; a one-shot stream
+would be consumed). A `None`, a failing function or a failing log action never affects the result. Logging only
+rejections:
+
+```scala
+val rejectionLogger: Request[IO] => RouteResult => IO[Option[String]] = request => {
+  case RouteResult.Rejected(rejections) =>
+    IO.pure(Some(s"${request.method} ${request.uri} was rejected: ${rejections.mkString(", ")}"))
+  case _ => IO.pure(None)
+}
+
+val route: Route = logRequestResultWith(rejectionLogger) {
+  parameter("id".as[Int]) { id => complete(s"id $id") }
+}
+```
+
 ### Redacting sensitive data
 
 With no configuration, values under conventionally named keys never reach the log:
