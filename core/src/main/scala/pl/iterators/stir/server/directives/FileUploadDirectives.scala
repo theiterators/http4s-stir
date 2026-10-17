@@ -69,7 +69,8 @@ trait FileUploadDirectives {
   /**
    * Like [[fileUpload]], but decodes the multipart body with http4s' mixed decoder, which spools parts above
    * 50 MiB to a temporary file, and keeps that decoder (and its temporary files) alive until the inner route has
-   * completed and the response body has been consumed. The part's stream can therefore be read inside the route
+   * completed and the response body has been consumed; a route that rejects, fails or is cancelled before this
+   * directive completes releases them at once. The part's stream can therefore be read inside the route
    * or streamed as the response. If there is no such field the request is rejected; if several parts share the
    * name the first one is used.
    *
@@ -84,29 +85,34 @@ trait FileUploadDirectives {
    */
   def fileUploadSpooled(fieldName: String, maxSizeBeforeWrite: Int): Directive1[(FileInfo, Stream[IO, Byte])] =
     Directive[Tuple1[(FileInfo, Stream[IO, Byte])]] { inner => ctx =>
-      EntityDecoder.mixedMultipartResource[IO](maxSizeBeforeWrite = maxSizeBeforeWrite, maxParts = MaxParts,
-        failOnLimit = true).allocated.flatMap {
-        case (decoder, releaseDecoder) =>
-          IO.ref(false).flatMap { released =>
-            // the decoder is released once: on rejection, on error, or when the response body is finalized
-            val release = released.getAndSet(true).flatMap(done => if (done) IO.unit else releaseDecoder)
-            val run = MarshallingDirectives.decodeEntity(ctx.request, decoder).flatMap {
-              case Left(rejection) => IO.pure(RouteResult.Rejected(rejection :: Nil))
-              case Right(formData) =>
-                formData.parts.find(part => part.name.contains(fieldName) && part.filename.isDefined) match {
-                  case Some(part) => inner(Tuple1((fileInfo(part), part.body)))(ctx)
-                  case None       => IO.pure(RouteResult.Rejected(MissingFormFieldRejection(fieldName) :: Nil))
-                }
+      // the decoder is owned from the moment it is allocated, so a cancellation (a request timeout, a dropped
+      // connection) releases it and its temporary files too
+      IO.uncancelable { poll =>
+        poll(EntityDecoder.mixedMultipartResource[IO](maxSizeBeforeWrite = maxSizeBeforeWrite, maxParts = MaxParts,
+          failOnLimit = true).allocated).flatMap {
+          case (decoder, releaseDecoder) =>
+            IO.ref(false).flatMap { released =>
+              // the decoder is released once: on rejection, on error, on cancellation, or when the response body is
+              // finalized
+              val release = released.getAndSet(true).flatMap(done => if (done) IO.unit else releaseDecoder)
+              val run = MarshallingDirectives.decodeEntity(ctx.request, decoder).flatMap {
+                case Left(rejection) => IO.pure(RouteResult.Rejected(rejection :: Nil))
+                case Right(formData) =>
+                  formData.parts.find(part => part.name.contains(fieldName) && part.filename.isDefined) match {
+                    case Some(part) => inner(Tuple1((fileInfo(part), part.body)))(ctx)
+                    case None       => IO.pure(RouteResult.Rejected(MissingFormFieldRejection(fieldName) :: Nil))
+                  }
+              }
+              poll(run).onCancel(release).attempt.flatMap {
+                case Right(RouteResult.Complete(response)) if response.body eq EmptyBody =>
+                  release.as(RouteResult.Complete(response))
+                case Right(RouteResult.Complete(response)) =>
+                  IO.pure(RouteResult.Complete(response.withBodyStream(response.body.onFinalize(release))))
+                case Right(rejected) => release.as(rejected)
+                case Left(error)     => release.attempt *> IO.raiseError(error)
+              }
             }
-            run.attempt.flatMap {
-              case Right(RouteResult.Complete(response)) if response.body eq EmptyBody =>
-                release.as(RouteResult.Complete(response))
-              case Right(RouteResult.Complete(response)) =>
-                IO.pure(RouteResult.Complete(response.withBodyStream(response.body.onFinalize(release))))
-              case Right(rejected) => release.as(rejected)
-              case Left(error)     => release *> IO.raiseError(error)
-            }
-          }
+        }
       }
     } & cancelRejections(RequestEntityExpectedRejection.getClass, classOf[UnsupportedRequestContentTypeRejection])
 
