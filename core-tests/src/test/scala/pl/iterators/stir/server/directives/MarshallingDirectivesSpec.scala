@@ -132,6 +132,11 @@ class MarshallingDirectivesSpec extends RoutingSpec with Inside {
         responseAs[String] shouldEqual "application/json"
       }
     }
+    "serve a route run with every representation acceptable whatever Accept says" in {
+      Get() ~> addHeader(Accept(MediaType.application.xml)) ~> mapRequestContext(_.withAcceptAll)(text) ~> check {
+        responseAs[String] shouldEqual "foo"
+      }
+    }
   }
 
   "The 'completeWith' directive" should {

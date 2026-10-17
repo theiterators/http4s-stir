@@ -19,7 +19,7 @@ case class RequestContext(request: Request[IO], unmatchedPath: Path) {
     obj.marshaller.toResponse(obj.value).map { response =>
       if (response.attributes.lookup(NegotiatedKey).isEmpty) RouteResult.Complete(response)
       else {
-        val plain = response.withAttributes(response.attributes.delete(NegotiatedKey))
+        val plain = response.withoutAttribute(NegotiatedKey)
         plain.contentType match {
           case Some(contentType) if !acceptsAll && !ContentNegotiation.isAcceptable(request, contentType) =>
             RouteResult.Rejected(UnacceptedResponseContentTypeRejection(Set(contentType)) :: Nil)
@@ -32,7 +32,7 @@ case class RequestContext(request: Request[IO], unmatchedPath: Path) {
    * Returns a copy of this context in which every response is acceptable to the client, whatever the request's
    * `Accept` header says: Pekko's `withAcceptAll`, used for the responses of exception and rejection handlers. The
    * header itself stays on the request, so a handler can still choose a representation by it (Pekko appends
-   * `*&#47;*;q=MIN` instead, which lets a `q=0` range still reject the handler's response).
+   * a wildcard range with the smallest quality instead, which lets a `q=0` range still reject the handler's response).
    */
   def withAcceptAll: RequestContext = copy(request = request.withAttribute(AcceptAllKey, ()))
 
