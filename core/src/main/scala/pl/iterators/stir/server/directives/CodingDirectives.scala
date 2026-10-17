@@ -140,8 +140,12 @@ object CodingDirectives extends CodingDirectives {
 
   private val compression: Compression[IO] = fs2ioCompressionForIO
 
-  private val GzipParams = DeflateParams(header = ZLibParams.Header.GZIP)
-  private val DeflateZlibParams = DeflateParams(header = ZLibParams.Header.ZLIB)
+  // each chunk is flushed, as Pekko's encoders flush every chunk: a streamed response (server-sent events, a slow
+  // producer) reaches the client as it is produced instead of when 32 KiB have accumulated
+  private val GzipParams =
+    DeflateParams(header = ZLibParams.Header.GZIP, flushMode = DeflateParams.FlushMode.SYNC_FLUSH)
+  private val DeflateZlibParams =
+    DeflateParams(header = ZLibParams.Header.ZLIB, flushMode = DeflateParams.FlushMode.SYNC_FLUSH)
   private val InflateZlibParams = InflateParams(header = ZLibParams.Header.ZLIB)
 
   private def theseOrDefault(these: Seq[ContentCoding]): Seq[ContentCoding] =
