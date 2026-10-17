@@ -12,7 +12,11 @@ Host directives provide filtering and extraction based on the request's `Host` h
 
 ### extractHost
 
-Extracts the hostname from the request's `Host` header as a `String`.
+Extracts the hostname of the request as a `String`, as Pekko does from the request's effective URI: the authority of
+the request URI (an absolute-form request, or an HTTP/2 request's `:authority`), else the `Host` header (RFC 7230
+5.4), an IPv6 address without brackets, and `""` when the request names no host. Ember 0.23.36 drops an HTTP/2
+request's `:authority` (it parses `host:port` as a URI and finds no authority) and HTTP/2 brings no `Host` header, so
+over Ember's HTTP/2 the host is `""` and `host(...)` rejects.
 
 ```scala
 val route: Route = extractHost { hostname =>
