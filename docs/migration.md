@@ -51,6 +51,10 @@ instead. Other differences that remain:
   `Accept-Language` q-values as leniently as Pekko).
 - Over Ember's HTTP/2 the host directives see no host (`extractHost` gives `""`, `host(...)` rejects): Ember 0.23.36
   drops the `:authority` pseudo-header, and HTTP/2 brings no `Host` header.
+- Over Ember's HTTP/2 a request carrying its host only in `:authority` (prior knowledge, HTTP/2 over TLS) has no host
+  for the host directives (`extractHost` gives `""`, `host(...)` rejects): Ember 0.23.36 drops `:authority`.
+- A request whose URI authority and `Host` header disagree is answered 400 by Pekko; stir names no host for it
+  (`extractHost` gives `""`, so `host(...)` rejects).
 - Content negotiation differs from Pekko for wildcard ranges with parameters: stir ignores `charset` on every range
   (Pekko only on `type/subtype` ranges, so its `text/*;charset=...` never matches) and does not count a wildcard
   range's parameters towards its specificity.
@@ -137,8 +141,9 @@ instead. Other differences that remain:
   `=` are accepted (the header used to be ignored, picking the first language), and a q-value with more than three
   decimals is truncated instead of rounded (`q=0.4999` now ranks below `q=0.5`).
 - `extractHost` and `host` read the authority of the request URI first, then the `Host` header, as Pekko reads the
-  effective URI: an absolute-form request is matched by its URI's host (it used to need a `Host` header, which
-  absolute-form requests may differ from), and an IPv6 host comes without brackets (`::1`, was `[::1]`).
+  effective URI: an absolute-form request is matched by its URI's host (when its `Host` header disagrees, no host
+  is named), a host name is lowercased (`Example.COM` matches `host("example.com")`), and an IPv6 host comes
+  without brackets (`::1`, was `[::1]`).
 
 ## Testkit differences
 
