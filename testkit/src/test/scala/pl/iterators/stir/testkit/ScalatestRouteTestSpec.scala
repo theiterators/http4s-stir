@@ -2,7 +2,7 @@ package pl.iterators.stir.testkit
 
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import org.http4s.{ Header, Response }
+import org.http4s.{ Header, Headers, Response }
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
@@ -18,6 +18,27 @@ class ScalatestRouteTestSpec extends AnyFreeSpec with Matchers with ScalatestRou
   override implicit val runtime: IORuntime = IORuntime.global
 
   "The ScalatestRouteTest should support" - {
+
+    "inspecting the chunks of a streamed response" in {
+      val body = Stream.chunk(Chunk.array("ab".getBytes("UTF-8"))) ++ Stream.chunk(Chunk.array("cd".getBytes("UTF-8")))
+      Get() ~> complete(Response[IO]().withBodyStream(body)) ~> check {
+        chunks.map(chunk => new String(chunk.toArray, "UTF-8")) shouldEqual List("ab", "cd")
+      }
+    }
+
+    "inspecting the chunk stream of a streamed response" in {
+      val body = Stream.chunk(Chunk.array("ab".getBytes("UTF-8"))) ++ Stream.chunk(Chunk.array("cd".getBytes("UTF-8")))
+      Get() ~> complete(Response[IO]().withBodyStream(body)) ~> check {
+        chunksStream.compile.toList.unsafeRunSync().size shouldEqual 2
+      }
+    }
+
+    "inspecting the trailer headers of a response" in {
+      val trailers = IO.pure(Headers(Header.Raw(CIString("X-Trailer"), "done")))
+      Get() ~> complete(Response[IO]().withTrailerHeaders(trailers)) ~> check {
+        trailer.get(CIString("X-Trailer")).map(_.head.value) shouldEqual Some("done")
+      }
+    }
 
     "the most simple and direct route test" in {
       Get() ~> complete(Response[IO]()) ~> { rr => rr.response.status } shouldEqual Response[IO]().status

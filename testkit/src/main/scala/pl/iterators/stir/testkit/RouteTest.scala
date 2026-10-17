@@ -3,6 +3,7 @@ package pl.iterators.stir.testkit
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import com.comcast.ip4s._
+import fs2.{ Chunk, Stream }
 import org.http4s._
 import org.http4s.ember.client.EmberClientBuilder
 import org.http4s.ember.server._
@@ -35,8 +36,18 @@ trait RouteTest extends RequestBuilding with RouteTestResultComponent
   def response: Response[IO] = result.response
   def responseEntity: EntityBody[IO] = result.entity
   private def rawResponse: Response[IO] = result.rawResponse
-//  def chunks: immutable.Seq[HttpEntity.ChunkStreamPart] = result.chunks
-//  def chunksStream: Source[ChunkStreamPart, Any] = result.chunksStream
+
+  /**
+   * The chunks of the response body as the route produced them (one `fs2.Chunk` per emitted chunk). Consumes the
+   * raw body: for a one-shot body use either `chunks` / `chunksStream` or `response` / `responseAs`, not both.
+   */
+  def chunks: Seq[Chunk[Byte]] = rawResponse.body.chunks.compile.toList.unsafeRunSync()
+
+  /** The response body as a stream of chunks; see `chunks` for the consumption caveat. */
+  def chunksStream: Stream[IO, Chunk[Byte]] = rawResponse.body.chunks
+
+  /** The trailer headers the route attached to the response (`Response.withTrailerHeaders`), empty when none. */
+  def trailer: Headers = rawResponse.trailerHeaders.unsafeRunSync()
   def entityAs[T](implicit um: EntityDecoder[IO, T], cls: ClassTag[T]): T = {
     def msg(e: Throwable) =
       s"Could not unmarshal entity to type '${implicitly[ClassTag[T]]}' for `entityAs` assertion: $e\n\nResponse was: $responseSafe"
@@ -62,15 +73,6 @@ trait RouteTest extends RequestBuilding with RouteTestResultComponent
   def header[T](implicit ev: Header.Select[T], @unused cls: ClassTag[T]): Option[ev.F[T]] = rawResponse.headers.get(ev)
   def header(name: String): Option[Header.Raw] = rawResponse.headers.get(CIString(name)).map(_.head)
   def status: Status = rawResponse.status
-
-//  def closingExtension: String = chunks.lastOption match {
-//    case Some(HttpEntity.LastChunk(extension, _)) => extension
-//    case _                                        => ""
-//  }
-//  def trailer: immutable.Seq[HttpHeader] = chunks.lastOption match {
-//    case Some(HttpEntity.LastChunk(_, trailer)) => trailer
-//    case _                                      => Nil
-//  }
 
   def rejections: Seq[Rejection] = result.rejections
   def rejection: Rejection = {

@@ -118,6 +118,18 @@ Get("/ws") ~> upgrade ~> handleWebSocketMessagesForProtocol(ws, handler, "json")
 }
 ```
 
+## Streamed Responses
+
+`chunks` returns the response body as the list of `fs2.Chunk`s the route produced, `chunksStream` the same as a
+`Stream[IO, Chunk[Byte]]`, and `trailer` the trailer headers attached with `withTrailerHeaders`. Both chunk
+accessors read the raw body; for a one-shot body use either them or `responseAs`, not both.
+
+```scala
+Get("/events") ~> route ~> check {
+  chunks.map(chunk => new String(chunk.toArray, "UTF-8")) shouldEqual List("event 1\n", "event 2\n")
+}
+```
+
 ## Request Builders
 
 The following request builders are available. Each accepts a URI string or `Uri` value, and optionally a request body:
