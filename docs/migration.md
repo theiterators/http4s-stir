@@ -29,7 +29,18 @@ Most directives have the **same names and signatures** as their Pekko HTTP count
 - `complete(IO(...))` replaces `complete(Future(...))`
 - `entity(as[T])` works identically, using http4s `EntityDecoder` instead of Akka `Unmarshaller`
 
-Path directives, method directives, parameter directives, header directives, and most other directive categories are API-compatible. Code migration typically involves updating imports and replacing `Future` with `IO`.
+Path directives, method directives, parameter directives, header directives, and most other directive categories are
+API-compatible. Code migration typically involves updating imports and replacing `Future` with `IO`. The exceptions
+whose signatures differ:
+
+- WebSocket: the directives take the server's `WebSocketBuilder2[IO]` and work on http4s `WebSocketFrame`s
+  (`handleWebSocketMessages(ws, pipe)`); `extractWebSocketUpgrade` is replaced by the builder.
+- Security: authenticators receive stir's `CredentialsHelper` (wrapping http4s' `Credentials`) where Pekko passes its
+  `Credentials`.
+- Debugging: `logRequest`, `logResult` and `logRequestResult` take named options (`logHeaders`, `logBody`,
+  `redactHeadersWhen`, `maxBodyBytes`, `logAction`, `redaction`) instead of Pekko's `LoggingMagnet` (a marker string
+  and log level), so `logRequest("marker")` does not compile (see the debugging directives).
+- `listDirectoryContents` takes stir's implicit `DirectoryRenderer`, not Pekko's `DirectoryRenderer` marshaller.
 
 ## What is not implemented
 
@@ -49,6 +60,23 @@ instead. Other differences that remain:
 - `parameter("x".repeated)` returns the values in the order of the query string; Pekko returns them reversed.
 - A header that http4s cannot parse is ignored where Pekko may parse it leniently (`selectPreferredLanguage` reads
   `Accept-Language` q-values as leniently as Pekko).
+- There is no default request-body size limit (Pekko: `max-content-length`, 8 MiB): `entity(as[String])` reads a body
+  of any size. Wrap the routes that read bodies, or the whole route, in `withSizeLimit`
+  (`withSizeLimit(8L * 1024 * 1024)(route).toHttpApp`).
+- `extractClientIP` also reads a client-sent `Remote-Address` header (after `X-Forwarded-For` and `X-Real-Ip`);
+  Pekko ignores that header and falls back to the connection address its server records. Like `X-Forwarded-For`,
+  it is only trustworthy behind a proxy that sets or strips it.
+- The testkit's `~>` sends the request URI as given, with no default host (Pekko's testkit uses
+  `http://example.com`): `extractUri` is relative and `host(...)` needs the request to name its host.
+- `withRequestTimeout` cancels the inner route when it fires and its default answer is an empty 503; Pekko keeps the
+  route running and answers with a text body.
+- The CSV framing of `EntityStreamingSupport.csv()` drops empty lines, strips a `\r` before `\n` and accepts a last
+  line without a newline; Pekko's line framing does none of these.
+- stir has no `Option`, `Either` or `Try` marshallers. With circe's codecs in scope `complete(option)` still compiles
+  but sends `null` with 200 where Pekko answers 404 for `None`, and `as[Option[T]]` decodes a JSON `null` rather
+  than an empty body; match on the option and complete explicitly.
+- `extractUri` gives the request URI as received (relative under HTTP/1); Pekko gives the effective, absolute URI.
+- An empty file is served with the `Content-Type` of its extension; Pekko sends an empty entity without one.
 - Content negotiation differs from Pekko for wildcard ranges with parameters: stir ignores `charset` on every range
   (Pekko only on `type/subtype` ranges, so its `text/*;charset=...` never matches) and does not count a wildcard
   range's parameters towards its specificity.

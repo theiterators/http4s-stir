@@ -84,13 +84,22 @@ object Main extends IOApp.Simple {
       .default[IO]
       .withHost(ipv4"0.0.0.0")
       .withPort(port"8080")
-      .withHttpApp(route.toHttpRoutes.orNotFound)
+      .withHttpApp(route.toHttpApp)
       .build
       .use(_ => IO.never)
 }
 ```
 
-`route.toHttpRoutes` converts the stir `Route` into an http4s `HttpRoutes[IO]`. Calling `.orNotFound` seals it into an `HttpApp[IO]` that returns 404 for unmatched paths.
+`route.toHttpApp` seals the stir `Route` with the default exception and rejection handlers and converts it into an
+http4s `HttpApp[IO]`: a rejected request gets the matching answer (404 for an unmatched path, 405 for a wrong method,
+400 for a malformed parameter, 401 with a challenge for failed authentication). `route.toHttpRoutes` instead gives
+an `HttpRoutes[IO]` that leaves a rejected request to the next routes, so combine it with other `HttpRoutes`; on its
+own, `toHttpRoutes.orNotFound` answers every rejection with 404 and loses those statuses, and an exception reaches
+the server as a 500 without stir's exception handler. `toHttpApp` uses the default handlers; for custom ones wrap the
+route in `handleRejections` / `handleExceptions` (or `Route.seal(route)(myRejectionHandler, myExceptionHandler)`).
+
+stir sets no limit on the size of request bodies (Pekko defaults to 8 MiB), so wrap the routes that read bodies in
+`withSizeLimit`, or the whole route: `withSizeLimit(8L * 1024 * 1024)(route).toHttpApp`.
 
 ## Test with curl
 
