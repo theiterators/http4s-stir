@@ -4,13 +4,14 @@ import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import fs2.{ Chunk, Stream }
 import io.circe.parser.parse
-import org.http4s.{ Charset, MediaType, Status }
+import org.http4s.{ Charset, Entity, EntityEncoder, MediaType, Status }
 import org.http4s.headers.`Content-Type`
 import pl.iterators.stir.common.EntityStreamingSupport
 import pl.iterators.stir.server._
 import pl.iterators.stir.unmarshalling.Unmarshaller
 
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.{ AtomicBoolean, AtomicInteger }
+import scala.concurrent.duration._
 
 class FramedEntityStreamingDirectivesSpec extends RoutingSpec {
   override implicit def runtime: IORuntime = IORuntime.global
@@ -26,6 +27,11 @@ class FramedEntityStreamingDirectivesSpec extends RoutingSpec {
   def sumRoute(implicit support: EntityStreamingSupport): Route =
     entity(asSourceOf[Int]) { ints => onSuccess(ints.compile.toList) { list => complete(list.mkString(",")) } }
 
+  def sumRouteUsing(um: Unmarshaller[String, Int], support: EntityStreamingSupport): Route =
+    entity(asSourceOf[Int](support)(um)) { ints =>
+      onSuccess(ints.compile.toList) { list => complete(list.mkString(",")) }
+    }
+
   /** Runs `body`, re-chunked to `chunkSize` bytes, through the support's framing decoder. */
   def frames(support: EntityStreamingSupport, body: String, chunkSize: Int): Either[Throwable, List[String]] =
     Stream.chunk(Chunk.array(body.getBytes("UTF-8"))).covary[IO].chunkN(chunkSize).unchunks
@@ -34,6 +40,31 @@ class FramedEntityStreamingDirectivesSpec extends RoutingSpec {
 
   def framesUnchunked(support: EntityStreamingSupport, body: String): List[String] =
     frames(support, body, Int.MaxValue).fold(throw _, identity)
+
+  /** Counts how many `slow` steps run at the same time, to prove that elements were processed in parallel. */
+  final class Concurrency {
+    private val running = new AtomicInteger(0)
+    private val peak = new AtomicInteger(0)
+    def max: Int = peak.get()
+
+    /**
+     * Sleeps `(9 - n) * 15 ms` (for `n` in 1 to 8): the elements with a smaller `n` sleep longer, so that unordered
+     * processing emits them in reverse.
+     */
+    def slow[A](n: Int, result: A): IO[A] =
+      IO(running.incrementAndGet()).flatMap(now => IO(peak.accumulateAndGet(now, math.max))) *>
+      IO.sleep((9 - n) * 15.millis) *> IO(running.decrementAndGet()).as(result)
+  }
+
+  /** Encodes an `Int` as its decimal text after a `Concurrency.slow` step. */
+  def slowEncoder(concurrency: Concurrency): EntityEncoder[IO, Int] =
+    EntityEncoder.encodeBy[IO, Int](`Content-Type`(MediaType.text.plain)) { n =>
+      Entity(Stream.eval(concurrency.slow(n, n)).flatMap(n => Stream.chunk(Chunk.array(n.toString.getBytes("UTF-8")))))
+    }
+
+  /** Reads the `a` field after a `Concurrency.slow` step. */
+  def slowUnmarshaller(concurrency: Concurrency): Unmarshaller[String, Int] =
+    Unmarshaller[String, Int](s => aField(s).flatMap(n => concurrency.slow(n, n)))
 
   /** Checks that every chunking of `body`, from one byte per chunk up to the whole body, frames identically. */
   def frameIndependentOfChunking(support: EntityStreamingSupport, body: String): Unit = {
@@ -145,6 +176,110 @@ class FramedEntityStreamingDirectivesSpec extends RoutingSpec {
         mediaType shouldEqual MediaType.text.plain
         responseAs[String] shouldEqual """["a"]"""
       }
+    }
+    "render newline separated objects with a custom framing renderer" in {
+      implicit val support: EntityStreamingSupport = EntityStreamingSupport.json()
+        .withFramingRenderer(frames => frames.flatMap(frame => Stream.chunk(frame) ++ Stream.emit('\n'.toByte)))
+      Get() ~> complete(Stream("\"a\"", "\"b\"").covary[IO]) ~> check {
+        mediaType shouldEqual MediaType.application.json
+        responseAs[String] shouldEqual "\"a\"\n\"b\"\n"
+      }
+    }
+    "marshal elements sequentially by default" in {
+      val concurrency = new Concurrency
+      implicit val slow: EntityEncoder[IO, Int] = slowEncoder(concurrency)
+      Get() ~> complete(Stream.emits(1 to 4).covary[IO]) ~> check {
+        responseAs[String] shouldEqual "[1,2,3,4]"
+        concurrency.max shouldEqual 1
+      }
+    }
+    "marshal elements in parallel, keeping their order" in {
+      val concurrency = new Concurrency
+      implicit val slow: EntityEncoder[IO, Int] = slowEncoder(concurrency)
+      implicit val support: EntityStreamingSupport =
+        EntityStreamingSupport.json().withParallelMarshalling(parallelism = 4, unordered = false)
+      Get() ~> complete(Stream.emits(1 to 8).covary[IO]) ~> check {
+        responseAs[String] shouldEqual "[1,2,3,4,5,6,7,8]"
+        concurrency.max should be > 1
+      }
+    }
+    "marshal elements in parallel and unordered" in {
+      val concurrency = new Concurrency
+      implicit val slow: EntityEncoder[IO, Int] = slowEncoder(concurrency)
+      implicit val support: EntityStreamingSupport =
+        EntityStreamingSupport.json().withParallelMarshalling(parallelism = 8, unordered = true)
+      Get() ~> complete(Stream.emits(1 to 8).covary[IO]) ~> check {
+        val emitted = responseAs[String].stripPrefix("[").stripSuffix("]").split(',').map(_.toInt).toList
+        emitted.sorted shouldEqual (1 to 8).toList
+        (emitted should not).equal((1 to 8).toList)
+        concurrency.max should be > 1
+      }
+    }
+    "fail the response body when an element cannot be encoded in parallel" in {
+      implicit val failing: EntityEncoder[IO, Int] = EntityEncoder.encodeBy[IO, Int](
+        `Content-Type`(MediaType.text.plain)) {
+        n =>
+          Entity(
+            if (n == 3) Stream.raiseError[IO](new IllegalStateException("no 3")) else Stream.emits(n.toString.getBytes))
+      }
+      implicit val support: EntityStreamingSupport =
+        EntityStreamingSupport.json().withParallelMarshalling(parallelism = 4, unordered = false)
+      Get() ~> complete(Stream.emits(1 to 8).covary[IO]) ~> check {
+        status shouldEqual Status.Ok
+        an[IllegalStateException] should be thrownBy responseAs[String]
+      }
+    }
+    "unmarshal frames in parallel, keeping their order" in {
+      val concurrency = new Concurrency
+      val support = EntityStreamingSupport.json().withParallelMarshalling(parallelism = 4, unordered = false)
+      val route = sumRouteUsing(slowUnmarshaller(concurrency), support)
+      Post("/", (1 to 8).map(n => s"""{"a":$n}""").mkString("[", ",", "]")) ~> addHeader(json) ~> route ~> check {
+        responseAs[String] shouldEqual "1,2,3,4,5,6,7,8"
+        concurrency.max should be > 1
+      }
+    }
+    "unmarshal frames in parallel and unordered" in {
+      val concurrency = new Concurrency
+      val support = EntityStreamingSupport.json().withParallelMarshalling(parallelism = 8, unordered = true)
+      val route = sumRouteUsing(slowUnmarshaller(concurrency), support)
+      Post("/", (1 to 8).map(n => s"""{"a":$n}""").mkString("[", ",", "]")) ~> addHeader(json) ~> route ~> check {
+        val emitted = responseAs[String].split(',').map(_.toInt).toList
+        emitted.sorted shouldEqual (1 to 8).toList
+        (emitted should not).equal((1 to 8).toList)
+        concurrency.max should be > 1
+      }
+    }
+    "fail with 500 when a frame cannot be unmarshalled in parallel" in {
+      val failing = Unmarshaller[String, Int](s =>
+        aField(s).flatMap(n =>
+          if (n == 3) IO.raiseError(new IllegalStateException("no 3")) else IO.pure(n)))
+      val support = EntityStreamingSupport.json().withParallelMarshalling(parallelism = 4, unordered = false)
+      Post("/", (1 to 8).map(n => s"""{"a":$n}""").mkString("[", ",", "]")) ~> addHeader(json) ~>
+      Route.seal(sumRouteUsing(failing, support))                           ~> check { status shouldEqual Status.InternalServerError }
+    }
+    "treat parallelism 1 as sequential even when unordered" in {
+      val concurrency = new Concurrency
+      implicit val slow: EntityEncoder[IO, Int] = slowEncoder(concurrency)
+      implicit val support: EntityStreamingSupport =
+        EntityStreamingSupport.json().withParallelMarshalling(parallelism = 1, unordered = true)
+      Get() ~> complete(Stream.emits(1 to 4).covary[IO]) ~> check {
+        responseAs[String] shouldEqual "[1,2,3,4]"
+        concurrency.max shouldEqual 1
+      }
+    }
+    "keep its other settings when reconfigured" in {
+      val base = EntityStreamingSupport.json()
+      base.parallelism shouldEqual 1
+      base.unordered shouldEqual false
+      val reconfigured = base.withParallelMarshalling(4, unordered = true)
+        .withFramingRenderer(frames => frames.flatMap(Stream.chunk))
+        .withContentType(`Content-Type`(MediaType.text.plain))
+        .withSupported(MediaType.text.plain)
+      reconfigured.parallelism shouldEqual 4
+      reconfigured.unordered shouldEqual true
+      reconfigured.contentType shouldEqual `Content-Type`(MediaType.text.plain)
+      reconfigured.supported shouldEqual MediaType.text.plain
+      an[IllegalArgumentException] should be thrownBy base.withParallelMarshalling(0, unordered = false)
     }
   }
 

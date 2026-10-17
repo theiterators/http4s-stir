@@ -24,8 +24,33 @@ trait EntityStreamingSupport {
   /** Joins rendered elements into the response bytes. */
   def framingRenderer: Pipe[IO, Chunk[Byte], Byte]
 
+  /**
+   * How many elements are (un)marshalled at the same time by `asSourceOf` and the stream marshaller (Pekko's
+   * `parallelism`, which Pekko applies on the read side only); 1 for the `json()` and `csv()` supports. Values below
+   * 1 are treated as 1.
+   */
+  def parallelism: Int
+
+  /**
+   * Whether parallel (un)marshalling may emit the elements out of order, which avoids head-of-line blocking when
+   * some elements are much larger than others (Pekko's `unordered`); `false` for the `json()` and `csv()` supports.
+   */
+  def unordered: Boolean
+
   def withSupported(range: MediaRange): EntityStreamingSupport
   def withContentType(contentType: `Content-Type`): EntityStreamingSupport
+
+  /** Replaces the renderer, for instance to emit newline separated JSON objects instead of an array. */
+  def withFramingRenderer(renderer: Pipe[IO, Chunk[Byte], Byte]): EntityStreamingSupport
+
+  /** (Un)marshals up to `parallelism` elements at a time, in order unless `unordered`. */
+  def withParallelMarshalling(parallelism: Int, unordered: Boolean): EntityStreamingSupport
+
+  /** Runs `f` on every element with the configured parallelism and ordering. */
+  private[stir] def mapElements[A, B](f: A => IO[B]): Pipe[IO, A, B] =
+    if (parallelism <= 1) _.evalMap(f)
+    else if (unordered) _.parEvalMapUnordered(parallelism)(f)
+    else _.parEvalMap(parallelism)(f)
 }
 
 object EntityStreamingSupport {
@@ -47,10 +72,17 @@ object EntityStreamingSupport {
       LineFraming.renderer)
 
   private final case class Impl(supported: MediaRange, contentType: `Content-Type`,
-      framingDecoder: Pipe[IO, Byte, Chunk[Byte]], framingRenderer: Pipe[IO, Chunk[Byte], Byte])
+      framingDecoder: Pipe[IO, Byte, Chunk[Byte]], framingRenderer: Pipe[IO, Chunk[Byte], Byte],
+      parallelism: Int = 1, unordered: Boolean = false)
       extends EntityStreamingSupport {
     def withSupported(range: MediaRange): EntityStreamingSupport = copy(supported = range)
     def withContentType(contentType: `Content-Type`): EntityStreamingSupport = copy(contentType = contentType)
+    def withFramingRenderer(renderer: Pipe[IO, Chunk[Byte], Byte]): EntityStreamingSupport =
+      copy(framingRenderer = renderer)
+    def withParallelMarshalling(parallelism: Int, unordered: Boolean): EntityStreamingSupport = {
+      require(parallelism >= 1, s"parallelism must be at least 1, was $parallelism")
+      copy(parallelism = parallelism, unordered = unordered)
+    }
   }
 
   private[stir] object JsonFraming {
