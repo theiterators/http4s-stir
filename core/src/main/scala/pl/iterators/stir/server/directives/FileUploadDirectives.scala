@@ -69,8 +69,8 @@ trait FileUploadDirectives {
   /**
    * Like [[fileUpload]], but decodes the multipart body with http4s' mixed decoder, which spools parts above
    * 50 MiB to a temporary file, and keeps that decoder (and its temporary files) alive until the inner route has
-   * completed and the response body has been consumed; a route that rejects, fails or is cancelled releases them at
-   * once. The part's stream can therefore be read inside the route
+   * completed and the response body has been consumed; a route that rejects, fails or is cancelled before this
+   * directive completes releases them at once. The part's stream can therefore be read inside the route
    * or streamed as the response. If there is no such field the request is rejected; if several parts share the
    * name the first one is used.
    *
@@ -109,7 +109,7 @@ trait FileUploadDirectives {
                 case Right(RouteResult.Complete(response)) =>
                   IO.pure(RouteResult.Complete(response.withBodyStream(response.body.onFinalize(release))))
                 case Right(rejected) => release.as(rejected)
-                case Left(error)     => release *> IO.raiseError(error)
+                case Left(error)     => release.attempt *> IO.raiseError(error)
               }
             }
         }
