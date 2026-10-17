@@ -48,9 +48,6 @@ instead. Other differences that remain:
   `getResourceAsStream`).
 - An `Accept-Language` (or other) header that http4s cannot parse is ignored, where Pekko parses leniently: Pekko's
   `q=.5` is not a valid RFC 7231 q-value, so `selectPreferredLanguage` then picks the first language.
-- `parameterMultiMap` lists a parameter without a value (`?flag`) with no values, where Pekko lists one empty value;
-  `parameterSeq` gives `("flag", "")` as Pekko does. For a bare `?`, `parameterSeq` is empty as in Pekko, while
-  `parameterMap` gives `Map("" -> "")` and `parameterMultiMap` `Map("" -> List())` (Pekko: empty maps).
 - Content negotiation differs from Pekko for wildcard ranges with parameters: stir ignores `charset` on every range
   (Pekko only on `type/subtype` ranges, so its `text/*;charset=...` never matches) and does not count a wildcard
   range's parameters towards its specificity.
@@ -79,6 +76,9 @@ instead. Other differences that remain:
   still decodes it as `""`.
 - `parameterSeq` and `formFieldSeq` return the pairs in the order of the query string or body, as Pekko does, and
   `parameterSeq` includes a parameter without a value (`?flag`) as `("flag", "")` instead of dropping it.
+- `parameterMap` keeps the last value of a repeated parameter (`?x=1&x=2` gives `x -> 2`, was `1`) and
+  `parameterMultiMap` lists a parameter without a value (`?flag`) with one empty value (was none), as Pekko does; a
+  bare `?` gives empty maps (was `Map("" -> "")` and `Map("" -> List())`).
 - The form directives parse url-encoded bodies themselves instead of through http4s' `UrlForm` decoder: `;` no
   longer separates fields (`a=1;b=2` is one field, as in Pekko) and characters that http4s rejected with a 400 when
   unencoded (spaces, quotes, brackets, non-ASCII) are accepted literally.

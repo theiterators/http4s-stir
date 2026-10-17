@@ -153,7 +153,8 @@ val route: Route = path("color") {
 
 ## parameterMap
 
-Extracts all query parameters as a `Map[String, String]`. If a parameter occurs multiple times, only one value is retained.
+Extracts all query parameters as a `Map[String, String]`. If a parameter occurs multiple times, the last value is
+retained; a parameter without a value (`?flag`) is an empty string, as in Pekko.
 
 ```scala
 val route: Route = path("info") {
@@ -162,11 +163,13 @@ val route: Route = path("info") {
   }
 }
 // GET /info?a=1&b=2 -> "Parameters: Map(a -> 1, b -> 2)"
+// GET /info?a=1&a=2 -> "Parameters: Map(a -> 2)"
 ```
 
 ## parameterMultiMap
 
-Extracts all query parameters as a `Map[String, Seq[String]]`, preserving multiple values for the same key. A parameter without a value (`?flag`) maps to an empty list (Pekko: a list with one empty string).
+Extracts all query parameters as a `Map[String, Seq[String]]`, preserving multiple values for the same key in the
+order of the query string. A parameter without a value (`?flag`) has one empty value, as in Pekko.
 
 ```scala
 val route: Route = path("info") {

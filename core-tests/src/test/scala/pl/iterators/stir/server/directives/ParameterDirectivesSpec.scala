@@ -406,6 +406,53 @@ class ParameterDirectivesSpec extends AnyFreeSpec with GenericRoutingSpec with I
     }
   }
 
+  "The 'parameterMap' directive should" - {
+    val completeAsMap = parameterMap(params => complete(params.toList.sorted.mkString(", ")))
+
+    "extract every parameter" in {
+      Get("/?color=blue&count=42") ~> completeAsMap ~> check {
+        responseAs[String] shouldEqual "(color,blue), (count,42)"
+      }
+    }
+    "keep the last value of a repeated parameter" in {
+      Get("/?x=1&x=2") ~> completeAsMap ~> check {
+        responseAs[String] shouldEqual "(x,2)"
+      }
+    }
+    "extract a parameter without a value as an empty string" in {
+      Get("/?flag&a=1") ~> completeAsMap ~> check {
+        responseAs[String] shouldEqual "(a,1), (flag,)"
+      }
+    }
+    "extract nothing from a bare question mark" in {
+      Get("/?") ~> parameterMap(params => complete(params.size.toString)) ~> check {
+        responseAs[String] shouldEqual "0"
+      }
+    }
+  }
+
+  "The 'parameterMultiMap' directive should" - {
+    val completeAsMultiMap =
+      parameterMultiMap(params =>
+        complete(params.toList.sortBy(_._1).map { case (k, vs) => s"$k -> $vs" }.mkString(", ")))
+
+    "extract every value of a repeated parameter in the order of the query string" in {
+      Get("/?x=23&b=1&x=42&x=7") ~> completeAsMultiMap ~> check {
+        responseAs[String] shouldEqual "b -> List(1), x -> List(23, 42, 7)"
+      }
+    }
+    "extract a parameter without a value as one empty value" in {
+      Get("/?flag&flag=on") ~> completeAsMultiMap ~> check {
+        responseAs[String] shouldEqual "flag -> List(, on)"
+      }
+    }
+    "extract nothing from a bare question mark" in {
+      Get("/?") ~> parameterMultiMap(params => complete(params.size.toString)) ~> check {
+        responseAs[String] shouldEqual "0"
+      }
+    }
+  }
+
   "when used with 'as[A](constructor)' the parameter directive should" - {
     "extract a parameter value as Case Class" in {
       case class Color(red: Int, green: Int, blue: Int)

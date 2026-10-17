@@ -14,14 +14,16 @@ import scala.util._
 trait ParameterDirectives extends ToNameReceptacleEnhancements with ParameterDirectivesInstances {
 
   /**
-   * Extracts the request's query parameters as a `Map[String, String]`.
+   * Extracts the request's query parameters as a `Map[String, String]`; of a repeated parameter the last value is
+   * kept, a parameter without a value (`?flag`) is an empty string, as in Pekko.
    *
    * @group param
    */
   def parameterMap: Directive1[Map[String, String]] = _parameterMap
 
   /**
-   * Extracts the request's query parameters as a `Map[String, List[String]]`.
+   * Extracts the request's query parameters as a `Map[String, Seq[String]]` with the values of each parameter in the
+   * order of the query string; a parameter without a value (`?flag`) has one empty value, as in Pekko.
    *
    * @group param
    */
@@ -36,19 +38,25 @@ trait ParameterDirectives extends ToNameReceptacleEnhancements with ParameterDir
    */
   def parameterSeq: Directive1[Seq[(String, String)]] = _parameterSeq
 
+  // the last value of a repeated parameter wins, as in Pekko (http4s' `Query.params` keeps the first)
   private val _parameterMap: Directive1[Map[String, String]] =
-    extract(_.request.uri.query.params)
+    extract(ctx => queryPairs(ctx.request.uri.query).toMap)
 
   private val _parameterMultiMap: Directive1[Map[String, Seq[String]]] =
-    extract(_.request.uri.query.multiParams)
+    extract { ctx =>
+      queryPairs(ctx.request.uri.query).foldLeft(Map.empty[String, List[String]]) { case (map, (name, value)) =>
+        map.updated(name, map.getOrElse(name, Nil) :+ value)
+      }
+    }
 
   private val _parameterSeq: Directive1[Seq[(String, String)]] =
-    extract { ctx =>
-      val query = ctx.request.uri.query
-      // http4s parses a bare `?` as one blank pair, Pekko as no parameters
-      if (query.pairs == Query.blank.pairs) Vector.empty
-      else query.pairs.map { case (name, value) => name -> value.getOrElse("") }
-    }
+    extract(ctx => queryPairs(ctx.request.uri.query))
+
+  /** The pairs in the order of the query string, a parameter without a value (`?flag`) with an empty value. */
+  private def queryPairs(query: Query): Vector[(String, String)] =
+    // http4s parses a bare `?` as one blank pair, Pekko as no parameters
+    if (query.pairs == Query.blank.pairs) Vector.empty
+    else query.pairs.map { case (name, value) => name -> value.getOrElse("") }
 
   trait ParamSpec {
     type Out
