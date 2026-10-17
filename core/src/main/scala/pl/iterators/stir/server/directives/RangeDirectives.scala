@@ -21,11 +21,11 @@ trait RangeDirectives {
    * Answers GET requests with a `Range` header by a `206 Partial Content` response as defined by
    * http://tools.ietf.org/html/rfc7233 and adds an `Accept-Ranges: bytes` header to every GET response.
    * Several ranges are coalesced when they are at most 80 bytes apart and answered as `multipart/byteranges`;
-   * more than 16 ranges reject with a [[TooManyRangesRejection]]. Ranges beyond the entity reject with an
-   * [[UnsatisfiableRangeRejection]] (`416` when sealed), as does a `200` response without a `Content-Length`, which
-   * cannot be sliced (the sealed `416` then carries no `Content-Range`). Responses other than `200`, non-GET requests
-   * and requests whose `Range` header holds an invalid byte range (RFC 7233 requires such a header to be ignored) pass
-   * through unchanged.
+   * more than 16 ranges reject with a [[TooManyRangesRejection]]. A request whose ranges all lie beyond the entity
+   * rejects with an [[UnsatisfiableRangeRejection]] (`416` when sealed), as does a `200` response without a
+   * `Content-Length`, which cannot be sliced (the sealed `416` then carries no `Content-Range`). Responses other than
+   * `200`, non-GET requests, and requests whose `Range` header uses a unit other than `bytes` or holds an invalid byte
+   * range (RFC 7233 requires such a header to be ignored) pass through unchanged.
    *
    * @group range
    */

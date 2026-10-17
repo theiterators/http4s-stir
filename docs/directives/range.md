@@ -23,8 +23,9 @@ invalid (a last position before the first; RFC 7233 requires the header to be ig
 `bytes` are served in full. Combine with `conditional` by putting `conditional` on the outside.
 
 Like Pekko, the parts of a `multipart/byteranges` response are sent in ascending order (both read the body once).
-One difference: `bytes=-0`, which http4s parses as `bytes=0-`, serves the whole entity as a `206` where Pekko
-answers `416`.
+Two differences: for a response of unknown length Pekko's sealed `416` carries `Content-Range: bytes */-1`, which is
+not valid RFC 7233 syntax, so stir omits the header; and `bytes=-0`, which http4s parses as `bytes=0-`, serves the
+whole entity as a `206` where Pekko answers `416`.
 
 ```scala
 val route: Route = path("video.mp4") {
