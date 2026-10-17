@@ -108,7 +108,8 @@ val route: Route = selectPreferredLanguage(LanguageTag("en"), LanguageTag("de"),
 
 ## Debugging Directives
 
-Debugging directives log requests and responses for diagnostic purposes. All three directives accept the same parameters:
+Debugging directives log requests and responses for diagnostic purposes. `logRequest`, `logResult` and
+`logRequestResult` accept the same parameters (`logRequestResultWith` takes a function instead, see below):
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -172,12 +173,16 @@ val route: Route = logRequestResult(logAction = Some(msg => Logger[IO].info(msg)
 ### logRequestResultWith
 
 Logs what a function of the request and the `RouteResult` returns, when it returns `Some`, as Pekko's
-`logRequestResult(show)` with an `Option[LogEntry]`. The function runs after the inner route, so it can look at the
-response or the rejections, and may read a `complete`d response's body (the stream is re-runnable; a one-shot stream
-would be consumed). A `None`, a failing function or a failing log action never affects the result. Logging only
-rejections:
+`logRequestResult(show)` with an `Option[LogEntry]`. `show(request)` is applied before the inner route and the
+resulting function after it, so it can look at the response or the rejections. A `None` logs nothing; a failing
+function fails the request, as in Pekko (the exception handler answers with a 500), while a failing log action is
+swallowed like in the other debugging directives. Logging only rejections:
 
 ```scala
+import cats.effect.IO
+import org.http4s.Request
+import pl.iterators.stir.server.{ Route, RouteResult }
+
 val rejectionLogger: Request[IO] => RouteResult => IO[Option[String]] = request => {
   case RouteResult.Rejected(rejections) =>
     IO.pure(Some(s"${request.method} ${request.uri} was rejected: ${rejections.mkString(", ")}"))
@@ -188,6 +193,12 @@ val route: Route = logRequestResultWith(rejectionLogger) {
   parameter("id".as[Int]) { id => complete(s"id $id") }
 }
 ```
+
+Treat the response body as opaque: it is the very stream the client will read. Reading it in the function re-runs
+its effects (a `Stream` completed through the streaming marshaller runs twice, an unbounded one never ends),
+consumes a one-shot body, and fires finalizers early (the upload directives delete their files when the body
+ends). Only a body built from a strict value (`complete("text")`, `complete(json)`) is safe to read; to log body
+prefixes use `logResult(maxBodyBytes = ...)`, which tees the bytes as the client reads them.
 
 ### Redacting sensitive data
 

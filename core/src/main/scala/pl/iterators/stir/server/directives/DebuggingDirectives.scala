@@ -109,9 +109,15 @@ trait DebuggingDirectives {
   /**
    * Produces a log entry for the [[RouteResult]]s the given function chooses to describe, with the request at hand:
    * Pekko's `logRequestResult(show: HttpRequest => RouteResult => Option[LogEntry])`, so that for instance only
-   * rejections are logged. `show` runs after the inner route and may read the response body (the body is a
-   * re-runnable stream for `complete`d values; a one-shot stream would be consumed). A `None`, a failing `show` or a
-   * failing `logAction` never affects the result.
+   * rejections are logged. `show(request)` is applied before the inner route runs and the result function after it;
+   * a `None` logs nothing. As in Pekko, a failing `show` fails the request (the exception handler answers), while a
+   * failing `logAction` is swallowed like in the other debugging directives.
+   *
+   * Treat the response body as opaque: it is the stream the client will read. Reading it re-runs its effects (a
+   * `Stream` completed through the streaming marshaller runs again, an unbounded one never ends), consumes a one-shot
+   * body, and triggers finalizers early (the upload directives delete their files when the body ends). Only a body
+   * built from a strict value (`complete("text")`, `complete(json)`) is safe to read. To log body prefixes use
+   * `logResult(maxBodyBytes = ...)`, which tees the bytes as the client reads them.
    *
    * @group debugging
    */
@@ -119,12 +125,8 @@ trait DebuggingDirectives {
       logAction: Option[String => IO[Unit]] = None): Directive0 =
     Directive { inner => ctx =>
       val log = DebuggingDirectives.safeLog(logAction)
-      val showResult = show(ctx.request)
-      inner(())(ctx).flatTap { result =>
-        IO.defer(showResult(result)).attempt.flatMap {
-          case Right(Some(line)) => log(line)
-          case _                 => IO.unit
-        }
+      IO(show(ctx.request)).flatMap { showResult =>
+        inner(())(ctx).flatTap(result => IO.defer(showResult(result)).flatMap(_.fold(IO.unit)(log)))
       }
     }
 }
