@@ -6,13 +6,20 @@ sidebar_position: 15
 
 # Host and Scheme Directives
 
-Host directives provide filtering and extraction based on the request's `Host` header. Scheme directives operate on the URI scheme (e.g., `http` or `https`).
+Host directives provide filtering and extraction based on the request's host (its URI authority or `Host` header). Scheme directives operate on the URI scheme (e.g., `http` or `https`).
 
 ## Host Directives
 
 ### extractHost
 
-Extracts the hostname from the request's `Host` header as a `String`.
+Extracts the hostname of the request as a `String`, as Pekko does from the request's effective URI: the authority of
+the request URI (an absolute-form request, or an HTTP/2 request's `:authority`), else the `Host` header (RFC 7230
+5.4). A host name is lowercased (as Pekko's URI parser does), an IPv6 address comes without brackets in its canonical
+form (`::1`), and the result is `""` when the request names no host, or when the URI authority and the `Host` header
+disagree (Pekko answers 400 then; here `host(...)` rejects rather than trust either). Ember 0.23.36 drops an HTTP/2
+request's `:authority` (it parses the value as a URI and finds no authority), so an HTTP/2 request that carries its
+host only there (prior knowledge, HTTP/2 over TLS) has no host over Ember and `host(...)` rejects it; the first
+request of an `h2c` upgrade, or one with a `host` header, still has one.
 
 ```scala
 val route: Route = extractHost { hostname =>

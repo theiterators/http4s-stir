@@ -29,7 +29,18 @@ Most directives have the **same names and signatures** as their Pekko HTTP count
 - `complete(IO(...))` replaces `complete(Future(...))`
 - `entity(as[T])` works identically, using http4s `EntityDecoder` instead of Akka `Unmarshaller`
 
-Path directives, method directives, parameter directives, header directives, and most other directive categories are API-compatible. Code migration typically involves updating imports and replacing `Future` with `IO`.
+Path directives, method directives, parameter directives, header directives, and most other directive categories are
+API-compatible. Code migration typically involves updating imports and replacing `Future` with `IO`. The exceptions
+whose signatures differ:
+
+- WebSocket: the directives take the server's `WebSocketBuilder2[IO]` and work on http4s `WebSocketFrame`s
+  (`handleWebSocketMessages(ws, pipe)`); `extractWebSocketUpgrade` is replaced by the builder.
+- Security: authenticators receive stir's `CredentialsHelper` (wrapping http4s' `Credentials`) where Pekko passes its
+  `Credentials`.
+- Debugging: `logRequest`, `logResult` and `logRequestResult` take named options (`logHeaders`, `logBody`,
+  `redactHeadersWhen`, `maxBodyBytes`, `logAction`, `redaction`) instead of Pekko's `LoggingMagnet` (a marker string
+  and log level), so `logRequest("marker")` does not compile (see the debugging directives).
+- `listDirectoryContents` takes stir's implicit `DirectoryRenderer`, not Pekko's `DirectoryRenderer` marshaller.
 
 ## What is not implemented
 
@@ -46,7 +57,44 @@ instead. Other differences that remain:
 - The resource directives (`getFromResource`, `getFromResourceDirectory`) only work on the JVM: on Scala Native and
   Scala.js an application using them fails to link (no `java.net.URL`; Native's class loader has only
   `getResourceAsStream`).
+- `StrictForm` and `StrictForm.FileData` are not ported: the form-field directives read the text parts of a multipart
+  body and skip a part with a `filename` (Pekko returns its content); read file parts with `fileUpload` /
+  `storeUploadedFile`.
+- `RejectionError` is not ported: a failed `IO` always reaches the exception handler; to reject, recover the `IO` and
+  `reject(...)` (e.g. with `onComplete`).
+- `toStrictEntity` / `extractStrictEntity` answer an entity over `maxBytes` with 413 Payload Too Large; Pekko answers
+  400 "Request too large".
+- The default exception handler logs an `IllegalRequestException` as "Error during processing of request: '...'.
+  Completing with 409 Conflict response. ..." like other errors; Pekko warns "Illegal request: '...'. ...".
+- `toStrictEntity` / `extractStrictEntity` answer a request body stream that fails (other than by the size limit or
+  the timeout) with a 500 from the exception handler; Pekko answers its parser's `EntityStreamException` with 400.
+- `HeaderMagnet` and `ModeledCustomHeader` are not ported: `headerValueByType[T]` and `optionalHeaderValueByType[T]`
+  use http4s' `Header[T, _]` type class; define a custom header with `Header.create`.
+- `complete(status)` and `complete((status, headers))` for a status that allows an entity send an empty body, and so
+  does the default exception handler's 500; Pekko sends the status's default message as `text/plain` (for example
+  "The requested resource could not be found." for 404, "There was an internal server error." for 500).
 - `parameter("x".repeated)` returns the values in the order of the query string; Pekko returns them reversed.
+- There is no default request-body size limit (Pekko: `max-content-length`, 8 MiB): `entity(as[String])` reads a body
+  of any size. Wrap the routes that read bodies, or the whole route, in `withSizeLimit`
+  (`withSizeLimit(8L * 1024 * 1024)(route).toHttpApp`).
+- `extractClientIP` also reads a client-sent `Remote-Address` header (after `X-Forwarded-For` and `X-Real-Ip`);
+  Pekko ignores that header and falls back to the connection address its server records. Like `X-Forwarded-For`,
+  it is only trustworthy behind a proxy that sets or strips it.
+- The testkit's `~>` sends the request URI as given, with no default host (Pekko's testkit uses
+  `http://example.com`): `extractUri` is relative and `host(...)` needs the request to name its host.
+- `withRequestTimeout` cancels the inner route when it fires and its default answer is an empty 503; Pekko keeps the
+  route running and answers with a text body.
+- The CSV framing of `EntityStreamingSupport.csv()` drops empty lines, strips a `\r` before `\n` and accepts a last
+  line without a newline; Pekko's line framing does none of these.
+- stir has no `Option`, `Either` or `Try` marshallers. With circe's codecs in scope `complete(option)` still compiles
+  but sends `null` with 200 where Pekko answers 404 for `None`, and `as[Option[T]]` decodes a JSON `null` rather
+  than an empty body; match on the option and complete explicitly.
+- `extractUri` gives the request URI as received (relative under HTTP/1); Pekko gives the effective, absolute URI.
+- An empty file is served with the `Content-Type` of its extension; Pekko sends an empty entity without one.
+- Over Ember's HTTP/2 a request carrying its host only in `:authority` (prior knowledge, HTTP/2 over TLS) has no host
+  for the host directives (`extractHost` gives `""`, `host(...)` rejects): Ember 0.23.36 drops `:authority`.
+- A request whose URI authority and `Host` header disagree is answered 400 by Pekko; stir names no host for it
+  (`extractHost` gives `""`, so `host(...)` rejects).
 - A header that http4s cannot parse is ignored where Pekko may parse it leniently (`selectPreferredLanguage` reads
   `Accept-Language` q-values as leniently as Pekko).
 - Content negotiation differs from Pekko for wildcard ranges with parameters: stir ignores `charset` on every range
@@ -123,7 +171,23 @@ instead. Other differences that remain:
   `Content-Encoding: gzip`. They answer conditional requests (`ETag`, `Last-Modified`, 304 and 412) and `Range`
   requests (206, 416) as Pekko does.
 - `getFromResource` rejects a directory entry inside a jar instead of serving it as an empty body.
+- `getFromResource` / `getFromResourceDirectory` reject a directory on a class-path folder whose path has a space or a
+  non-ASCII character; they used to serve the JDK's listing of its file names.
 - `logRequestResultWith(show)` is new; a `show` that fails fails the request, as in Pekko.
+- `entity` rejects every failure, as Pekko does: a request body stream that fails (a dropped connection, a broken
+  upstream) is a `MalformedRequestContentRejection` carrying the error, and a decoder raising an
+  `IllegalArgumentException` a `ValidationRejection`; both used to reach the exception handler as a 500. So does any
+  other error a custom `EntityDecoder` raises (a 400 rejection where it used to be a logged 500), and an I/O error
+  while http4s spools a large multipart part to a temporary file. `formFieldSeq`, `formFieldMap` and
+  `formFieldMultiMap` likewise reject a body that fails while it is buffered (a body over the size limit still
+  answers 413, a slow one 408); a corrupt compressed form body now reaches the rejection handler, whose 400 reads
+  "The request content was malformed:" followed by the message.
+- `headerValueByType[T]` rejects with `MissingHeaderRejection` naming the header as its http4s `Header` instance does
+  (`X-Custom-Header`), as Pekko names a modeled custom header; it used the Scala class name (`XCustomHeader`), which
+  only matched for http4s' own header classes. It now needs a `Header[T, _]` instance instead of a `ClassTag`.
+- `complete(status, value)` (with or without headers) sends no entity when the status allows none (1xx, 204, 205, 304),
+  as Pekko does; the value used to be sent as the body. Without an entity such a response is not negotiated either
+  (Pekko still answers a 204 with an unacceptable value's type with 406).
 - `complete` negotiates the response's `Content-Type` against the request's `Accept` header, as Pekko does: a
   representation the client does not accept is rejected with `UnacceptedResponseContentTypeRejection` (406 when sealed,
   "Resource representation is only available with these types:" followed by the types). Clients sending `*/*` or no
@@ -131,6 +195,19 @@ instead. Other differences that remain:
   of the text. Error responses (4xx, 5xx: `complete(Status.NotFound, "not found")`) are sent whatever the client
   accepts, as Pekko sends them through an opaque fallback, and exception and rejection handlers are exempt. To keep the old behaviour for a
   route, wrap it in `mapRequestContext(_.withAcceptAll)`; see "Content negotiation" in the marshalling directives.
+- Under `toHttpApp` and the testkit a request body that cannot be handed out again fails a later read at once with an
+  `IllegalStateException` ("The request entity was read before ...") instead of waiting on the connection until the
+  idle timeout or arriving truncated, as Pekko fails the second materialization of a streamed entity: a chunked or
+  length-less body with bytes (HTTP/2 included) can be read once, and a body of known length cannot be read again
+  after a read that stopped partway (it failed mid-stream, or the reader stopped before asking for the end). A body
+  of known length read to its end, and an empty body, are readable again as before. Alternatives that each run a form
+  directive read the body anew each, so wrap them in `toStrictEntity` to let several of them read a streamed body.
+  This applies to in-memory test bodies too (a body built with `withBodyStream` has no length, so it can be read
+  once); `toHttpRoutes` hands the next routes the request as received and is not covered.
+- `extractHost` and `host` read the authority of the request URI first, then the `Host` header, as Pekko reads the
+  effective URI: an absolute-form request is matched by its URI's host (when its `Host` header disagrees, no host
+  is named), a host name is lowercased (`Example.COM` matches `host("example.com")`), and an IPv6 host comes
+  without brackets (`::1`, was `[::1]`).
 - `selectPreferredLanguage` reads `Accept-Language` q-values as leniently as Pekko: `q=.5` and spaces around `;` and
   `=` are accepted (the header used to be ignored, picking the first language), and a q-value with more than three
   decimals is truncated instead of rounded (`q=0.4999` now ranks below `q=0.5`).
@@ -139,7 +216,8 @@ instead. Other differences that remain:
 
 The http4s-stir testkit differs from the Pekko HTTP testkit in the following ways:
 
-- **Synchronous execution**: all test assertions run synchronously; there is no async test support.
+- **Synchronous execution**: all test assertions run synchronously; there is no async test support. `~>` waits for the
+  route, so `~> runRoute` does not separate running the route from checking it as Pekko's does.
 - **Chunk inspection**: `chunks`, `chunksStream` and `trailer` expose the body chunks and trailer headers; there is no `ChunkStreamPart` model.
 - **Limited request building**: some minor header convenience methods available in the Pekko HTTP testkit are missing.
 - **WebSocket testing**: `WS(uri, probe, subprotocols*)` and `WSProbe` exchange frames with the handler in memory, as in Pekko, but the probe talks to the handler as the directive received it (no ping/pong filtering or defragmentation) and over `~!>` no frames are exchanged. `isWebSocketUpgrade` and `expectWebSocketUpgradeWithProtocol` work as in Pekko.

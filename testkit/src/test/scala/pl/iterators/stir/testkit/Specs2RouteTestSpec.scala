@@ -55,32 +55,6 @@ class Specs2RouteTestSpec extends Specification with Specs2RouteTest {
       }
     }
 
-//    "separation of route execution from checking" in {
-//      val pinkHeader = RawHeader("Fancy", "pink")
-//
-//      case object Command
-//      val service = TestProbe()
-//      val handler = TestProbe()
-//      implicit def serviceRef: ActorRef = service.ref
-//      implicit val askTimeout: Timeout = 1.second
-//
-//      val result =
-//        Get() ~> pinkHeader ~> {
-//          respondWithHeader(pinkHeader) {
-//            complete(handler.ref.ask(Command).mapTo[String])
-//          }
-//        } ~> runRoute
-//
-//      handler.expectMsg(Command)
-//      handler.reply("abc")
-//
-//      check {
-//        status shouldEqual OK
-//        responseEntity shouldEqual HttpEntity(ContentTypes.`text/plain(UTF-8)`, "abc")
-//        header("Fancy") shouldEqual Some(pinkHeader)
-//      }(result)
-//    }
-
     "failing the test inside the route" in {
 
       val route = get {

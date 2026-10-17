@@ -1,8 +1,10 @@
 package pl.iterators.stir.server.directives
 
+import org.http4s.Uri
 import org.http4s.headers.Host
 import pl.iterators.stir.server.{ Directive0, Directive1 }
 
+import java.util.Locale
 import scala.util.matching.Regex
 
 /**
@@ -14,7 +16,8 @@ trait HostDirectives {
   import RouteDirectives._
 
   /**
-   * Extracts the hostname part of the Host request header value.
+   * Extracts the hostname of the request: the authority of the request URI, else the Host header, lowercased (see
+   * `HostDirectives` for the rules).
    *
    * @group host
    */
@@ -65,7 +68,37 @@ trait HostDirectives {
 }
 
 object HostDirectives extends HostDirectives {
-  import HeaderDirectives._
+  import BasicDirectives._
 
-  private val _extractHost: Directive1[String] = optionalHeaderValueByType[Host].map(_.fold("")(h => h.host))
+  // the host of the request's effective URI, as Pekko reads it: the authority of the request URI (an absolute-form
+  // request, or HTTP/2's :authority), else the Host header (RFC 7230 5.4); a host name lowercased as Pekko's URI parser
+  // lowercases it, an IPv6 address without brackets. When the URI authority and the Host header disagree (host or
+  // port) Pekko answers 400; no host is named then, so that `host(...)` rejects instead of trusting either one (a
+  // proxy routing on Host must not be bypassed by an absolute-form target naming another host).
+  private val _extractHost: Directive1[String] = extract { ctx =>
+    val request = ctx.request
+    val defaultPort = request.uri.scheme.map(_.value.toLowerCase(Locale.ROOT)) match {
+      case Some("https") | Some("wss") => Some(443)
+      case Some("http") | Some("ws")   => Some(80)
+      case Some(_)                     => None
+      case None                        => Some(80) // an authority without a scheme, as code may build it
+    }
+    def port(p: Option[Int]): Option[Int] = p.filterNot(defaultPort.contains)
+    val fromUri = request.uri.authority.filter(_.host.value.nonEmpty).map(a => (address(a.host), port(a.port)))
+    val fromHeader = request.headers.get[Host].map(h => (unbracketed(h.host).toLowerCase(Locale.ROOT), port(h.port)))
+    (fromUri, fromHeader) match {
+      case (Some(uri), Some(header)) => if (uri == header) uri._1 else ""
+      case (Some(uri), None)         => uri._1
+      case (None, Some(header))      => header._1
+      case (None, None)              => ""
+    }
+  }
+
+  private def address(host: Uri.Host): String = host match {
+    case Uri.Ipv6Address(ipv6) => ipv6.toString
+    case other                 => other.value.toLowerCase(Locale.ROOT)
+  }
+
+  private def unbracketed(host: String): String =
+    if (host.startsWith("[") && host.endsWith("]")) host.substring(1, host.length - 1) else host
 }

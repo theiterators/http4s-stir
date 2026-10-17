@@ -26,9 +26,8 @@ trait MiscDirectives {
     Directive { inner => if (check) inner(()) else reject(ValidationRejection(errorMsg, None)) }
 
   /**
-   * Extracts the client's IP from either the X-Forwarded-For, Remote-Address, X-Real-IP header
-   * or the TCP connection the request was received from
-   * (in that order of priority).
+   * Extracts the client's IP from the X-Forwarded-For, X-Real-Ip or Remote-Address header, or the TCP connection the
+   * request was received from (in that order of priority).
    *
    * @group misc
    */
@@ -185,14 +184,14 @@ object MiscDirectives extends MiscDirectives {
 
   /**
    * The body of a length-less HTTP/2 request, read through a cell so that its first chunk can be looked at before
-   * the route reads it: the network stream can be read only once, and every reader (the alternatives of a route,
-   * `entity`, `decodeRequest`, ...) must still get all of it. The look runs in a scope of its own, released once the
-   * rest of the body has been read, or when the route rejects or fails or its response body ends
-   * ([[RequestContext.run]]). Reading the body after that (a second time, or in the background after the response)
-   * may give only the first chunk, or fail for a body that holds resources.
+   * the route reads it: the network stream can be read only once, so the body can be read once, whole, after the
+   * look (a second read fails, see [[body]]). The look runs in a scope of its own, released once the rest of the body
+   * has been read, or when the route rejects or fails or its response body ends ([[RequestContext.run]]); a read in
+   * the background after that may fail for a body that holds resources.
    */
   private[stir] final class SharedBody private (original: EntityBody[IO],
-      cell: Ref[IO, Option[Deferred[IO, Either[Throwable, EntityBody[IO]]]]], releaseCell: Ref[IO, Option[IO[Unit]]]) {
+      cell: Ref[IO, Option[Deferred[IO, Either[Throwable, EntityBody[IO]]]]], releaseCell: Ref[IO, Option[IO[Unit]]],
+      guard: RereadGuard) {
 
     /** The original body with its first chunk already read, or `EmptyBody` when it has no bytes. */
     private val peeked: IO[EntityBody[IO]] =
@@ -229,7 +228,14 @@ object MiscDirectives extends MiscDirectives {
 
     val isEmpty: IO[Boolean] = peeked.map(_ eq EmptyBody)
 
-    val body: EntityBody[IO] = Stream.eval(peeked).flatten
+    /**
+     * The body every reader gets: the first chunk and the rest of the stream, which a network body hands out once,
+     * so it can be read once ([[guardRereads]]); a second read (an alternative after a rejection) fails at once
+     * instead of getting the first chunk and whatever the drained stream still has.
+     */
+    val body: EntityBody[IO] =
+      // an empty body loses nothing on a second read (every HTTP/2 GET comes here)
+      Stream.eval(peeked).flatMap(peeked => if (peeked eq EmptyBody) Stream.empty else guard(peeked))
 
     /** Closes the scope of the first look, once; nothing to do when the body was not looked at or was empty. */
     val release: IO[Unit] = releaseCell.getAndSet(None).flatMap(_.getOrElse(IO.unit))
@@ -237,17 +243,57 @@ object MiscDirectives extends MiscDirectives {
 
   private[stir] object SharedBody {
     def apply(original: EntityBody[IO]): IO[SharedBody] =
-      (Ref.of[IO, Option[Deferred[IO, Either[Throwable, EntityBody[IO]]]]](None), Ref.of[IO, Option[IO[Unit]]](None))
-        .mapN(new SharedBody(original, _, _))
+      (Ref.of[IO, Option[Deferred[IO, Either[Throwable, EntityBody[IO]]]]](None), Ref.of[IO, Option[IO[Unit]]](None),
+        RereadGuard(singleRead = true)).mapN(new SharedBody(original, _, _, _))
   }
 
   private[stir] val SharedBodyKey: Key[SharedBody] = Key.newKey[SyncIO, SharedBody].unsafeRunSync()
 
-  /** Prepares a request for routing: a length-less HTTP/2 request gets its body through a [[SharedBody]]. */
+  /**
+   * Prepares a request for routing: a length-less HTTP/2 request gets its body through a [[SharedBody]], any other
+   * body through [[guardRereads]].
+   */
   private[stir] def prepare(request: Request[IO]): IO[Request[IO]] =
-    if (!lengthlessHttp2(request)) IO.pure(request)
-    else
+    if (lengthlessHttp2(request))
       SharedBody(request.body).map(shared => request.withAttribute(SharedBodyKey, shared).withBodyStream(shared.body))
+    else if (request.body eq EmptyBody) IO.pure(request)
+    else
+      guardRereads(request.body, singleRead = request.isChunked || request.contentLength.isEmpty)
+        .map(request.withBodyStream)
+
+  /**
+   * The body, failing at once when it is read again where the server cannot hand it out again: a server hands a
+   * network body out once, and read again Ember's HTTP/1 body re-emits what it buffered and then waits on the socket
+   * for bytes that were already taken, so an alternative re-reading it would hang until the idle timeout instead of
+   * being answered (Pekko fails the second materialization of a streamed entity the same way).
+   *
+   *  - A chunked or length-less body (`singleRead`) can be read once: any later read fails.
+   *  - A body of known length fails a later read after a read that stopped partway (an error, a cancellation, a
+   *    reader that stopped before asking for the end); one read to its end stays readable as before.
+   */
+  private[stir] def guardRereads(body: EntityBody[IO], singleRead: Boolean): IO[EntityBody[IO]] =
+    RereadGuard(singleRead).map(_(body))
+
+  /** The state of [[guardRereads]] for one request body, shared by every read of it. */
+  private[stir] final class RereadGuard private (started: Ref[IO, Boolean], readPartly: Ref[IO, Boolean],
+      singleRead: Boolean) {
+    def apply(body: EntityBody[IO]): EntityBody[IO] =
+      Stream.eval((started.getAndSet(true), readPartly.get, Ref.of[IO, Boolean](false)).tupled).flatMap {
+        case (wasStarted, partly, ended) =>
+          if (partly || (singleRead && wasStarted)) Stream.raiseError[IO](new IllegalStateException(RereadMessage))
+          // a reader stopping early closes the stream normally, so whether the body reached its end is recorded
+          // here; a reader that stops after the last byte without asking for more counts as stopping early
+          else (body ++ Stream.exec(ended.set(true))).onFinalize(ended.get.flatMap(readPartly.set(true).unlessA(_)))
+      }
+  }
+
+  private[stir] object RereadGuard {
+    def apply(singleRead: Boolean): IO[RereadGuard] =
+      (Ref.of[IO, Boolean](false), Ref.of[IO, Boolean](false)).mapN(new RereadGuard(_, _, singleRead))
+  }
+
+  private[stir] val RereadMessage: String =
+    "The request entity was read before (by an earlier route) and cannot be read again"
 
   private val _requestEntityEmpty: Directive0 =
     knownEmpty.flatMap(if (_) pass else reject)

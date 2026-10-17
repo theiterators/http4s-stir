@@ -3,10 +3,11 @@ package pl.iterators.stir.server.directives
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import fs2.Stream
-import org.http4s.{ Headers, MediaRange, MediaType, Request, Status, UrlForm }
+import org.http4s.{ Charset, Headers, MediaRange, MediaType, Request, Status, UrlForm }
 import org.http4s.headers.`Content-Type`
 import org.http4s.multipart.{ Multipart, Multiparts, Part }
 
+import java.util.concurrent.atomic.AtomicBoolean
 import scala.concurrent.duration._
 import pl.iterators.stir.unmarshalling.Unmarshaller._
 import pl.iterators.stir.server._
@@ -14,8 +15,6 @@ import pl.iterators.stir.unmarshalling.Unmarshaller
 
 class FormFieldDirectivesSpec extends RoutingSpec {
   override implicit def runtime: IORuntime = IORuntime.global
-//  implicit val nodeSeqUnmarshaller: FromEntityUnmarshaller[NodeSeq] =
-//    ScalaXmlSupport.nodeSeqUnmarshaller(`text/xml`, `text/html`, `text/plain`)
 
   val nodeSeq: xml.NodeSeq = <b>yes</b>
   implicit val xmlFromStringUnmarshaller: Unmarshaller[String, xml.NodeSeq] =
@@ -23,22 +22,19 @@ class FormFieldDirectivesSpec extends RoutingSpec {
   val urlEncodedForm = UrlForm("firstName" -> "Mike", "age" -> "42")
   val urlEncodedFormWithVip =
     UrlForm("firstName" -> "Mike", "age" -> "42", "VIP" -> "true", "super" -> "<b>no</b>")
-//  val multipartForm = Multipart.FormData {
-//    Map(
-//      "firstName" -> HttpEntity("Mike"),
-//      "age" -> HttpEntity(ContentTypes.`text/xml(UTF-8)`, "<int>42</int>"),
-//      "VIPBoolean" -> HttpEntity("true"))
-//  }
-//  val multipartFormWithTextHtml = Multipart.FormData {
-//    Map(
-//      "firstName" -> HttpEntity("Mike"),
-//      "age" -> HttpEntity(ContentTypes.`text/xml(UTF-8)`, "<int>42</int>"),
-//      "VIP" -> HttpEntity(ContentTypes.`text/html(UTF-8)`, "<b>yes</b>"),
-//      "super" -> HttpEntity("no"))
-//  }
-//  val multipartFormWithFile = Multipart.FormData(
-//    Multipart.FormData.BodyPart.Strict("file", HttpEntity(ContentTypes.`text/xml(UTF-8)`, "<int>42</int>"),
-//      Map("filename" -> "age.xml")))
+  // Pekko's multipart forms: parts with their own content types (stir has no StrictForm.FileData; file parts are
+  // read with the upload directives)
+  private def pekkoMultipart(parts: Part[IO]*): Request[IO] = {
+    val multipart = Multiparts.forSync[IO].flatMap(_.multipart(parts.toVector)).unsafeRunSync()
+    Post("/", multipart).transformHeaders(_ ++ multipart.headers)
+  }
+  private val xmlPart = `Content-Type`(MediaType.text.xml, Charset.`UTF-8`)
+  def pekkoMultipartForm: Request[IO] = pekkoMultipart(Part.formData[IO]("firstName", "Mike"),
+    Part.formData[IO]("age", "<int>42</int>", xmlPart), Part.formData[IO]("VIPBoolean", "true"))
+  def pekkoMultipartFormWithTextHtml: Request[IO] = pekkoMultipart(Part.formData[IO]("firstName", "Mike"),
+    Part.formData[IO]("age", "<int>42</int>", xmlPart),
+    Part.formData[IO]("VIP", "<b>yes</b>", `Content-Type`(MediaType.text.html, Charset.`UTF-8`)),
+    Part.formData[IO]("super", "no"))
 
   "The 'formFields' extraction directive" should {
     "properly extract the value of www-urlencoded form fields" in {
@@ -56,21 +52,13 @@ class FormFieldDirectivesSpec extends RoutingSpec {
         }
       } ~> check { responseAs[String] shouldEqual "Mike66Nonefalse" }
     }
-//    "properly extract the value of multipart form fields" in {
-//      Post("/", multipartForm) ~> {
-//        formFields("firstName", "age", "sex".optional, "VIP".withDefault(nodeSeq)) { (firstName, age, sex, vip) =>
-//          complete(firstName + age + sex + vip)
-//        }
-//      } ~> check { responseAs[String] shouldEqual "Mike<int>42</int>None<b>yes</b>" }
-//    }
-//    "extract StrictForm.FileData from a multipart part" in {
-//      Post("/", multipartFormWithFile) ~> {
-//        formFields("file".as[StrictForm.FileData]) {
-//          case StrictForm.FileData(name, HttpEntity.Strict(ct, data)) =>
-//            complete(s"type ${ct.mediaType} length ${data.length} filename ${name.get}")
-//        }
-//      } ~> check { responseAs[String] shouldEqual "type text/xml length 13 filename age.xml" }
-//    }
+    "properly extract the value of multipart form fields with their own content types" in {
+      pekkoMultipartForm ~> {
+        formFields("firstName", "age", "sex".optional, "VIP".withDefault(nodeSeq)) { (firstName, age, sex, vip) =>
+          complete(firstName + age + sex + vip)
+        }
+      } ~> check { responseAs[String] shouldEqual "Mike<int>42</int>None<b>yes</b>" }
+    }
     "reject the request with a MissingFormFieldRejection if a required form field is missing" in {
       Post("/", urlEncodedForm) ~> {
         formFields("firstName", "age", "sex", "VIP".withDefault(false)) { (firstName, age, sex, vip) =>
@@ -78,25 +66,21 @@ class FormFieldDirectivesSpec extends RoutingSpec {
         }
       } ~> check { rejection shouldEqual MissingFormFieldRejection("sex") }
     }
-//    "properly extract the value if only a urlencoded deserializer is available for a multipart field that comes without a" +
-//      "Content-Type (or text/plain)" in {
-//      Post("/", multipartForm) ~> {
-//        formFields("firstName", "age", "sex".optional, "VIPBoolean".withDefault(false)) { (firstName, age, sex, vip) =>
-//          complete(firstName + age + sex + vip)
-//        }
-//      } ~> check {
-//        responseAs[String] shouldEqual "Mike<int>42</int>Nonetrue"
-//      }
-//    }
-//    "work even if only a FromStringUnmarshaller is available for a multipart field with custom Content-Type" in {
-//      Post("/", multipartFormWithTextHtml) ~> {
-//        formFields("firstName", "age", "super".withDefault(false)) { (firstName, age, vip) =>
-//          complete(firstName + age + vip)
-//        }
-//      } ~> check {
-//        responseAs[String] shouldEqual "Mike<int>42</int>false"
-//      }
-//    }
+    "properly extract the value if only a urlencoded deserializer is available for a multipart field that comes without a " +
+    "Content-Type (or text/plain)" in {
+      pekkoMultipartForm ~> {
+        formFields("firstName", "age", "sex".optional, "VIPBoolean".withDefault(false)) { (firstName, age, sex, vip) =>
+          complete(firstName + age + sex + vip)
+        }
+      } ~> check { responseAs[String] shouldEqual "Mike<int>42</int>Nonetrue" }
+    }
+    "work even if only a FromStringUnmarshaller is available for a multipart field with custom Content-Type" in {
+      pekkoMultipartFormWithTextHtml ~> {
+        formFields("firstName", "age", "super".withDefault(false)) { (firstName, age, vip) =>
+          complete(firstName + age + vip)
+        }
+      } ~> check { responseAs[String] shouldEqual "Mike<int>42</int>false" }
+    }
     "work even if only a FromEntityUnmarshaller is available for a www-urlencoded field" in {
       Post("/", urlEncodedFormWithVip) ~> {
         formFields("firstName", "age", "sex".optional, "super".withDefault(nodeSeq)) { (firstName, age, sex, vip) =>
@@ -106,65 +90,27 @@ class FormFieldDirectivesSpec extends RoutingSpec {
         responseAs[String] shouldEqual "Mike42None<b>no</b>"
       }
     }
-//    "work even when the entity is not strict" in {
-//      val request: HttpRequest =
-//        Post("/", urlEncodedForm)
-//          // transformEntityDataBytes will convert the entity to chunked
-//          .transformEntityDataBytes(AllowMaterializationOnlyOnce())
-//
-//      request.entity.contentType shouldEqual ContentTypes.`application/x-www-form-urlencoded`
-//      request.entity.isStrict should be(false)
-//
-//      request ~> {
-//        formFields("firstName", "age".as[Int], "sex".optional, "VIP".withDefault(false)) { (firstName, age, sex, vip) =>
-//          complete(firstName + age + sex + vip)
-//        }
-//      } ~> check { responseAs[String] shouldEqual "Mike42Nonefalse" }
-//    }
 
-//    "work even with nested directives when the entity is not strict" in {
-//      val request: HttpRequest =
-//        Post("/", urlEncodedForm)
-//          // transformEntityDataBytes will convert the entity to chunked
-//          .transformEntityDataBytes(AllowMaterializationOnlyOnce())
-//
-//      request.entity.contentType shouldEqual ContentTypes.`application/x-www-form-urlencoded`
-//      request.entity.isStrict should be(false)
-//
-//      request ~> {
-//        formFields("firstName") { firstName =>
-//          formFields("age".as[Int], "sex".optional) { (age, sex) =>
-//            formFields("VIP".withDefault(false)) { vip =>
-//              complete(firstName + age + sex + vip)
-//            }
-//          }
-//        }
-//      } ~> check { responseAs[String] shouldEqual "Mike42Nonefalse" }
-//    }
-
-//    "work even for alternatives when the entity is not strict" in pendingUntilFixed {
-//      val request: HttpRequest =
-//        Post("/", urlEncodedForm)
-//          // transformEntityDataBytes will convert the entity to chunked
-//          .transformEntityDataBytes(AllowMaterializationOnlyOnce())
-//
-//      request.entity.contentType shouldEqual ContentTypes.`application/x-www-form-urlencoded`
-//      request.entity.isStrict should be(false)
-//
-//      request ~> {
-//        concat(
-//          formFields("firstName", "age".as[Int]) { (firstName, age) =>
-//            reject
-//          },
-//          formFields("firstName", "age".as[Int]) { (firstName, age) =>
-//            formFields("sex".optional) { sex =>
-//              formFields("VIP".withDefault(false)) { vip =>
-//                complete(firstName + age + sex + vip)
-//              }
-//            }
-//          })
-//      } ~> check { responseAs[String] shouldEqual "Mike42Nonefalse" }
-//    }
+    "work even for alternatives when the entity is not strict" in pendingUntilFixed {
+      // pending, as in Pekko: the second alternative reads the original body again, which a network body allows once
+      val read = new AtomicBoolean(false)
+      val oneShot = Stream.eval(IO(read.getAndSet(true))).flatMap { again =>
+        if (again) Stream.raiseError[IO](new IllegalStateException("read twice"))
+        else Stream.emits("firstName=Mike&age=42".getBytes("UTF-8")).covary[IO]
+      }
+      Post().withBodyStream(oneShot) ~> addHeader(`Content-Type`(MediaType.application.`x-www-form-urlencoded`)) ~> {
+        concat(
+          formFields("firstName", "age".as[Int]) { (_, _) => reject },
+          formFields("firstName", "age".as[Int]) { (firstName, age) =>
+            formFields("sex".optional) { sex =>
+              formFields("VIP".withDefault(false)) { vip =>
+                complete(firstName + age + sex + vip)
+              }
+            }
+          })
+      } ~> check { responseAs[String] shouldEqual "Mike42Nonefalse" }
+      ()
+    }
   }
   "The 'formField' requirement directive" should {
     "block requests that do not contain the required formField" in {
@@ -238,34 +184,6 @@ class FormFieldDirectivesSpec extends RoutingSpec {
         res shouldEqual Map("age" -> "42", "numberA" -> "3", "numberB" -> "5")
       }
     }
-//    "not show bad performance characteristics when field names' hashCodes collide" in {
-//      val numKeys = 10000
-//      val value = "null"
-//
-//      val regularKeys = Iterator.from(1).map(i => s"key_$i").take(numKeys)
-//      val collidingKeys = HashCodeCollider.zeroHashCodeIterator().take(numKeys)
-//
-//      def createFormData(keys: Iterator[String]): FormData = {
-//        val tuples = keys.map((_, value)).toSeq
-//        val query = tuples.foldLeft(Uri.Query.newBuilder)((acc, pair) => acc += pair)
-//        FormData(query.result())
-//      }
-//
-//      val regularFormData = createFormData(regularKeys)
-//      val collidingDormData = createFormData(collidingKeys)
-//
-//      def regular(): Unit =
-//        Post("/", regularFormData) ~> {
-//          formFieldMap { _ => complete(StatusCodes.OK) }
-//        } ~> check {}
-//
-//      def colliding(): Unit =
-//        Post("/", collidingDormData) ~> {
-//          formFieldMap { _ => complete(StatusCodes.OK) }
-//        }
-//
-//      BenchUtils.nanoRace(colliding(), regular()) should be < 3.0 // speed must be in same order of magnitude
-//    }
   }
 
   "The 'formFieldSeq' directive" should {
@@ -295,14 +213,23 @@ class FormFieldDirectivesSpec extends RoutingSpec {
         formFieldSeq { echoComplete }
       } ~> check { responseAs[String] shouldEqual "Vector()" }
     }
-//    "reject with MalformedRequestContentRejection if request entity fails" in {
-//      val failedSource = Source.failed(new IllegalStateException("Form was stapled wrongly"))
-//      Post("/", HttpEntity(`application/x-www-form-urlencoded`, failedSource)) ~>
-//        formFieldSeq { echoComplete } ~>
-//        check {
-//          rejection shouldBe a[MalformedRequestContentRejection]
-//        }
-//    }
+    "answer 413 over a real server for a form over the buffer limit, without letting an alternative re-read it" in {
+      val big = "a=" + ("x" * (9 * 1024 * 1024))
+      Post("/", big) ~> addHeader(`Content-Type`(MediaType.application.`x-www-form-urlencoded`)) ~!> {
+        formFieldMap(fields => complete(fields.size.toString)) ~ entity(as[String])(s => complete(s.length.toString))
+      } ~> check { status shouldEqual Status.PayloadTooLarge }
+    }
+    "still answer 413 when sealed for a form over the size limit" in {
+      Post("/", UrlForm("field" -> ("x" * 100))) ~> Route.seal(withSizeLimit(10)(formFieldSeq { echoComplete })) ~>
+      check { status shouldEqual Status.PayloadTooLarge }
+    }
+    "reject with MalformedRequestContentRejection if request entity fails" in {
+      val failed = Stream.raiseError[IO](new IllegalStateException("Form was stapled wrongly"))
+      Post().withBodyStream(failed) ~> addHeader(`Content-Type`(MediaType.application.`x-www-form-urlencoded`)) ~>
+      formFieldSeq { echoComplete } ~> check {
+        rejection should matchPattern { case MalformedRequestContentRejection("Form was stapled wrongly", _) => }
+      }
+    }
   }
 
   "The 'formFieldMultiMap' directive" should {
@@ -318,34 +245,6 @@ class FormFieldDirectivesSpec extends RoutingSpec {
         res shouldEqual Map("age" -> List("42"), "number" -> List("5", "3"))
       }
     }
-//    "not show bad performance characteristics when field names' hashCodes collide" in {
-//      val numKeys = 10000
-//      val value = "null"
-//
-//      val regularKeys = Iterator.from(1).map(i => s"key_$i").take(numKeys)
-//      val collidingKeys = HashCodeCollider.zeroHashCodeIterator().take(numKeys)
-//
-//      def createFormData(keys: Iterator[String]): FormData = {
-//        val tuples = keys.map((_, value)).toSeq
-//        val query = tuples.foldLeft(Uri.Query.newBuilder)((acc, pair) => acc += pair)
-//        FormData(query.result())
-//      }
-//
-//      val regularFormData = createFormData(regularKeys)
-//      val collidingDormData = createFormData(collidingKeys)
-//
-//      def regular(): Unit =
-//        Post("/", regularFormData) ~> {
-//          formFieldMultiMap { _ => complete(StatusCodes.OK) }
-//        } ~> check {}
-//
-//      def colliding(): Unit =
-//        Post("/", collidingDormData) ~> {
-//          formFieldMultiMap { _ => complete(StatusCodes.OK) }
-//        }
-//
-//      BenchUtils.nanoRace(colliding(), regular()) should be < 3.0 // speed must be in same order of magnitude
-//    }
   }
 
   "The 'formFields' extraction directive over a real server" should {

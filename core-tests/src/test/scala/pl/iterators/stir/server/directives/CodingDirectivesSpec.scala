@@ -2,16 +2,30 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import fs2.Stream
+import fs2.{ Pipe, Stream }
 import fs2.text.utf8
 import fs2.compression.{ Compression, DeflateParams, InflateParams, ZLibParams }
-import org.http4s.{ ContentCoding, HttpVersion, Method, QValue, Request, Status, TransferCoding }
+import org.http4s.{
+  Charset,
+  ContentCoding,
+  Header,
+  HttpVersion,
+  MediaType,
+  Method,
+  QValue,
+  Request,
+  Response,
+  Status,
+  TransferCoding
+}
 import org.scalatest.Inside
-import org.http4s.headers.{ `Accept-Encoding`, `Content-Encoding`, `Transfer-Encoding` }
+import org.http4s.headers.{ `Accept-Encoding`, `Content-Encoding`, `Content-Type`, `Transfer-Encoding` }
+import org.typelevel.ci.CIString
 import pl.iterators.stir.server._
 
 import java.io.File
 import java.nio.file.{ Files => NioFiles }
+import scala.concurrent.duration._
 
 class CodingDirectivesSpec extends RoutingSpec with Inside {
   override implicit def runtime: IORuntime = IORuntime.global
@@ -193,6 +207,40 @@ class CodingDirectivesSpec extends RoutingSpec with Inside {
     }
   }
 
+  "the encodeResponse directive on a streamed response" should {
+    // Pekko's encoders flush every chunk, so a reader gets each chunk's bytes as it is produced
+    def firstBytes(coding: ContentCoding, decode: Pipe[IO, Byte, Byte]): String = {
+      val slow = (Stream("hello") ++ Stream.sleep_[IO](10.seconds) ++ Stream("world")).through(utf8.encode)
+      Get() ~> addHeader(`Accept-Encoding`(coding)) ~> encodeResponseWith(coding) {
+        complete(Response[IO]().withBodyStream(slow).withContentType(`Content-Type`(MediaType.text.plain)))
+      } ~> check {
+        chunksStream.flatMap(Stream.chunk).through(decode).through(utf8.decode).take(1).compile.string
+          .timeout(3.seconds)
+          .unsafeRunSync()
+      }
+    }
+    "send a gzipped chunk without waiting for the rest of the stream" in {
+      firstBytes(ContentCoding.gzip, Compression[IO].gunzip().andThen(_.flatMap(_.content))) shouldEqual "hello"
+    }
+    "send all of a large chunk without waiting for the rest of the stream" in {
+      // a chunk whose compressed form exceeds the deflater's buffer is still flushed whole
+      val random = new scala.util.Random(7)
+      val big = Array.fill(60000)(('!' + random.nextInt(90)).toByte)
+      val slow = Stream.chunk(fs2.Chunk.array(big)) ++ Stream.sleep_[IO](10.seconds) ++ Stream.emit('!'.toByte)
+      Get() ~> addHeader(`Accept-Encoding`(ContentCoding.gzip)) ~> encodeResponseWith(ContentCoding.gzip) {
+        complete(Response[IO]().withBodyStream(slow).withContentType(`Content-Type`(MediaType.text.plain)))
+      } ~> check {
+        chunksStream.flatMap(Stream.chunk).through(Compression[IO].gunzip()).flatMap(_.content).take(60000L)
+          .compile.count.timeout(3.seconds).unsafeRunSync() shouldEqual 60000L
+      }
+    }
+    "send a deflated chunk without waiting for the rest of the stream" in {
+      firstBytes(ContentCoding.deflate,
+        Compression[IO].inflate(InflateParams(header = ZLibParams.Header.ZLIB))) shouldEqual
+      "hello"
+    }
+  }
+
   "the encodeResponseWith directive" should {
     "use the first encoder when the request has no Accept-Encoding" in {
       Get() ~> encodeResponseWith(ContentCoding.gzip)(textRoute) ~> check {
@@ -352,6 +400,274 @@ class CodingDirectivesSpec extends RoutingSpec with Inside {
     "reject a request without Content-Encoding when gzip is required" in {
       Post("/", "body") ~> requestEncodedWith(ContentCoding.gzip)(completeOk) ~> check {
         rejection shouldEqual UnsupportedRequestEncodingRejection(ContentCoding.gzip)
+      }
+    }
+  }
+
+  "Pekko's coding cases" when {
+    // Pekko's CodingDirectivesSpec, case by case; compressed bytes differ between compressors, so the bodies are
+    // compared after decompression
+    val yeah: Route = complete("Yeah!")
+    val nope: Route = complete(Status.NotFound, "Nope!")
+    val drain: Route = extractRequest { request => onSuccess(request.body.compile.drain)(completeOk) }
+    val textPlain = `Content-Type`(MediaType.text.plain, Charset.`UTF-8`)
+    def acceptEncoding(value: String) = Header.Raw(CIString("Accept-Encoding"), value)
+
+    "the identity (NoEncoding) decoder" should {
+      val decode = decodeRequestWith(ContentCoding.identity)
+      "decode the request content if it has a `Content-Encoding: identity` header and the content is not encoded" in {
+        Post("/", "yes") ~> addHeader(`Content-Encoding`(ContentCoding.identity)) ~> decode(echo) ~> check {
+          responseAs[String] shouldEqual "yes"
+        }
+      }
+      "reject requests with content encoded with 'deflate'" in {
+        Post("/", "yes") ~> addHeader(`Content-Encoding`(ContentCoding.deflate)) ~> decode(echo) ~> check {
+          rejection shouldEqual UnsupportedRequestEncodingRejection(ContentCoding.identity)
+        }
+      }
+      "decode the request content if no Content-Encoding header is present" in {
+        Post("/", "yes") ~> decode(echo) ~> check { responseAs[String] shouldEqual "yes" }
+      }
+      "leave request without content unchanged" in {
+        Post() ~> decode(completeOk) ~> check { status shouldEqual Status.Ok }
+      }
+      val echoBytes: Route = extractRequest { request =>
+        onSuccess(request.body.compile.to(Array)) { bytes =>
+          complete(
+            request.contentType.fold("")(c => s"${c.mediaType.mainType}/${c.mediaType.subType}:") + bytes.mkString(","))
+        }
+      }
+      "leave a strict request entity unchanged" in {
+        val data = Array.fill[Byte](10000)(42.toByte)
+        Post("/", data) ~> addHeader(`Content-Type`(MediaType.application.`octet-stream`)) ~> decode(echoBytes) ~>
+        check { responseAs[String] shouldEqual "application/octet-stream:" + data.mkString(",") }
+      }
+      "leave a streamed request entity unchanged" in {
+        val chunks = Stream("abc", "def", "ghi").through(utf8.encode).covary[IO]
+        Post().withBodyStream(chunks) ~> addHeader(`Content-Type`(MediaType.application.`octet-stream`)) ~>
+        decode(echoBytes)             ~> check {
+          responseAs[String] shouldEqual "application/octet-stream:" + "abcdefghi".getBytes("UTF-8").mkString(",")
+        }
+      }
+    }
+
+    "the gzip decoder" should {
+      val decode = decodeRequestWith(ContentCoding.gzip)
+      "decode the request content if it has a `Content-Encoding: gzip` header and the content is gzip encoded" in {
+        Post("/", gzipped("Hello")) ~> addHeader(`Content-Encoding`(ContentCoding.gzip)) ~> decode(echo) ~> check {
+          responseAs[String] shouldEqual "Hello"
+        }
+      }
+      "reject the request content if it has encoding 'gzip' but is corrupt" in {
+        Post("/", Array[Byte](0, 1, 2)) ~> addHeader(`Content-Encoding`(ContentCoding.gzip)) ~>
+        Route.seal(decode(drain))       ~> check {
+          status shouldEqual Status.BadRequest
+          responseAs[String] shouldEqual "The request's encoding is corrupt"
+        }
+      }
+      "reject truncated gzip request content" in {
+        Post("/", gzipped("Hello").dropRight(2)) ~> addHeader(`Content-Encoding`(ContentCoding.gzip)) ~>
+        Route.seal(decode(drain))                ~> check {
+          status shouldEqual Status.BadRequest
+          responseAs[String] shouldEqual "The request's encoding is corrupt"
+        }
+      }
+      "reject requests without Content-Encoding header" in {
+        Post("/", "yes") ~> decode(echo) ~> check {
+          rejection shouldEqual UnsupportedRequestEncodingRejection(ContentCoding.gzip)
+        }
+      }
+      "leave request without content unchanged" in {
+        Post() ~> decode(completeOk) ~> check { status shouldEqual Status.Ok }
+      }
+    }
+
+    "the encoder" should {
+      "encode the response content with gzip if the response is not a success and request has no Accept-Encoding header" in {
+        Post() ~> encodeResponseWith(ContentCoding.gzip)(nope) ~> check {
+          status shouldEqual Status.NotFound
+          header[`Content-Encoding`].map(_.contentCoding) shouldEqual Some(ContentCoding.gzip)
+          header[`Content-Type`] shouldEqual Some(textPlain)
+          gunzipped shouldEqual "Nope!"
+        }
+      }
+      "encode the response content with deflate if the response is not a success and request has no Accept-Encoding header" in {
+        Post() ~> encodeResponseWith(ContentCoding.deflate)(nope) ~> check {
+          status shouldEqual Status.NotFound
+          header[`Content-Encoding`].map(_.contentCoding) shouldEqual Some(ContentCoding.deflate)
+          inflated shouldEqual "Nope!"
+        }
+      }
+      "not encode the response content with gzip if the response is of status not allowing entity" in {
+        Post() ~> encodeResponseWith(ContentCoding.gzip)(complete(Status.NoContent)) ~> check {
+          status shouldEqual Status.NoContent
+          header[`Content-Encoding`] shouldEqual None
+          responseAs[Array[Byte]] shouldBe empty
+        }
+      }
+      "allow compressed responses with no body for informational messages" in {
+        Post() ~> encodeResponseWith(ContentCoding.deflate)(complete(Status.Continue, "Let's continue!")) ~> check {
+          status shouldEqual Status.Continue
+          header[`Content-Encoding`] shouldEqual None
+          responseAs[Array[Byte]] shouldBe empty
+        }
+      }
+    }
+
+    "the gzip encoder" should {
+      "encode the response content with gzip if the client accepts it with a dedicated Accept-Encoding header" in {
+        Post() ~> addHeader(`Accept-Encoding`(ContentCoding.gzip)) ~> encodeResponseWith(ContentCoding.gzip)(yeah) ~>
+        check {
+          header[`Content-Encoding`].map(_.contentCoding) shouldEqual Some(ContentCoding.gzip)
+          header[`Content-Type`] shouldEqual Some(textPlain)
+          gunzipped shouldEqual "Yeah!"
+        }
+      }
+      "leave responses with an already set Content-Encoding header unchanged" in {
+        Post() ~> addHeader(`Accept-Encoding`(ContentCoding.gzip)) ~> encodeResponseWith(ContentCoding.gzip) {
+          respondWithHeader(Header.Raw(CIString("Content-Encoding"), "identity"))(completeOk)
+        } ~> check {
+          status shouldEqual Status.Ok
+          headers.headers.filter(_.name == CIString("Content-Encoding")).map(_.value) shouldEqual List("identity")
+          responseAs[Array[Byte]] shouldBe empty
+        }
+      }
+      "correctly encode the chunk stream produced by a chunked response" in {
+        val lengthy = "This is a somewhat lengthy text that is being chunked by the autochunk directive!"
+        val chunked = Stream.emits(lengthy.getBytes("UTF-8")).chunkN(8).flatMap(Stream.chunk).covary[IO]
+        Post() ~> addHeader(`Accept-Encoding`(ContentCoding.gzip)) ~> encodeResponseWith(ContentCoding.gzip) {
+          complete(Response[IO]().withBodyStream(chunked).withContentType(textPlain))
+        } ~> check {
+          header[`Content-Encoding`].map(_.contentCoding) shouldEqual Some(ContentCoding.gzip)
+          gunzipped shouldEqual lengthy
+        }
+      }
+      "correctly encode the chunk stream produced by an empty chunked response" in {
+        Post() ~> addHeader(`Accept-Encoding`(ContentCoding.gzip)) ~> encodeResponseWith(ContentCoding.gzip) {
+          // a streamed body without bytes: `Stream.empty` itself is http4s' known-empty `EmptyBody`
+          complete(Response[IO]().withBodyStream(Stream.exec(IO.unit)).withContentType(textPlain))
+        } ~> check {
+          header[`Content-Encoding`].map(_.contentCoding) shouldEqual Some(ContentCoding.gzip)
+          gunzipped shouldEqual ""
+        }
+      }
+    }
+
+    "the encodeResponseWith(identity) directive" should {
+      "produce a non-encoded response if the request has an `Accept-Encoding: gzip, identity` header" in {
+        Post()                                           ~> addHeader(`Accept-Encoding`(ContentCoding.gzip, ContentCoding.identity)) ~>
+        encodeResponseWith(ContentCoding.identity)(yeah) ~> check {
+          header[`Content-Encoding`] shouldEqual None
+          responseAs[String] shouldEqual "Yeah!"
+        }
+      }
+      "produce a non-encoded response from (deflate, identity) for a request accepting gzip" in {
+        Post()                                                                  ~> addHeader(`Accept-Encoding`(ContentCoding.gzip)) ~>
+        encodeResponseWith(ContentCoding.deflate, ContentCoding.identity)(yeah) ~> check {
+          header[`Content-Encoding`] shouldEqual None
+          responseAs[String] shouldEqual "Yeah!"
+        }
+      }
+    }
+
+    "the encodeResponseWith directive" should {
+      "produce a response encoded with the specified encoder if the request has a matching Accept-Encoding header" in {
+        Post() ~> addHeader(`Accept-Encoding`(ContentCoding.gzip)) ~> encodeResponseWith(ContentCoding.gzip)(yeah) ~>
+        check {
+          header[`Content-Encoding`].map(_.contentCoding) shouldEqual Some(ContentCoding.gzip)
+          gunzipped shouldEqual "Yeah!"
+        }
+      }
+      "produce a response encoded with one of the specified encoders if the request has a matching Accept-Encoding header" in {
+        Post()                                                              ~> addHeader(`Accept-Encoding`(ContentCoding.deflate)) ~>
+        encodeResponseWith(ContentCoding.gzip, ContentCoding.deflate)(yeah) ~> check {
+          header[`Content-Encoding`].map(_.contentCoding) shouldEqual Some(ContentCoding.deflate)
+          inflated shouldEqual "Yeah!"
+        }
+      }
+      "produce a response encoded with the first of the specified encoders if the request has no Accept-Encoding header" in {
+        Post() ~> encodeResponseWith(ContentCoding.gzip, ContentCoding.deflate)(yeah) ~> check {
+          header[`Content-Encoding`].map(_.contentCoding) shouldEqual Some(ContentCoding.gzip)
+          gunzipped shouldEqual "Yeah!"
+        }
+      }
+      "produce a response with no encoding if the request has an empty Accept-Encoding header" in {
+        val encoders = encodeResponseWith(ContentCoding.gzip, ContentCoding.deflate, ContentCoding.identity)
+        Post() ~> addHeader(acceptEncoding("")) ~> encoders(completeOk) ~> check {
+          status shouldEqual Status.Ok
+          header[`Content-Encoding`] shouldEqual None
+        }
+        // with a body, Pekko too picks the first encoder: an empty header leaves every coding at q=1
+        Post() ~> addHeader(acceptEncoding("")) ~> encoders(yeah) ~> check {
+          header[`Content-Encoding`].map(_.contentCoding) shouldEqual Some(ContentCoding.gzip)
+        }
+      }
+      "negotiate the correct content encoding" in {
+        Post()                                                                                      ~> addHeader(acceptEncoding("identity;q=0.5, deflate;q=0, gzip")) ~>
+        encodeResponseWith(ContentCoding.identity, ContentCoding.deflate, ContentCoding.gzip)(yeah) ~> check {
+          header[`Content-Encoding`].map(_.contentCoding) shouldEqual Some(ContentCoding.gzip)
+          gunzipped shouldEqual "Yeah!"
+        }
+        Post()                                                              ~> addHeader(acceptEncoding("*, deflate;q=0.2")) ~>
+        encodeResponseWith(ContentCoding.deflate, ContentCoding.gzip)(yeah) ~> check {
+          header[`Content-Encoding`].map(_.contentCoding) shouldEqual Some(ContentCoding.gzip)
+        }
+      }
+      "reject the request if it has an Accept-Encoding header with an encoding that matches but is blacklisted" in {
+        Post() ~> addHeader(acceptEncoding("gzip;q=0")) ~> encodeResponseWith(ContentCoding.gzip)(yeah) ~> check {
+          rejection shouldEqual UnacceptedResponseEncodingRejection(Set(ContentCoding.gzip))
+        }
+      }
+    }
+
+    "the decodeRequest directive" should {
+      "decode the request content if it has a `Content-Encoding: identity` header and the content is not encoded" in {
+        Post("/", "yes") ~> addHeader(`Content-Encoding`(ContentCoding.identity)) ~> decodeRequest(echo) ~> check {
+          responseAs[String] shouldEqual "yes"
+        }
+      }
+      "reject the request if it has a `Content-Encoding: deflate` header but the request is encoded with gzip" in {
+        Post("/", gzipped("Hello"))      ~> addHeader(`Content-Encoding`(ContentCoding.deflate)) ~>
+        Route.seal(decodeRequest(drain)) ~> check {
+          status shouldEqual Status.BadRequest
+          responseAs[String] shouldEqual "The request's encoding is corrupt"
+        }
+      }
+    }
+
+    "the (decodeRequest & encodeResponse) compound directive" should {
+      val decodeEncode = decodeRequest & encodeResponse
+      "decode a gzip encoded request and produce a none encoded response if the request has no Accept-Encoding header" in {
+        Post("/", gzipped("Hello")) ~> addHeader(`Content-Encoding`(ContentCoding.gzip)) ~> decodeEncode(echo) ~>
+        check {
+          header[`Content-Encoding`] shouldEqual None
+          header[`Content-Type`] shouldEqual Some(textPlain)
+          responseAs[String] shouldEqual "Hello"
+        }
+      }
+      "decode a gzip encoded request and produce a deflate encoded response if the request has an `Accept-Encoding: deflate` header" in {
+        Post("/", gzipped("Hello"))                 ~> addHeaders(`Content-Encoding`(ContentCoding.gzip),
+          `Accept-Encoding`(ContentCoding.deflate)) ~> decodeEncode(echo) ~> check {
+          header[`Content-Encoding`].map(_.contentCoding) shouldEqual Some(ContentCoding.deflate)
+          inflated shouldEqual "Hello"
+        }
+      }
+      "decode an unencoded request and produce a gzip encoded response if the request has an `Accept-Encoding: gzip` header" in {
+        Post("/", "Hello") ~> addHeader(`Accept-Encoding`(ContentCoding.gzip)) ~> decodeEncode(echo) ~> check {
+          header[`Content-Encoding`].map(_.contentCoding) shouldEqual Some(ContentCoding.gzip)
+          gunzipped shouldEqual "Hello"
+        }
+      }
+    }
+
+    "the default marshaller" should {
+      "allow compressed responses with no body for informational messages" in {
+        Get() ~> addHeader(`Accept-Encoding`(ContentCoding.compress)) ~> encodeResponse(complete(Status.Continue)) ~>
+        check { status shouldEqual Status.Continue }
+      }
+      "allow gzipped responses with no body for 204 messages" in {
+        Get() ~> addHeader(`Accept-Encoding`(ContentCoding.gzip)) ~> encodeResponse(complete(Status.NoContent)) ~>
+        check { status shouldEqual Status.NoContent }
       }
     }
   }

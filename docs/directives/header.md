@@ -24,7 +24,9 @@ val route: Route = path("info") {
 
 ## headerValueByType
 
-Extracts a typed header using the http4s `Header.Select[T]` type class. Rejects with `MissingHeaderRejection` if no header of the given type is present.
+Extracts a typed header using the http4s `Header.Select[T]` and `Header[T, _]` type classes, which every http4s header
+and every header made with `Header.create` has. Rejects with `MissingHeaderRejection` naming the header (`header.name`,
+e.g. `X-Custom-Header`) if no header of the given type is present.
 
 The extraction type is `ev.F[T]`, which depends on the header kind. For singleton headers (e.g. `Content-Type`), `F[T] = T` so you get the header value directly. For recurring headers (e.g. `Set-Cookie`), `F[T] = NonEmptyList[T]`.
 
@@ -32,8 +34,10 @@ The extraction type is `ev.F[T]`, which depends on the header kind. For singleto
 import org.http4s.headers.`Content-Type`
 
 val route: Route = path("check") {
-  headerValueByType[`Content-Type`] { contentType =>
-    complete(s"Content-Type: $contentType")
+  // the directive takes implicit parameters, so apply it through a value (or combine it, e.g. `& get`)
+  val contentType = headerValueByType[`Content-Type`]
+  contentType { value =>
+    complete(s"Content-Type: $value")
   }
 }
 // Request with Content-Type header -> extracts the typed Content-Type value
@@ -97,7 +101,9 @@ As with `headerValueByType`, the inner type depends on the header kind: `F[T] = 
 import org.http4s.headers.`Content-Type`
 
 val route: Route = path("check") {
-  optionalHeaderValueByType[`Content-Type`] {
+  // the directive takes implicit parameters, so apply it through a value (or combine it, e.g. `& get`)
+  val contentType = optionalHeaderValueByType[`Content-Type`]
+  contentType {
     case Some(ct) => complete(s"Content-Type: $ct")
     case None     => complete("No Content-Type header found.")
   }

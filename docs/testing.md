@@ -39,9 +39,10 @@ Extend `Specs2RouteTest` in your specification:
 ```scala
 import cats.effect.unsafe.IORuntime
 import pl.iterators.stir.server.Directives._
+import org.specs2.mutable.Specification
 import pl.iterators.stir.testkit.Specs2RouteTest
 
-class MyRouteSpec extends org.specs2.mutable.Specification with Specs2RouteTest {
+class MyRouteSpec extends Specification with Specs2RouteTest {
   override implicit val runtime: IORuntime = IORuntime.global
 
   // tests go here

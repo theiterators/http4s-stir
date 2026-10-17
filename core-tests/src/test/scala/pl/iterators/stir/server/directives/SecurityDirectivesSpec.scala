@@ -8,6 +8,8 @@ import org.typelevel.ci.CIString
 import pl.iterators.stir.server.AuthenticationFailedRejection.{ CredentialsMissing, CredentialsRejected }
 import pl.iterators.stir.server._
 
+import java.util.concurrent.atomic.AtomicReference
+
 class SecurityDirectivesSpec extends RoutingSpec {
   override implicit def runtime: IORuntime = IORuntime.global
 
@@ -99,16 +101,15 @@ class SecurityDirectivesSpec extends RoutingSpec {
     }
     "properly handle exceptions thrown in its inner route" in {
       object TestException extends RuntimeException("Boom")
-//      EventFilter[TestException.type](
-//        occurrences = 1,
-//        start =
-//          "Error during processing of request: 'Boom'. Completing with 500 Internal Server Error response.").intercept {
+      val lines = new AtomicReference[List[String]](Nil)
       Get() ~> addHeader(Authorization(BasicCredentials("Alice", ""))) ~> {
         Route.seal {
           doBasicAuth { _ => throw TestException }
-        }
-      } ~> check { status shouldEqual Status.InternalServerError }
-//      }
+        }(RejectionHandler.default, recordingDefaultHandler(lines))
+      } ~> check {
+        status shouldEqual Status.InternalServerError
+        lines.get shouldEqual List(logged500("Boom"))
+      }
     }
   }
   "bearer token authentication" should {
@@ -172,16 +173,15 @@ class SecurityDirectivesSpec extends RoutingSpec {
     }
     "properly handle exceptions thrown in its inner route" in {
       object TestException extends RuntimeException("Boom")
-//      EventFilter[TestException.type](
-//        occurrences = 1,
-//        start =
-//          "Error during processing of request: 'Boom'. Completing with 500 Internal Server Error response.").intercept {
+      val lines = new AtomicReference[List[String]](Nil)
       Get() ~> addHeader(Authorization(OAuth2BearerToken("myToken"))) ~> {
         Route.seal {
           doOAuth2Auth { _ => throw TestException }
-        }
-      } ~> check { status shouldEqual Status.InternalServerError }
-//      }
+        }(RejectionHandler.default, recordingDefaultHandler(lines))
+      } ~> check {
+        status shouldEqual Status.InternalServerError
+        lines.get shouldEqual List(logged500("Boom"))
+      }
     }
   }
   "authentication directives" should {
