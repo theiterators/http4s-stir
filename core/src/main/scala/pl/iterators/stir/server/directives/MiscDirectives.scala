@@ -241,11 +241,34 @@ object MiscDirectives extends MiscDirectives {
 
   private[stir] val SharedBodyKey: Key[SharedBody] = Key.newKey[SyncIO, SharedBody].unsafeRunSync()
 
-  /** Prepares a request for routing: a length-less HTTP/2 request gets its body through a [[SharedBody]]. */
+  /**
+   * Prepares a request for routing: a length-less HTTP/2 request gets its body through a [[SharedBody]], any other
+   * body through [[guardRereads]].
+   */
   private[stir] def prepare(request: Request[IO]): IO[Request[IO]] =
-    if (!lengthlessHttp2(request)) IO.pure(request)
-    else
+    if (lengthlessHttp2(request))
       SharedBody(request.body).map(shared => request.withAttribute(SharedBodyKey, shared).withBodyStream(shared.body))
+    else if (request.body eq EmptyBody) IO.pure(request)
+    else guardRereads(request.body).map(request.withBodyStream)
+
+  /**
+   * The body, failing at once when it is read again after a read that stopped partway (an error, a cancellation, a
+   * reader that stopped early). A server hands a network body out once: read again, Ember's HTTP/1 body re-emits what
+   * it buffered and then waits on the socket for bytes that were already taken, so an alternative re-reading a body
+   * that failed mid-stream would hang until the idle timeout instead of being answered. A body read to the end stays
+   * readable as before. (Pekko fails the second materialization of a streamed entity the same way.)
+   */
+  private[stir] def guardRereads(body: EntityBody[IO]): IO[EntityBody[IO]] =
+    Ref.of[IO, Boolean](false).map { readPartly =>
+      Stream.eval((readPartly.get, Ref.of[IO, Boolean](false)).tupled).flatMap { case (partly, ended) =>
+        // a reader stopping early closes the stream normally, so whether the body reached its end is recorded here
+        if (partly) Stream.raiseError[IO](new IllegalStateException(RereadMessage))
+        else (body ++ Stream.exec(ended.set(true))).onFinalize(ended.get.flatMap(readPartly.set(true).unlessA(_)))
+      }
+    }
+
+  private[stir] val RereadMessage: String =
+    "The request entity was read partway before (by an earlier route) and cannot be read again"
 
   private val _requestEntityEmpty: Directive0 =
     knownEmpty.flatMap(if (_) pass else reject)
