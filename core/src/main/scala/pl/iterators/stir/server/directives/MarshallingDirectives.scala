@@ -87,8 +87,11 @@ object MarshallingDirectives extends MarshallingDirectives {
 
   /**
    * Decodes the request with the given decoder. The `Content-Type` is checked only when the request has one.
-   * A `DecodeFailure` (returned or raised), an `EntityStreamSizeException` or an `IllegalRequestException` becomes a
-   * rejection; any other error is re-raised. A decoder that fails on a request known to carry no body
+   * Every failure becomes a rejection, as in Pekko's `entity`: a `DecodeFailure` (returned or raised) by its kind, an
+   * `IllegalArgumentException` a `ValidationRejection`, anything else (a failing body stream, an
+   * `EntityStreamSizeException`, an `IllegalRequestException`, any other error a custom decoder raises, and an I/O
+   * error while http4s spools a large multipart part to a temporary file) a `MalformedRequestContentRejection`
+   * carrying it. A decoder that fails on a request known to carry no body
    * (`Content-Length: 0`, or an HTTP/1.x request with neither a length nor chunking) rejects with
    * `RequestEntityExpectedRejection`, as Pekko's unmarshallers do on an empty entity, unless the failure is about the
    * `Content-Type`. A length-less HTTP/2 body cannot be told from a missing one by its headers, so its failures stay
@@ -103,7 +106,9 @@ object MarshallingDirectives extends MarshallingDirectives {
       case Left(e: IllegalRequestException)   =>
         // e.g. a corrupt compressed body from decodeRequest: a rejection, so alternatives and handlers still apply
         IO.pure(Left(MalformedRequestContentRejection(e.message, e)))
-      case Left(error) => IO.raiseError(error)
+      case Left(e: IllegalArgumentException) => IO.pure(Left(ValidationRejection(e.getMessage.nullAsEmpty, Some(e))))
+      case Left(error)                       =>
+        IO.pure(Left(MalformedRequestContentRejection(error.getMessage.nullAsEmpty, error)))
     }
 
   private def rejectionFor(request: Request[IO], failure: DecodeFailure): Rejection = failure match {
