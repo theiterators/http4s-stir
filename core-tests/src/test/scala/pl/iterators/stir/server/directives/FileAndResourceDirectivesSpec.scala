@@ -3,7 +3,7 @@ package pl.iterators.stir.server.directives
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import org.http4s.{ Charset, ContentCoding, Header, HttpDate, MediaType, Response, Status, Uri }
-import org.http4s.headers.{ `Content-Encoding`, `Content-Type`, `Last-Modified` }
+import org.http4s.headers.{ `Accept-Encoding`, `Content-Encoding`, `Content-Type`, `Last-Modified` }
 import org.typelevel.ci._
 import org.scalatest.{ Inside, Inspectors }
 import pl.iterators.stir.impl.util._
@@ -217,6 +217,17 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
       } finally {
         file.delete
         ()
+      }
+    }
+    "mark a .gz resource served through getFromResourceDirectory and never re-compress it" in {
+      Get("/app.js.gz") ~> getFromResourceDirectory("precompressed") ~> check {
+        mediaType shouldEqual MediaType.application.javascript
+        header[`Content-Encoding`] shouldEqual Some(`Content-Encoding`(ContentCoding.gzip))
+      }
+      Get("/app.js.gz")                                         ~> addHeader(`Accept-Encoding`(ContentCoding.gzip)) ~>
+      encodeResponse(getFromResourceDirectory("precompressed")) ~> check {
+        header[`Content-Encoding`] shouldEqual Some(`Content-Encoding`(ContentCoding.gzip))
+        responseAs[String] shouldEqual "gzipped bytes"
       }
     }
     "support files with registered MediaType and .gz suffix" in {

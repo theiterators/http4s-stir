@@ -84,9 +84,9 @@ an explicit content type. `encodeResponse` never compresses such a response, so 
 in either order.
 
 ```scala
-val route: Route = pathPrefix("static") {
+val route: Route = path("logo.svg") {
   withPrecompressedMediaTypeSupport {
-    getFromDirectory("/var/www/static")
+    getFromFile("/var/www/static/logo.svgz", `Content-Type`(MediaType.image.`svg+xml`))
   }
 }
 ```

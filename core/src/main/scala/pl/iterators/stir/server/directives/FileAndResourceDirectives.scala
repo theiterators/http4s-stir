@@ -26,7 +26,7 @@ trait FileAndResourceDirectives {
 
   /**
    * Completes GET requests with the content of the given file, typed by the in-scope [[ContentTypeResolver]]
-   * (http4s' extension lookup by default). If the file cannot be found or read the request is rejected.
+   * ([[ContentTypeResolver.Default]], Pekko's rules). If the file cannot be found or read the request is rejected.
    *
    * @group fileandresource
    */
@@ -234,8 +234,11 @@ object FileAndResourceDirectives extends FileAndResourceDirectives {
   private[stir] def isPrecompressed(name: String, contentType: Option[`Content-Type`]): Boolean = {
     val lower = name.toRootLowerCase
     val gzippedName = lower.endsWith(".svgz") || (lower.endsWith(".gz") && lower.dropRight(3).contains('.'))
-    gzippedName && contentType.exists(ct => ct.mediaType.subType != "gzip" && ct.mediaType.subType != "x-gzip")
+    gzippedName && contentType.exists(ct => !ArchiveSubtypes.contains(ct.mediaType.subType))
   }
+
+  /** Media subtypes that are compressed archives in their own right and must never be marked `Content-Encoding`. */
+  private val ArchiveSubtypes: Set[String] = Set("gzip", "x-gzip", "x-compressed", "x-gtar", "gnutar", "zip")
 
   /**
    * Given a base directory and a (Uri) path, returns a path to a location contained in the base directory,
