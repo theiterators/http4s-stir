@@ -260,6 +260,13 @@ class MiscDirectivesSpec extends RoutingSpec {
         responseAs[String] shouldEqual MiscDirectives.RereadMessage
       }
     }
+    "let an empty length-less body be read again, as nothing can be lost" in {
+      http2(Post().withBodyStream(Stream.empty)) ~>
+      (entity(as[String])(_ => reject) ~ entity(as[String])(s =>
+        complete("second:" + s.length)))          ~> check { responseAs[String] shouldEqual "second:0" }
+      Get().withHttpVersion(HttpVersion.`HTTP/2`) ~> (formField("a")(echoComplete) ~ formField("b")(echoComplete)) ~>
+      check { rejections shouldEqual List(MissingFormFieldRejection("a"), MissingFormFieldRejection("b")) }
+    }
     "not hand a second alternative a truncated body over a real HTTP/2 connection" in {
       val app = (entity(as[String])(_ => reject) ~ entity(as[String])(s => complete("second:" + s.length))).toHttpApp
       val result = (for {

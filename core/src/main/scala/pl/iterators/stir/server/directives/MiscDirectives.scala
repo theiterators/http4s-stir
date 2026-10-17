@@ -232,7 +232,9 @@ object MiscDirectives extends MiscDirectives {
      * so it can be read once ([[guardRereads]]); a second read (an alternative after a rejection) fails at once
      * instead of getting the first chunk and whatever the drained stream still has.
      */
-    val body: EntityBody[IO] = guard(Stream.eval(peeked).flatten)
+    val body: EntityBody[IO] =
+      // an empty body loses nothing on a second read (every HTTP/2 GET comes here)
+      Stream.eval(peeked).flatMap(peeked => if (peeked eq EmptyBody) Stream.empty else guard(peeked))
 
     /** Closes the scope of the first look, once; nothing to do when the body was not looked at or was empty. */
     val release: IO[Unit] = releaseCell.getAndSet(None).flatMap(_.getOrElse(IO.unit))
