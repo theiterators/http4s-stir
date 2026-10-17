@@ -52,8 +52,8 @@ trait CodingDirectives {
 
   /**
    * Decodes the incoming request with the given coding (gzip, deflate or identity). Requests encoded differently
-   * are rejected with an [[UnsupportedRequestEncodingRejection]]; requests that declare `Content-Length: 0` pass
-   * through untouched. The decoded request carries `Transfer-Encoding: chunked` instead of its `Content-Length`,
+   * are rejected with an [[UnsupportedRequestEncodingRejection]]; requests known to carry no body (`Content-Length:
+   * 0`, or HTTP/1.x with neither a length nor chunking) pass through untouched. The decoded request carries `Transfer-Encoding: chunked` instead of its `Content-Length`,
    * since the decoded size is unknown. A corrupt compressed body fails the entity with a decode failure, which
    * `entity` turns into a [[MalformedRequestContentRejection]] (400).
    *
@@ -69,7 +69,7 @@ trait CodingDirectives {
           .putHeaders(`Transfer-Encoding`(TransferCoding.chunked))
       }
 
-    contentLengthZero |
+    knownEmptyRequest |
     (requestEncodedWith(decoder) & applyDecoder &
     cancelRejections(classOf[UnsupportedRequestEncodingRejection]))
   }
@@ -145,9 +145,17 @@ object CodingDirectives extends CodingDirectives {
   private def isPrecompressed(response: Response[IO]): Boolean =
     response.attributes.lookup(FileAndResourceDirectives.ServedNameKey).exists(_.toLowerCase.endsWith(".svgz"))
 
-  /** Passes only requests that declare `Content-Length: 0`; a bodiless request without that header has no encoding. */
-  private val contentLengthZero: Directive0 =
-    extract(_.request.contentLength.contains(0L)).flatMap(if (_) pass else reject)
+  /**
+   * Passes requests known to carry no body: `Content-Length: 0`, or an HTTP/1.x request with neither a length nor
+   * chunking (RFC 7230 3.3.3). Unlike `requestEntityEmpty`, a length-less HTTP/2 body is not assumed empty here,
+   * because skipping the decoder would hand compressed bytes to the route.
+   */
+  private val knownEmptyRequest: Directive0 =
+    extract { ctx =>
+      val request = ctx.request
+      request.contentLength.contains(0L) ||
+      (request.httpVersion.major < 2 && request.contentLength.isEmpty && !request.isChunked)
+    }.flatMap(if (_) pass else reject)
 
   private def requestEncoding(request: Request[IO]): ContentCoding =
     request.headers.get[`Content-Encoding`].map(_.contentCoding).getOrElse(ContentCoding.identity)

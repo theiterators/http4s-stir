@@ -5,8 +5,8 @@ import cats.effect.unsafe.IORuntime
 import fs2.Stream
 import fs2.text.utf8
 import fs2.compression.{ Compression, DeflateParams, InflateParams, ZLibParams }
-import org.http4s.{ ContentCoding, QValue, Status }
-import org.http4s.headers.{ `Accept-Encoding`, `Content-Encoding` }
+import org.http4s.{ ContentCoding, HttpVersion, Method, QValue, Request, Status, TransferCoding }
+import org.http4s.headers.{ `Accept-Encoding`, `Content-Encoding`, `Transfer-Encoding` }
 import pl.iterators.stir.server._
 
 import java.io.File
@@ -150,6 +150,27 @@ class CodingDirectivesSpec extends RoutingSpec {
       Post("/", "")             ~> addHeader(`Content-Encoding`(ContentCoding.unsafeFromString("br"))) ~>
       decodeRequest(completeOk) ~>
       check { status shouldEqual Status.Ok }
+    }
+    "pass a bodiless request without Content-Length through decodeRequestWith(gzip), as Pekko does" in {
+      Request[IO](method = Method.POST) ~> decodeRequestWith(ContentCoding.gzip)(completeOk) ~> check {
+        status shouldEqual Status.Ok
+      }
+    }
+    "pass a bodiless request without Content-Length through whatever its Content-Encoding" in {
+      Request[IO](method = Method.POST).putHeaders(`Content-Encoding`(ContentCoding.deflate)) ~>
+      decodeRequestWith(ContentCoding.gzip)(completeOk)                                       ~> check { status shouldEqual Status.Ok }
+    }
+    "decode a length-less HTTP/2 gzip body instead of assuming it empty" in {
+      Request[IO](method = Method.POST, httpVersion = HttpVersion.`HTTP/2`,
+        body = Stream.emits(gzipped(text)).covary[IO])
+        .putHeaders(`Content-Encoding`(ContentCoding.gzip)) ~> decodeRequest(echo) ~> check {
+        responseAs[String] shouldEqual text
+      }
+    }
+    "decode a chunked HTTP/1.1 gzip body without Content-Length" in {
+      Request[IO](method = Method.POST, body = Stream.emits(gzipped(text)).covary[IO])
+        .putHeaders(`Content-Encoding`(ContentCoding.gzip), `Transfer-Encoding`(TransferCoding.chunked)) ~>
+      decodeRequest(echo)                                                                                ~> check { responseAs[String] shouldEqual text }
     }
     "reject with UnsupportedRequestEncodingRejection for an unknown encoding" in {
       Post("/", "body") ~> addHeader(`Content-Encoding`(ContentCoding.unsafeFromString("br"))) ~> decodeRequest(echo) ~>
