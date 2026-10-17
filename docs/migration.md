@@ -4,8 +4,6 @@ title: Migration from Pekko/Akka HTTP
 sidebar_position: 26
 ---
 
-- **Synchronous execution**: all test assertions run synchronously; there is no async test support. `~>` waits for the
-  route, so `~> runRoute` does not separate running the route from checking it as Pekko's does.
 # Migration from Pekko/Akka HTTP
 
 This guide covers the key differences between Pekko HTTP (or Akka HTTP) and http4s-stir, and lists the directives and features that are not yet implemented.
@@ -149,6 +147,8 @@ instead. Other differences that remain:
 
 The http4s-stir testkit differs from the Pekko HTTP testkit in the following ways:
 
+- **Synchronous execution**: all test assertions run synchronously; there is no async test support. `~>` waits for the
+  route, so `~> runRoute` does not separate running the route from checking it as Pekko's does.
 - **Chunk inspection**: `chunks`, `chunksStream` and `trailer` expose the body chunks and trailer headers; there is no `ChunkStreamPart` model.
 - **Limited request building**: some minor header convenience methods available in the Pekko HTTP testkit are missing.
 - **WebSocket testing**: `WS(uri, probe, subprotocols*)` and `WSProbe` exchange frames with the handler in memory, as in Pekko, but the probe talks to the handler as the directive received it (no ping/pong filtering or defragmentation) and over `~!>` no frames are exchanged. `isWebSocketUpgrade` and `expectWebSocketUpgradeWithProtocol` work as in Pekko.
