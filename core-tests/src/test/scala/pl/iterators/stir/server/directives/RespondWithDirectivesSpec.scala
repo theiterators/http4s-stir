@@ -73,5 +73,15 @@ class RespondWithDirectivesSpec extends RoutingSpec {
         headers.headers shouldEqual List(customHeader2, existingHeader)
       }
     }
+    "add several missing defaults in their declared order before the existing headers" in {
+      val other = Header.Raw(CIString("other"), "other")
+      Get() ~> respondWithDefaultHeaders(customHeader, customHeader2) { respondWithHeader(other) { completeOk } } ~>
+      check { headers.headers shouldEqual List(customHeader, customHeader2, other) }
+    }
+    "add duplicate-named defaults when the name is absent, judging presence by the original headers" in {
+      Get() ~> respondWithDefaultHeaders(customHeader, existingHeader) { completeOk } ~> check {
+        headers.headers shouldEqual List(customHeader, existingHeader)
+      }
+    }
   }
 }

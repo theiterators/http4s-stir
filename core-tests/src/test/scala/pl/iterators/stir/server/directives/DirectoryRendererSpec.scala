@@ -55,14 +55,20 @@ class DirectoryRendererSpec extends AnyWordSpec with Matchers {
     }
   }
 
-  "humanReadableByteCount under a Turkish default locale" should {
-    "still use a decimal point" in {
+  "the formatters under a foreign default locale" should {
+    def withDefaultLocale[A](tag: String)(body: => A): A = {
       val previous = Locale.getDefault
-      Locale.setDefault(Locale.forLanguageTag("tr-TR"))
-      try {
-        DirectoryRenderer.humanReadableByteCount(1500000L) shouldEqual "1.5 MB"
-        DirectoryRenderer.humanReadableByteCount(1234L) shouldEqual "1.2 kB"
-      } finally Locale.setDefault(previous)
+      Locale.setDefault(Locale.forLanguageTag(tag))
+      try body
+      finally Locale.setDefault(previous)
+    }
+    "still use a decimal point for sizes under tr-TR" in withDefaultLocale("tr-TR") {
+      DirectoryRenderer.humanReadableByteCount(1500000L) shouldEqual "1.5 MB"
+      DirectoryRenderer.humanReadableByteCount(1234L) shouldEqual "1.2 kB"
+    }
+    "still use ASCII digits for dates under ar-EG" in withDefaultLocale("ar-EG") {
+      DirectoryRenderer.isoLikeDateTime(0L) shouldEqual "1970-01-01 00:00:00"
+      DirectoryRenderer.isoLikeDateTime(1709164800000L) shouldEqual "2024-02-29 00:00:00"
     }
   }
 

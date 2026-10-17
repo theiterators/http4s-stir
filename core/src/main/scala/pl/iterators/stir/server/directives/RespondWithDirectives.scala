@@ -44,7 +44,7 @@ trait RespondWithDirectives {
    */
   def respondWithDefaultHeaders(responseHeaders: immutable.Seq[Header.Raw]): Directive0 =
     mapResponse { response =>
-      // the missing defaults go first, as in Pekko's withDefaultHeaders
+      // the missing defaults go first (in declared order; Pekko's withDefaultHeaders also prepends them, reversed)
       val missing = responseHeaders.filterNot(header => response.headers.get(header.name).isDefined)
       response.withHeaders(Headers(missing.toList ++ response.headers.headers))
     }

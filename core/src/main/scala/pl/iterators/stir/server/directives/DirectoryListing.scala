@@ -131,6 +131,7 @@ object DirectoryRenderer {
     val day = dayOfYear - (153 * mp + 2) / 5 + 1
     val month = if (mp < 10) mp + 3 else mp - 9
     val year = yearOfEra + era * 400 + (if (month <= 2) 1 else 0)
-    f"$year%04d-$month%02d-$day%02d ${seconds / 3600}%02d:${seconds % 3600 / 60}%02d:${seconds % 60}%02d"
+    "%04d-%02d-%02d %02d:%02d:%02d".formatLocal(Locale.ROOT, year, month, day, seconds / 3600, seconds % 3600 / 60,
+      seconds % 60) // Locale.ROOT: %d digits would otherwise follow the default locale (Arabic-Indic, Thai)
   }
 }
