@@ -32,7 +32,16 @@ object ToResponseMarshaller {
 
   implicit def fromEncoderableWithStatus[E](
       implicit encoder: EntityEncoder[IO, E]): ToResponseMarshaller[(Status, E)] =
-    negotiated(trm => IO.pure(Response[IO](status = trm._1).withEntity(trm._2)))
+    (trm: (Status, E)) => negotiatedIfSuccess(Response[IO](status = trm._1).withEntity(trm._2))
+
+  /**
+   * A successful response (`Status.isSuccess`: 1xx to 3xx, as Pekko's `isSuccess`) is negotiated; an error (4xx, 5xx)
+   * is sent whatever the request accepts, as Pekko adds an opaque fallback for errors so that
+   * `complete(Status.BadRequest, "...")` reaches a client asking for JSON
+   * (akka/akka#19397).
+   */
+  private def negotiatedIfSuccess(response: Response[IO]): IO[Response[IO]] =
+    IO.pure(if (response.status.isSuccess) response.withAttribute(NegotiatedKey, ()) else response)
 
   implicit def fromStatusWithHeaders: ToResponseMarshaller[(Status, Headers)] = {
     (trm: (Status, Headers)) =>
@@ -43,7 +52,8 @@ object ToResponseMarshaller {
 
   implicit def fromEncoderableWithStatusAndHeaders[E](
       implicit encoder: EntityEncoder[IO, E]): ToResponseMarshaller[(Status, Headers, E)] =
-    negotiated(trm => IO.pure(Response[IO](status = trm._1, headers = trm._2).withEntity(trm._3)))
+    (trm: (Status, Headers, E)) =>
+      negotiatedIfSuccess(Response[IO](status = trm._1, headers = trm._2).withEntity(trm._3))
 
   implicit def fromStatus: ToResponseMarshaller[Status] = {
     (trm: Status) =>
