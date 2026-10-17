@@ -124,6 +124,14 @@ instead. Other differences that remain:
   requests (206, 416) as Pekko does.
 - `getFromResource` rejects a directory entry inside a jar instead of serving it as an empty body.
 - `logRequestResultWith(show)` is new; a `show` that fails fails the request, as in Pekko.
+- `entity` rejects every failure, as Pekko does: a request body stream that fails (a dropped connection, a broken
+  upstream) is a `MalformedRequestContentRejection` carrying the error, and a decoder raising an
+  `IllegalArgumentException` a `ValidationRejection`; both used to reach the exception handler as a 500. So does any
+  other error a custom `EntityDecoder` raises (a 400 rejection where it used to be a logged 500), and an I/O error
+  while http4s spools a large multipart part to a temporary file. `formFieldSeq`, `formFieldMap` and
+  `formFieldMultiMap` likewise reject a body that fails while it is buffered (a body over the size limit still
+  answers 413, a slow one 408); a corrupt compressed form body now reaches the rejection handler, whose 400 reads
+  "The request content was malformed:" followed by the message.
 - `complete` negotiates the response's `Content-Type` against the request's `Accept` header, as Pekko does: a
   representation the client does not accept is rejected with `UnacceptedResponseContentTypeRejection` (406 when sealed,
   "Resource representation is only available with these types:" followed by the types). Clients sending `*/*` or no
