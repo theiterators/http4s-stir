@@ -215,5 +215,32 @@ class MarshallingDirectivesSpec extends RoutingSpec with Inside {
         entity(as[String]) { s => complete(s) }
       } ~> check { responseAs[String] shouldEqual jsonBody }
     }
+    "reject with RequestEntityExpectedRejection when the request has no entity" in {
+      Put() ~> echoJson                                              ~> check { rejection shouldEqual RequestEntityExpectedRejection }
+      Put() ~> addHeader(`Content-Type`(MediaType.application.json)) ~> echoJson ~> check {
+        rejection shouldEqual RequestEntityExpectedRejection
+      }
+    }
+    "complete with 400 'Request entity expected but not supplied' for a missing entity when sealed" in {
+      Put() ~> Route.seal(echoJson) ~> check {
+        status shouldEqual Status.BadRequest
+        responseAs[String] shouldEqual "Request entity expected but not supplied"
+      }
+    }
+    "prefer the UnsupportedRequestContentTypeRejection when an empty request has an unsupported Content-Type" in {
+      Put() ~> addHeader(`Content-Type`(MediaType.text.plain)) ~> echoJson ~> check {
+        rejection shouldBe an[UnsupportedRequestContentTypeRejection]
+      }
+    }
+    "decode a missing entity as an empty String" in {
+      Put() ~> entity(as[String]) { s => complete("[" + s + "]") } ~> check { responseAs[String] shouldEqual "[]" }
+    }
+    "cancel the RequestEntityExpectedRejection when another alternative accepts the request" in {
+      val acceptsThenRejects: Route = entity(as[String]) { _ => reject(MissingCookieRejection("c")) }
+      Put() ~> (echoJson ~ acceptsThenRejects)                  ~> check { rejections shouldEqual List(MissingCookieRejection("c")) }
+      Put() ~> (echoJson ~ reject(MissingCookieRejection("c"))) ~> check {
+        rejections shouldEqual List(RequestEntityExpectedRejection, MissingCookieRejection("c"))
+      }
+    }
   }
 }

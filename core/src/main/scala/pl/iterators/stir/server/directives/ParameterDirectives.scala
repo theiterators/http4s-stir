@@ -30,6 +30,8 @@ trait ParameterDirectives extends ToNameReceptacleEnhancements with ParameterDir
    * Extracts the request's query parameters as a `Seq[(String, String)]`.
    *
    * @group param
+   * The pairs come in the order of the query string, a parameter without a value (`?flag`) as an empty string, as
+   * Pekko's `Uri.Query.toSeq`.
    */
   def parameterSeq: Directive1[Seq[(String, String)]] = _parameterSeq
 
@@ -40,7 +42,7 @@ trait ParameterDirectives extends ToNameReceptacleEnhancements with ParameterDir
     extract(_.request.uri.query.multiParams)
 
   private val _parameterSeq: Directive1[Seq[(String, String)]] =
-    extract(_.request.uri.query.multiParams.toList.flatMap { case (k, vs) => vs.map(v => (k, v)) })
+    extract(_.request.uri.query.pairs.map { case (name, value) => name -> value.getOrElse("") })
 
   trait ParamSpec {
     type Out

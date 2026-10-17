@@ -389,6 +389,16 @@ class ParameterDirectivesSpec extends AnyFreeSpec with GenericRoutingSpec with I
         responseAs[String] shouldEqual "4: [a -> b, a -> z, c -> d, e -> f]"
       }
     }
+    "extract parameters in the order of the query string" in {
+      Get("/?e=f&a=z&c=d&a=b") ~> parameterSeq { params => complete(params.mkString(", ")) } ~> check {
+        responseAs[String] shouldEqual "(e,f), (a,z), (c,d), (a,b)"
+      }
+    }
+    "extract a parameter without a value as an empty string" in {
+      Get("/?flag&a=1") ~> parameterSeq { params => complete(params.mkString(", ")) } ~> check {
+        responseAs[String] shouldEqual "(flag,), (a,1)"
+      }
+    }
   }
 
   "when used with 'as[A](constructor)' the parameter directive should" - {

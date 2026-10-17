@@ -141,7 +141,9 @@ val route: Route = path("data") {
 
 ## formFieldSeq
 
-Extracts all form fields as a `Seq[(String, String)]`, preserving order and duplicate keys.
+Extracts all form fields as a `Seq[(String, String)]` in the order of the body, preserving duplicate keys; a field
+without a value (`flag` or `flag=`) is an empty string and a field without a name is dropped, as in Pekko. Both
+url-encoded bodies and the text parts of a `multipart/form-data` body keep their order.
 
 ```scala
 val route: Route = path("data") {

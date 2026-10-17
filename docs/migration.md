@@ -56,6 +56,11 @@ size limits) is set per directive instead.
 - `getFromFile`, `getFromResource`, `getFromDirectory`, `getFromResourceDirectory` and the browseable directory
   directives take an implicit `ContentTypeResolver`; code that passed them as function values (`xs.map(getFromDirectory)`)
   now needs `xs.map(getFromDirectory(_))`.
+- `entity(as[T])` on a request known to have no body rejects with `RequestEntityExpectedRejection` (400, "Request
+  entity expected but not supplied") instead of `MalformedRequestContentRejection`, as Pekko does; `as[String]`
+  still decodes it as `""`.
+- `parameterSeq` and `formFieldSeq` return the pairs in the order of the query string or body, as Pekko does, and
+  `parameterSeq` includes a parameter without a value (`?flag`) as `("flag", "")` instead of dropping it.
 - `complete` negotiates the response's `Content-Type` against the request's `Accept` header, as Pekko does: a
   representation the client does not accept is rejected with `UnacceptedResponseContentTypeRejection` (406 when sealed,
   "Resource representation is only available with these types:" followed by the types). Clients sending `*/*` or no

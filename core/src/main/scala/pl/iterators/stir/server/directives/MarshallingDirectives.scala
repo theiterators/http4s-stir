@@ -34,7 +34,7 @@ trait MarshallingDirectives {
         case Right(value)    => inner(Tuple1(value))(ctx)
         case Left(rejection) => IO.pure(RouteResult.Rejected(rejection :: Nil))
       }
-  } & cancelRejections(classOf[UnsupportedRequestContentTypeRejection])
+  } & cancelRejections(RequestEntityExpectedRejection.getClass, classOf[UnsupportedRequestContentTypeRejection])
 
   /**
    * Returns the in-scope [[EntityDecoder]] for the given type.
@@ -88,19 +88,27 @@ object MarshallingDirectives extends MarshallingDirectives {
   /**
    * Decodes the request with the given decoder. The `Content-Type` is checked only when the request has one.
    * A `DecodeFailure` (returned or raised), an `EntityStreamSizeException` or an `IllegalRequestException` becomes a
-   * rejection; any other error is re-raised.
+   * rejection; any other error is re-raised. A decoder that fails on a request known to carry no body
+   * (`Content-Length: 0`, or neither a length nor chunking) rejects with `RequestEntityExpectedRejection`, as
+   * Pekko's `NoContentException` does, unless the failure is about the `Content-Type`.
    */
   private[stir] def decodeEntity[T](request: Request[IO], decoder: EntityDecoder[IO, T]): IO[Either[Rejection, T]] =
     decoder.decode(request, strict = request.contentType.isDefined).value.attempt.flatMap {
       case Right(Right(value))                => IO.pure(Right(value))
-      case Right(Left(failure))               => IO.pure(Left(rejectionFor(failure)))
-      case Left(failure: DecodeFailure)       => IO.pure(Left(rejectionFor(failure)))
+      case Right(Left(failure))               => IO.pure(Left(rejectionFor(request, failure)))
+      case Left(failure: DecodeFailure)       => IO.pure(Left(rejectionFor(request, failure)))
       case Left(e: EntityStreamSizeException) => IO.pure(Left(MalformedRequestContentRejection(e.getMessage, e)))
       case Left(e: IllegalRequestException)   =>
         // e.g. a corrupt compressed body from decodeRequest: a rejection, so alternatives and handlers still apply
         IO.pure(Left(MalformedRequestContentRejection(e.message, e)))
       case Left(error) => IO.raiseError(error)
     }
+
+  private def rejectionFor(request: Request[IO], failure: DecodeFailure): Rejection = failure match {
+    case _: MediaTypeMismatch | _: MediaTypeMissing => rejectionFor(failure)
+    case _ if MiscDirectives.isKnownEmpty(request)  => RequestEntityExpectedRejection
+    case _                                          => rejectionFor(failure)
+  }
 
   private[stir] def rejectionFor(failure: DecodeFailure): Rejection = failure match {
     case MediaTypeMismatch(actual, expected)                                 => UnsupportedRequestContentTypeRejection(expected, Some(actual))

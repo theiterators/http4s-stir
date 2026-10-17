@@ -179,7 +179,8 @@ val route: Route = path("info") {
 
 ## parameterSeq
 
-Extracts all query parameters as a `Seq[(String, String)]`, preserving duplicate keys. Note that the order of parameters may not match the original query string order since the implementation is based on `multiParams`, which uses a `Map` internally.
+Extracts all query parameters as a `Seq[(String, String)]` in the order of the query string, preserving duplicate
+keys; a parameter without a value (`?flag`) is an empty string, as in Pekko.
 
 ```scala
 val route: Route = path("info") {

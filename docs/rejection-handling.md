@@ -42,7 +42,7 @@ A `PUT /order` request would be rejected by both the `get` and `post` directives
 | `MalformedFormFieldRejection(fieldName, errorMsg, cause)` | A form field could not be interpreted. |
 | `UnsupportedRequestContentTypeRejection(supported, contentType)` | The request's `Content-Type` is not accepted by the entity decoder. Produces 415. |
 | `MalformedRequestContentRejection(message, cause)` | Unmarshalling the request content failed with a non-`IllegalArgumentException` error. Produces 400, or 413 when the cause is an `EntityStreamSizeException`. |
-| `RequestEntityExpectedRejection` | An entity was expected but the request has none. Produced by `requestEntityPresent`. Produces 400. |
+| `RequestEntityExpectedRejection` | An entity was expected but the request has none. Produced by `requestEntityPresent`, and by `entity` when its decoder fails on a request known to have no body. Produces 400. |
 | `InvalidOriginRejection(allowedOrigins)` | The `Origin` header is not in the allowed list. Produced by `checkSameOrigin`. Produces 403. |
 | `UnacceptedResponseContentTypeRejection(supported)` | The client accepts none of the content types the route can produce (`Accept`). Produced by `complete` for `EntityEncoder`-based marshallers. Produces 406 listing the types. |
 | `UnacceptedResponseEncodingRejection(supported)` | The client accepts none of the response encodings the route can produce. Produced by `encodeResponse*` and `responseEncodingAccepted`. Produces 406. |

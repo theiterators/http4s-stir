@@ -2,7 +2,18 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.IO
 import cats.implicits._
-import org.http4s.{ DecodeResult, EntityDecoder, Media, MediaRange, MediaTypeMismatch, MediaTypeMissing, UrlForm }
+import org.http4s.{
+  Charset,
+  DecodeResult,
+  EntityDecoder,
+  Media,
+  MediaRange,
+  MediaType,
+  MediaTypeMismatch,
+  MediaTypeMissing,
+  Uri,
+  UrlForm
+}
 import pl.iterators.stir.common._
 import pl.iterators.stir.impl.util._
 import pl.iterators.stir.server._
@@ -44,11 +55,9 @@ object FormFieldDirectives {
   /** How long a field directive waits for the form body before failing the request with 408 (10 s, as Pekko). */
   private[stir] val StrictFormTimeout: FiniteDuration = 10.seconds
 
-  private val _formFieldSeq: Directive1[Seq[(String, String)]] = {
-    BasicDirectives.toStrictEntity(StrictFormTimeout).tflatMap(_ => entity(formDecoder)).map { form =>
-      form.values.toSeq.flatMap { case (k, vs) => vs.map(v => k -> v).toList }
-    }
-  }
+  private val _formFieldSeq: Directive1[Seq[(String, String)]] =
+    BasicDirectives.toStrictEntity(StrictFormTimeout).tflatMap(_ => entity(formFieldsDecoder)).map(fields =>
+      fields: Seq[(String, String)])
   private val _formFieldMap: Directive1[Map[String, String]] = _formFieldSeq.map(toMap)
 
   private val _formFieldMultiMap: Directive1[Map[String, List[String]]] = {
@@ -71,32 +80,51 @@ object FormFieldDirectives {
   private def toMap(seq: Seq[(String, String)]): Map[String, String] = immutable.TreeMap(seq: _*)
 
   /**
-   * Decodes a form from either an `application/x-www-form-urlencoded` body or the text parts of a
-   * `multipart/form-data` body (parts with a `filename` are files, not fields; see the upload directives).
+   * Decodes the fields of either an `application/x-www-form-urlencoded` body or the text parts of a
+   * `multipart/form-data` body (parts with a `filename` are files, not fields; see the upload directives), in the
+   * order of the body, as Pekko's `StrictForm.fields`. Fields without a name are dropped, as Pekko drops them.
    */
-  private[stir] lazy val formDecoder: EntityDecoder[IO, UrlForm] = new EntityDecoder[IO, UrlForm] {
-    private val urlEncoded = UrlForm.entityDecoder[IO]
-    private val multipart = multipartFormDecoder
+  private[stir] lazy val formFieldsDecoder: EntityDecoder[IO, Vector[(String, String)]] =
+    new EntityDecoder[IO, Vector[(String, String)]] {
+      private val urlEncoded = urlEncodedFieldsDecoder
+      private val multipart = multipartFieldsDecoder
 
-    val consumes: Set[MediaRange] = urlEncoded.consumes ++ multipart.consumes
+      val consumes: Set[MediaRange] = urlEncoded.consumes ++ multipart.consumes
 
-    def decode(media: Media[IO], strict: Boolean): DecodeResult[IO, UrlForm] =
-      if (media.contentType.exists(ct => multipart.matchesMediaType(ct.mediaType))) multipart.decode(media, strict)
-      else
-        urlEncoded.decode(media, strict).leftMap {
-          case MediaTypeMismatch(actual, _) => MediaTypeMismatch(actual, consumes)
-          case MediaTypeMissing(_)          => MediaTypeMissing(consumes)
-          case other                        => other
-        }
+      def decode(media: Media[IO], strict: Boolean): DecodeResult[IO, Vector[(String, String)]] =
+        if (media.contentType.exists(ct => multipart.matchesMediaType(ct.mediaType))) multipart.decode(media, strict)
+        else
+          urlEncoded.decode(media, strict).leftMap {
+            case MediaTypeMismatch(actual, _) => MediaTypeMismatch(actual, consumes)
+            case MediaTypeMissing(_)          => MediaTypeMissing(consumes)
+            case other                        => other
+          }
+    }
+
+  /** The fields as a `UrlForm`, for the single-field directives. */
+  private[stir] lazy val formDecoder: EntityDecoder[IO, UrlForm] = formFieldsDecoder.map(fields => UrlForm(fields: _*))
+
+  /** Url-encoded fields in wire order, decoded with the body's charset (`+` is a space); `name` alone is `name=`. */
+  private def urlEncodedFieldsDecoder: EntityDecoder[IO, Vector[(String, String)]] =
+    EntityDecoder.decodeBy(MediaType.application.`x-www-form-urlencoded`) { media =>
+      DecodeResult.success(EntityDecoder.decodeText(media).map(body =>
+        parseUrlEncoded(body, media.charset.getOrElse(Charset.`UTF-8`))))
+    }
+
+  private[stir] def parseUrlEncoded(body: String, charset: Charset): Vector[(String, String)] = {
+    def decode(encoded: String): String = Uri.decode(encoded, charset.nioCharset, plusIsSpace = true)
+    body.split('&').iterator.filter(_.nonEmpty).map { segment =>
+      segment.indexOf('=') match {
+        case -1    => decode(segment) -> ""
+        case index => decode(segment.substring(0, index)) -> decode(segment.substring(index + 1))
+      }
+    }.filter(_._1.nonEmpty).toVector
   }
 
-  private def multipartFormDecoder: EntityDecoder[IO, UrlForm] =
+  private def multipartFieldsDecoder: EntityDecoder[IO, Vector[(String, String)]] =
     EntityDecoder.multipart[IO].flatMapR { multipart =>
-      val fields = multipart.parts.filter(part => part.filename.isEmpty && part.name.isDefined).toList.traverse {
-        part =>
-          part.bodyText.compile.string.map(value => part.name.getOrElse("") -> value)
-      }
-      DecodeResult.success(fields.map(values => UrlForm(values: _*)))
+      val fields = multipart.parts.filter(part => part.filename.isEmpty && part.name.exists(_.nonEmpty)).toVector
+      DecodeResult.success(fields.traverse(part => part.bodyText.compile.string.map(part.name.getOrElse("") -> _)))
     }
 
   trait FieldSpec {
