@@ -57,6 +57,10 @@ val sealed = myExceptionHandler.seal(
 )
 ```
 
+Sealing an already sealed handler returns it unchanged, so a log action given the second time is ignored, as in Pekko.
+`Route.seal` takes no log action; to log through your own action, wrap the route in
+`handleExceptions(ExceptionHandler.seal(handler)(logAction))` before sealing it.
+
 ## Default Behavior
 
 The default `ExceptionHandler` (returned by `ExceptionHandler.default()`) handles all non-fatal exceptions by:

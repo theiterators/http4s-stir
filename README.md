@@ -159,9 +159,10 @@ There's a compatibility layer, [`Http4sDirectives`](https://github.com/theiterat
 
 Every Pekko HTTP directive category has a counterpart. What differs:
 
-* Directives tied to the Pekko runtime (`extractExecutionContext`, `extractMaterializer`, `extractActorSystem`, `withLog`, `withSettings` and friends, `onCompleteWithBreaker`, `completeWith`) have no equivalent; settings-driven behaviour is configured per directive instead.
-* `DebuggingDirectives` have a different API (flags and `LogRedaction` instead of `LoggingMagnet`).
-* Testkit differences: synchronous execution, no incremental inspection of chunked responses, WebSocket tests cover the handshake but not frames.
+* Directives tied to the Pekko runtime (`extractExecutionContext`, `extractMaterializer`, `extractActorSystem`, `withLog`, `withSettings` and friends, `onCompleteWithBreaker`) have no equivalent; settings-driven behaviour is configured per directive instead.
+* `DebuggingDirectives` have a different API (flags and `LogRedaction` instead of `LoggingMagnet`; `logRequestResultWith` takes Pekko's per-result function).
+* `Marshaller.oneOf` and `Accept-Charset` negotiation are not ported; resource directives work on the JVM only.
+* Testkit differences: synchronous execution, and the WebSocket probe talks to the handler without the server's ping/pong and defragmentation.
 
 See the [migration guide](https://theiterators.github.io/http4s-stir/docs/migration) for the full list, including the behaviour changes in 0.7.
 

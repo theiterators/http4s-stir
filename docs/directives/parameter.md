@@ -166,7 +166,7 @@ val route: Route = path("info") {
 
 ## parameterMultiMap
 
-Extracts all query parameters as a `Map[String, Seq[String]]`, preserving multiple values for the same key.
+Extracts all query parameters as a `Map[String, Seq[String]]`, preserving multiple values for the same key. A parameter without a value (`?flag`) maps to an empty list (Pekko: a list with one empty string).
 
 ```scala
 val route: Route = path("info") {

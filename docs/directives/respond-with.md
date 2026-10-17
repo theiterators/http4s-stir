@@ -10,7 +10,7 @@ Respond-with directives add headers to HTTP responses produced by inner routes. 
 
 ## respondWithHeader
 
-Unconditionally adds the given header to all responses from the inner route. The new header is prepended to the existing headers -- if a header with the same name already exists, both the new and the existing header will be present in the response.
+Unconditionally adds the given header to all responses from the inner route. The new header is prepended to the existing headers -- if a header with the same name already exists, both the new and the existing header will be present in the response, as in Pekko. To replace a header the inner route set, use `mapResponseHeaders(_.put(header))`; to add one only when it is missing, `respondWithDefaultHeader`.
 
 ```scala
 import org.http4s.Header
