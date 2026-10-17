@@ -6,13 +6,14 @@ import fs2.Stream
 import fs2.text.utf8
 import fs2.compression.{ Compression, DeflateParams, InflateParams, ZLibParams }
 import org.http4s.{ ContentCoding, HttpVersion, Method, QValue, Request, Status, TransferCoding }
+import org.scalatest.Inside
 import org.http4s.headers.{ `Accept-Encoding`, `Content-Encoding`, `Transfer-Encoding` }
 import pl.iterators.stir.server._
 
 import java.io.File
 import java.nio.file.{ Files => NioFiles }
 
-class CodingDirectivesSpec extends RoutingSpec {
+class CodingDirectivesSpec extends RoutingSpec with Inside {
   override implicit def runtime: IORuntime = IORuntime.global
 
   val text = "Hello, compression! " * 50
@@ -206,6 +207,43 @@ class CodingDirectivesSpec extends RoutingSpec {
       Post("/", gzipped(text)) ~> addHeader(`Content-Encoding`(ContentCoding.gzip)) ~> {
         withSizeLimit(100000) { decodeRequest { withSizeLimit(50000) { echo } } }
       } ~> check { responseAs[String] shouldEqual text }
+    }
+    "bound the decoded body to CodingDirectives.DefaultDecodeMaxBytes unless a nested directive says otherwise" in {
+      val nineMiB = Stream.constant(0.toByte).take(9L * 1024 * 1024).covary[IO]
+        .through(Compression[IO].gzip(fileName = None, modificationTime = None, comment = None,
+          deflateParams = DeflateParams(header = ZLibParams.Header.GZIP)))
+        .compile.to(Array).unsafeRunSync()
+      val count: Route = extractRequest { request =>
+        onSuccess(request.body.chunks.compile.fold(0L)((n, chunk) => n + chunk.size)) { n => complete(n.toString) }
+      }
+      Post("/", nineMiB) ~> addHeader(`Content-Encoding`(ContentCoding.gzip)) ~> Route.seal(decodeRequest(count)) ~>
+      check { status shouldEqual Status.PayloadTooLarge }
+      Post("/", nineMiB)                                 ~> addHeader(`Content-Encoding`(ContentCoding.gzip)) ~>
+      Route.seal(decodeRequest(withoutSizeLimit(count))) ~>
+      check { responseAs[String] shouldEqual (9L * 1024 * 1024).toString }
+      Post("/", nineMiB)                                                 ~> addHeader(`Content-Encoding`(ContentCoding.gzip)) ~>
+      Route.seal(decodeRequest(withSizeLimit(10L * 1024 * 1024)(count))) ~>
+      check { responseAs[String] shouldEqual (9L * 1024 * 1024).toString }
+    }
+    "reject with MalformedRequestContentRejection when entity reads a corrupt compressed body" in {
+      Post("/", "definitely not gzip") ~> addHeader(`Content-Encoding`(ContentCoding.gzip)) ~> decodeRequest(echo) ~>
+      check {
+        inside(rejection) { case MalformedRequestContentRejection(message, _) =>
+          message shouldEqual "The request's encoding is corrupt"
+        }
+      }
+    }
+    "let an alternative handle a corrupt compressed body that entity rejected" in {
+      Post("/", "definitely not gzip")             ~> addHeader(`Content-Encoding`(ContentCoding.gzip)) ~>
+      (decodeRequest(echo) ~ complete("fallback")) ~> check { responseAs[String] shouldEqual "fallback" }
+    }
+    "fail with 400 when a corrupt compressed body is read outside entity" in {
+      val drain: Route = extractRequest { request => onSuccess(request.body.compile.drain)(completeOk) }
+      Post("/", "definitely not gzip") ~> addHeader(`Content-Encoding`(ContentCoding.gzip)) ~>
+      Route.seal(decodeRequest(drain)) ~> check {
+        status shouldEqual Status.BadRequest
+        responseAs[String] should include("The request's encoding is corrupt")
+      }
     }
     "gunzip over a real server" in {
       Post("/", gzipped(text)) ~> addHeader(`Content-Encoding`(ContentCoding.gzip)) ~!> decodeRequest(echo) ~> check {

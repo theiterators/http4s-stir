@@ -46,11 +46,16 @@ Passes when the client lists the given coding (or `*`) with a positive q-value i
 ## decodeRequest
 
 Decompresses a `gzip` or `deflate` encoded request body before the inner route reads it; unencoded requests and
-requests known to carry no body (`Content-Length: 0`, or HTTP/1.x with neither a length nor chunking) pass through. Any other `Content-Encoding` is rejected with
-`UnsupportedRequestEncodingRejection`s (400 when sealed). A corrupt compressed body is reported as a
-`MalformedRequestContentRejection` by `entity`. The decoded request carries `Transfer-Encoding: chunked` in place
-of its `Content-Length`, so `requestEntityPresent` still sees a body. Put `withSizeLimit` *inside* `decodeRequest`
-to bound the decompressed size; outside it only bounds the compressed bytes.
+requests known to carry no body (`Content-Length: 0`, or HTTP/1.x with neither a length nor chunking) pass through.
+Any other `Content-Encoding` is rejected with `UnsupportedRequestEncodingRejection`s (400 when sealed). A corrupt
+compressed body fails the entity stream with a `400 Bad Request` ("The request's encoding is corrupt"), whoever reads
+it. The decoded request carries `Transfer-Encoding: chunked` in place of its `Content-Length`, so
+`requestEntityPresent` still sees a body.
+
+The decoded body is bounded to `CodingDirectives.DefaultDecodeMaxBytes` (8 MiB, Pekko's `decode-max-size`), so a
+small compressed body cannot expand without limit; exceeding it fails with `413 Payload Too Large`. A
+`withSizeLimit` or `withoutSizeLimit` *inside* `decodeRequest` replaces that bound for the decompressed bytes; outside
+it only bounds the compressed bytes.
 
 ```scala
 val route: Route = decodeRequest {

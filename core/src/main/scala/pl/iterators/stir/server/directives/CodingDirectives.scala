@@ -4,7 +4,7 @@ import cats.effect.IO
 import fs2.Stream
 import fs2.compression.{ Compression, DeflateParams, InflateParams, ZLibParams }
 import fs2.io.compression.fs2ioCompressionForIO
-import org.http4s.{ ContentCoding, EntityBody, MalformedMessageBodyFailure, QValue, Request, Response, TransferCoding }
+import org.http4s.{ ContentCoding, EntityBody, QValue, Request, Response, Status, TransferCoding }
 import org.http4s.headers.{ `Accept-Encoding`, `Content-Encoding`, `Content-Length`, `Transfer-Encoding` }
 import pl.iterators.stir.server._
 
@@ -54,8 +54,10 @@ trait CodingDirectives {
    * Decodes the incoming request with the given coding (gzip, deflate or identity). Requests encoded differently
    * are rejected with an [[UnsupportedRequestEncodingRejection]]; requests known to carry no body (`Content-Length:
    * 0`, or HTTP/1.x with neither a length nor chunking) pass through untouched. The decoded request carries `Transfer-Encoding: chunked` instead of its `Content-Length`,
-   * since the decoded size is unknown. A corrupt compressed body fails the entity with a decode failure, which
-   * `entity` turns into a [[MalformedRequestContentRejection]] (400).
+   * since the decoded size is unknown, and its decoded body is bounded to [[CodingDirectives.DefaultDecodeMaxBytes]]
+   * unless a nested `withSizeLimit` / `withoutSizeLimit` says otherwise. A corrupt compressed body fails the entity
+   * stream with a `400` ([[IllegalRequestException]]); `entity` turns that into a [[MalformedRequestContentRejection]]
+   * so alternatives still apply.
    *
    * @group coding
    */
@@ -67,7 +69,7 @@ trait CodingDirectives {
           .removeHeader[`Content-Encoding`]
           .removeHeader[`Content-Length`]
           .putHeaders(`Transfer-Encoding`(TransferCoding.chunked))
-      }
+      } & MiscDirectives.withSizeLimit(DefaultDecodeMaxBytes) // nested withSizeLimit / withoutSizeLimit override it
 
     knownEmptyRequest |
     (requestEncodedWith(decoder) & applyDecoder &
@@ -123,6 +125,9 @@ object CodingDirectives extends CodingDirectives {
 
   /** The codings `decodeRequest` understands, in order. */
   val DefaultCoders: Seq[ContentCoding] = Seq(ContentCoding.gzip, ContentCoding.deflate, ContentCoding.identity)
+
+  /** Pekko's `decode-max-size`: the most bytes a decoded request body may expand to (8 MiB). */
+  val DefaultDecodeMaxBytes: Long = 8L * 1024 * 1024
 
   // same entries as DefaultCoders but in different order
   private val DefaultEncodeResponseEncoders =
@@ -205,8 +210,8 @@ object CodingDirectives extends CodingDirectives {
       else body.through(compression.inflate(InflateZlibParams))
     decoded.handleErrorWith {
       case e: EntityStreamSizeException => Stream.raiseError[IO](e)
-      case NonFatal(e)                  =>
-        Stream.raiseError[IO](MalformedMessageBodyFailure("The request's encoding is corrupt", Some(e)))
+      case NonFatal(_)                  =>
+        Stream.raiseError[IO](IllegalRequestException(Status.BadRequest, "The request's encoding is corrupt"))
     }
   }
 }
