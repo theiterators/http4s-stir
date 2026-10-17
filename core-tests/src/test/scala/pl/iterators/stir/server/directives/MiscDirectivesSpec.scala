@@ -2,12 +2,18 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
+import cats.syntax.all._
 import com.comcast.ip4s._
-import org.http4s.{ Header, HttpVersion, LanguageTag, Request, Status, UrlForm }
-import org.http4s.headers.`X-Forwarded-For`
+import fs2.Stream
+import org.http4s.{ Header, HttpRoutes, HttpVersion, LanguageTag, Method, Request, Response, Status, Uri, UrlForm }
+import org.http4s.ember.client.EmberClientBuilder
+import org.http4s.ember.server.EmberServerBuilder
+import org.http4s.h2.H2Keys.Http2PriorKnowledge
+import org.http4s.headers.{ `Content-Length`, `X-Forwarded-For` }
 import org.typelevel.ci.CIString
 import pl.iterators.stir.server._
 
+import java.util.concurrent.atomic.{ AtomicBoolean, AtomicInteger }
 import scala.concurrent.duration._
 
 class MiscDirectivesSpec extends RoutingSpec {
@@ -165,22 +171,111 @@ class MiscDirectivesSpec extends RoutingSpec {
     }
   }
 
-  "the requestEntityEmpty directive on HTTP/2" should {
-    "treat a length-less body as empty but record a warning" in {
-      val before = MiscDirectives.lengthlessHttp2Warnings.get
-      Post("/", "abc")                  ~> removeHeader("Content-Length") ~> ((_: Request[IO]).withHttpVersion(HttpVersion.`HTTP/2`)) ~>
-      requestEntityEmpty { completeOk } ~> check { status shouldEqual Status.Ok }
-      MiscDirectives.lengthlessHttp2Warnings.get should be > before
-    }
-  }
+  "the requestEntityEmpty and requestEntityPresent directives on HTTP/2" should {
+    // HTTP/2 bodies carry no Content-Length; whether the stream ended with the headers only shows in the body
+    def http2(request: Request[IO]): Request[IO] =
+      request.withHttpVersion(HttpVersion.`HTTP/2`).removeHeader[`Content-Length`]
+    val emptyOrBody: Route =
+      requestEntityEmpty { complete("empty") } ~ requestEntityPresent { entity(as[String])(s => complete("body:" + s)) }
 
-  "the requestEntityEmpty directive on a bodiless HTTP/2 GET" should {
-    "not count it as a length-less body" in {
-      val before = MiscDirectives.lengthlessHttp2Warnings.get
-      Get() ~> ((_: Request[IO]).withHttpVersion(HttpVersion.`HTTP/2`)) ~> requestEntityEmpty { completeOk } ~> check {
-        status shouldEqual Status.Ok
+    val emptyOrEntity: Route =
+      requestEntityEmpty { complete("empty") } ~ entity(as[String])(s => complete("body:" + s))
+
+    "treat a length-less body as present and pass all of it on" in {
+      val body = Stream("ab", "c", "", "de").through(fs2.text.utf8.encode)
+      http2(Post().withBodyStream(body)) ~> emptyOrBody ~> check { responseAs[String] shouldEqual "body:abcde" }
+    }
+    def oneShot: Stream[IO, Byte] = {
+      val read = new AtomicBoolean(false)
+      Stream.eval(IO(read.getAndSet(true))).flatMap { again =>
+        if (again) Stream.raiseError[IO](new IllegalStateException("read twice"))
+        else Stream("ab", "c").through(fs2.text.utf8.encode)
       }
-      MiscDirectives.lengthlessHttp2Warnings.get shouldEqual before
+    }
+    "read a body that can be read only once a single time across alternatives" in {
+      http2(Post().withBodyStream(oneShot)) ~> emptyOrBody ~> check { responseAs[String] shouldEqual "body:abc" }
+    }
+    "hand the whole body to an alternative that reads it without these directives" in {
+      http2(Post().withBodyStream(oneShot)) ~> emptyOrEntity ~> check { responseAs[String] shouldEqual "body:abc" }
+    }
+    def bracketed(open: AtomicBoolean, released: AtomicInteger): Stream[IO, Byte] =
+      Stream.bracket(IO(open.set(true)))(_ => IO { open.set(false); released.incrementAndGet(); () }).flatMap { _ =>
+        Stream("ab", "c").through(fs2.text.utf8.encode)
+      }
+    "release the body it looked at when the route does not read it" in {
+      val (open, released) = (new AtomicBoolean(false), new AtomicInteger(0))
+      http2(Post().withBodyStream(bracketed(open, released))) ~> requestEntityPresent { complete("ignored") } ~> check {
+        responseAs[String] shouldEqual "ignored"
+      }
+      (open.get, released.get) shouldEqual ((false, 1))
+      http2(Post().withBodyStream(bracketed(open, released))) ~> requestEntityEmpty { completeOk } ~> check {
+        rejections shouldEqual Nil
+      }
+      (open.get, released.get) shouldEqual ((false, 2))
+    }
+    "answer for the body a directive replaced it with" in {
+      http2(Post("/", "abc")) ~> mapRequest(_.withEntity("")) {
+        requestEntityEmpty { complete("empty") } ~ complete("present")
+      }                                          ~> check { responseAs[String] shouldEqual "empty" }
+      http2(Post().withBodyStream(Stream.empty)) ~> mapRequest(_.withBodyStream(Stream.emits("abc".getBytes))) {
+        requestEntityEmpty { complete("empty") } ~ complete("present")
+      } ~> check { responseAs[String] shouldEqual "present" }
+    }
+    "leave the body alone for the routes after a rejecting toHttpRoutes" in {
+      val stir = requestEntityEmpty { complete("empty") }.toHttpRoutes
+      val other = HttpRoutes.of[IO] { case request =>
+        request.as[String].map(s => Response[IO]().withEntity("other:" + s))
+      }
+      val response = (stir <+> other).orNotFound.run(http2(Post().withBodyStream(oneShot)))
+      response.flatMap(_.as[String]).unsafeRunSync() shouldEqual "other:abc"
+    }
+    "keep the resources of the body open until the route has read it" in {
+      val open = new AtomicBoolean(false)
+      val body = Stream.bracket(IO(open.set(true)))(_ => IO(open.set(false))).flatMap { _ =>
+        Stream("ab", "c").evalTap(_ => IO(open.get).flatMap(IO.raiseUnless(_)(new IllegalStateException("closed"))))
+      }.through(fs2.text.utf8.encode)
+      http2(Post().withBodyStream(body)) ~> emptyOrBody ~> check { responseAs[String] shouldEqual "body:abc" }
+      open.get shouldEqual false
+    }
+    "treat a length-less body without bytes as empty" in {
+      http2(Post().withBodyStream(Stream.empty)) ~> emptyOrBody                         ~> check { responseAs[String] shouldEqual "empty" }
+      http2(Post().withBodyStream(Stream.empty)) ~> requestEntityPresent { completeOk } ~> check {
+        rejection shouldEqual RequestEntityExpectedRejection
+      }
+    }
+    "keep an enclosing size limit on the body it looked at" in {
+      http2(Post("/", "abcde")) ~> Route.seal(withSizeLimit(3) { emptyOrBody }) ~> check {
+        status shouldEqual Status.PayloadTooLarge
+      }
+    }
+    "let withoutSizeLimit lift the enclosing limit after it" in {
+      http2(Post("/", "abcde")) ~> withSizeLimit(3) {
+        requestEntityPresent { withoutSizeLimit { entity(as[String])(s => complete("body:" + s)) } }
+      } ~> check { responseAs[String] shouldEqual "body:abcde" }
+    }
+    "tell an empty request from one with a body over a real HTTP/2 connection" in {
+      val app = extractRequest { request =>
+        mapResponse(_.putHeaders("X-Version" -> request.httpVersion.renderString)) {
+          path("entity")(emptyOrEntity) ~ emptyOrBody
+        }
+      }.toHttpApp
+      val responses = (for {
+        server <- EmberServerBuilder.default[IO].withHttp2.withHost(ipv4"127.0.0.1").withPort(port"0")
+          .withHttpApp(app).withShutdownTimeout(Duration.Zero).build
+        client <- EmberClientBuilder.default[IO].withHttp2.build
+      } yield (server, client)).use { case (server, client) =>
+        def send(request: Request[IO], path: String = ""): IO[(String, Option[String])] = {
+          val uri = Uri.unsafeFromString(s"http://127.0.0.1:${server.address.getPort}/$path")
+          client.run(request.withUri(uri).withAttribute(Http2PriorKnowledge, ())).use { response =>
+            response.as[String].map(_ -> response.headers.get(CIString("X-Version")).map(_.head.value))
+          }
+        }
+        val streamed = Stream("ab", "c").through(fs2.text.utf8.encode).covary[IO]
+        List(send(Request[IO](Method.POST)), send(Request[IO](Method.POST).withBodyStream(streamed)),
+          send(Request[IO](Method.POST), "entity"), send(Request[IO](Method.POST).withBodyStream(streamed), "entity"))
+          .sequence
+      }.unsafeRunSync()
+      responses shouldEqual List("empty", "body:abc", "empty", "body:abc").map(_ -> Some("HTTP/2.0"))
     }
   }
 

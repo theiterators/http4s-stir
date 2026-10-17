@@ -1,15 +1,15 @@
 package pl.iterators.stir.server.directives
 
-import cats.effect.{ IO, SyncIO }
-import cats.effect.std.Console
+import cats.syntax.all._
+import cats.effect.{ Deferred, IO, Outcome, Ref, SyncIO }
 import com.comcast.ip4s.IpAddress
 import fs2.{ Pull, Stream }
-import org.http4s.{ EmptyBody, EntityBody, LanguageTag, Method, Request, Response }
+import org.http4s.{ EmptyBody, EntityBody, LanguageTag, Request, Response }
 import org.http4s.headers._
 import org.typelevel.vault.Key
 import pl.iterators.stir.server._
 
-import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.CancellationException
 
 trait MiscDirectives {
   import BasicDirectives._
@@ -42,8 +42,9 @@ trait MiscDirectives {
   def extractDirectClientIP: Directive1[Option[IpAddress]] = MiscDirectives._extractDirectClientIP
 
   /**
-   * Rejects if the request entity is non-empty. A request is empty when it declares `Content-Length: 0` or
-   * declares neither `Content-Length` nor `Transfer-Encoding`.
+   * Rejects if the request entity is non-empty. An HTTP/1 request is empty when it declares `Content-Length: 0` or
+   * declares neither `Content-Length` nor `Transfer-Encoding`; an HTTP/2 request without `Content-Length` when its
+   * body has no bytes, which is found out by reading the first chunk (and putting it back).
    *
    * @group misc
    */
@@ -153,30 +154,98 @@ object MiscDirectives extends MiscDirectives {
 
   private val _extractDirectClientIP: Directive1[Option[IpAddress]] = extract(_.request.remote.map(_.host))
 
-  /** The methods whose requests normally carry a body; a length-less GET is not worth a warning. */
-  private val BodyMethods: Set[Method] = Set(Method.POST, Method.PUT, Method.PATCH, MethodDirectives.QUERY)
-
-  /** How often the HTTP/2 length-less body heuristic was applied; the first time prints a warning. */
-  private[stir] val lengthlessHttp2Warnings = new AtomicLong(0L)
-
-  /** Whether the request is known to be empty, warning once per process about length-less HTTP/2 bodies. */
+  /**
+   * Whether the request is known to be empty. Over HTTP/1 the headers tell. An HTTP/2 body carries no
+   * Content-Length and whether its stream ended with the headers only shows in the body, so the [[SharedBody]] that
+   * routing starts with reads its first chunk. That answer holds only while the request still carries that body
+   * (possibly under `withSizeLimit`); a replaced length-less body, or one under `toHttpRoutes` or a hand-built
+   * `RequestContext`, is taken as present.
+   */
   private val knownEmpty: Directive1[Boolean] =
     Directive[Tuple1[Boolean]] { inner => ctx =>
       val request = ctx.request
-      val lengthless = request.httpVersion.major >= 2 && BodyMethods.contains(request.method) &&
-        request.contentLength.isEmpty && !request.isChunked
-      val warn =
-        if (!lengthless) IO.unit
-        else IO(lengthlessHttp2Warnings.incrementAndGet()).flatMap { count =>
-          if (count == 1)
-            Console[IO].errorln(
-              "requestEntityEmpty / requestEntityPresent met an HTTP/2 " + request.method.name +
-              " request without Content-Length and treat it as empty; HTTP/2 bodies carry no length, so these " +
-              "directives cannot tell an empty body from a streamed one there (this warning is printed once).")
-          else IO.unit
-        }
-      warn *> inner(Tuple1(isKnownEmpty(request)))(ctx)
+      sharedBodyOf(request) match {
+        case Some(shared)                     => shared.isEmpty.flatMap(empty => inner(Tuple1(empty))(ctx))
+        case None if lengthlessHttp2(request) => inner(Tuple1(false))(ctx)
+        case None                             => inner(Tuple1(isKnownEmpty(request)))(ctx)
+      }
     }
+
+  /** The request's [[SharedBody]] while the request still carries it, directly or limited by `withSizeLimit`. */
+  private def sharedBodyOf(request: Request[IO]): Option[SharedBody] =
+    request.attributes.lookup(SharedBodyKey).filter { shared =>
+      (request.body eq shared.body) ||
+      request.attributes.lookup(LimitedBodyKey).exists(l => (l.limited eq request.body) && (l.original eq shared.body))
+    }
+
+  private def lengthlessHttp2(request: Request[IO]): Boolean =
+    request.httpVersion.major >= 2 && request.contentLength.isEmpty
+
+  /**
+   * The body of a length-less HTTP/2 request, read through a cell so that its first chunk can be looked at before
+   * the route reads it: the network stream can be read only once, and every reader (the alternatives of a route,
+   * `entity`, `decodeRequest`, ...) must still get all of it. The look runs in a scope of its own, released once the
+   * rest of the body has been read, or when the route rejects or fails or its response body ends
+   * ([[RequestContext.run]]). Reading the body after that (a second time, or in the background after the response)
+   * may give only the first chunk, or fail for a body that holds resources.
+   */
+  private[stir] final class SharedBody private (original: EntityBody[IO],
+      cell: Ref[IO, Option[Deferred[IO, Either[Throwable, EntityBody[IO]]]]], releaseCell: Ref[IO, Option[IO[Unit]]]) {
+
+    /** The original body with its first chunk already read, or `EmptyBody` when it has no bytes. */
+    private val peeked: IO[EntityBody[IO]] =
+      Deferred[IO, Either[Throwable, EntityBody[IO]]].flatMap { result =>
+        IO.uncancelable { poll =>
+          cell.modify {
+            case existing @ Some(done) => existing -> poll(done.get).rethrow
+            case None                  =>
+              Some(result) -> poll(peek).guaranteeCase {
+                case Outcome.Succeeded(body) => body.flatMap(b => result.complete(Right(b))).void
+                case Outcome.Errored(error)  => result.complete(Left(error)).void
+                case Outcome.Canceled()      =>
+                  cell.set(None) *> result.complete(Left(new CancellationException("The body was not read"))).void
+              }
+          }.flatten
+        }
+      }
+
+    /** Reads up to the first non-empty chunk in a scope that [[release]] closes. */
+    private def peek: IO[EntityBody[IO]] = {
+      def go(stream: EntityBody[IO]): Pull[IO, EntityBody[IO], Unit] =
+        stream.pull.uncons.flatMap {
+          case None                                 => Pull.output1(EmptyBody)
+          case Some((chunk, rest)) if chunk.isEmpty => go(rest)
+          case Some((chunk, rest))                  => Pull.output1(Stream.chunk(chunk) ++ rest)
+        }
+      IO.uncancelable { poll =>
+        poll(go(original).stream.compile.resource.lastOrError.allocated).flatMap { case (peeked, close) =>
+          if (peeked eq EmptyBody) close.as(EmptyBody)
+          else releaseCell.set(Some(close)).as(peeked.onFinalize(release))
+        }
+      }
+    }
+
+    val isEmpty: IO[Boolean] = peeked.map(_ eq EmptyBody)
+
+    val body: EntityBody[IO] = Stream.eval(peeked).flatten
+
+    /** Closes the scope of the first look, once; nothing to do when the body was not looked at or was empty. */
+    val release: IO[Unit] = releaseCell.getAndSet(None).flatMap(_.getOrElse(IO.unit))
+  }
+
+  private[stir] object SharedBody {
+    def apply(original: EntityBody[IO]): IO[SharedBody] =
+      (Ref.of[IO, Option[Deferred[IO, Either[Throwable, EntityBody[IO]]]]](None), Ref.of[IO, Option[IO[Unit]]](None))
+        .mapN(new SharedBody(original, _, _))
+  }
+
+  private[stir] val SharedBodyKey: Key[SharedBody] = Key.newKey[SyncIO, SharedBody].unsafeRunSync()
+
+  /** Prepares a request for routing: a length-less HTTP/2 request gets its body through a [[SharedBody]]. */
+  private[stir] def prepare(request: Request[IO]): IO[Request[IO]] =
+    if (!lengthlessHttp2(request)) IO.pure(request)
+    else
+      SharedBody(request.body).map(shared => request.withAttribute(SharedBodyKey, shared).withBodyStream(shared.body))
 
   private val _requestEntityEmpty: Directive0 =
     knownEmpty.flatMap(if (_) pass else reject)

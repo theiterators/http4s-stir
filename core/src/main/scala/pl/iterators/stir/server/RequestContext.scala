@@ -1,7 +1,7 @@
 package pl.iterators.stir.server
 
 import cats.effect.{ IO, SyncIO }
-import org.http4s.{ Request, Response, Status, Uri }
+import org.http4s.{ EmptyBody, Request, Response, Status, Uri }
 import org.http4s.Uri.Path
 import org.typelevel.vault.Key
 import pl.iterators.stir.marshalling.{ ContentNegotiation, ToResponseMarshallable, ToResponseMarshaller }
@@ -60,6 +60,23 @@ case class RequestContext(request: Request[IO], unmatchedPath: Path) {
 object RequestContext {
   def apply(request: Request[IO]): RequestContext =
     RequestContext(request, request.pathInfo)
+
+  /**
+   * Runs a route the way `toHttpApp` and the testkit start routing: on a request prepared by `MiscDirectives.prepare`,
+   * releasing what its shared body holds when the route rejects or fails, or when the response body ends.
+   */
+  private[stir] def run(request: Request[IO])(route: RequestContext => IO[RouteResult]): IO[RouteResult] =
+    directives.MiscDirectives.prepare(request).flatMap { prepared =>
+      prepared.attributes.lookup(directives.MiscDirectives.SharedBodyKey) match {
+        case None         => route(RequestContext(prepared))
+        case Some(shared) =>
+          route(RequestContext(prepared)).onError(_ => shared.release).flatMap {
+            case RouteResult.Complete(response) if !(response.body eq EmptyBody) =>
+              IO.pure(RouteResult.Complete(response.withBodyStream(response.body.onFinalize(shared.release))))
+            case other => shared.release.as(other)
+          }.onCancel(shared.release)
+      }
+    }
 
   /** Set on the request by `withAcceptAll`: responses completed with it are not negotiated. */
   private[stir] val AcceptAllKey: Key[Unit] = Key.newKey[SyncIO, Unit].unsafeRunSync()

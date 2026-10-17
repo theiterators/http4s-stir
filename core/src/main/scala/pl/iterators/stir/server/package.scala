@@ -15,7 +15,7 @@ package object server {
           .tapply(_ => route)
       }
       Kleisli[IO, Request[IO], Response[IO]](req =>
-        sealedRoute(RequestContext(req)).map {
+        RequestContext.run(req)(sealedRoute).map {
           case RouteResult.Complete(response) => response
           case RouteResult.Rejected(_)        =>
             throw new IllegalStateException("RouteResult.Rejected should not be returned from a sealed route")
@@ -24,6 +24,7 @@ package object server {
 
     def toHttpRoutes: HttpRoutes[IO] = {
       Kleisli(req =>
+        // not `RequestContext.run`: a rejected request goes on to the next routes, which must get its body untouched
         OptionT(route(RequestContext(req)).map {
           case RouteResult.Complete(response) => Some(response)
           case _                              => None
