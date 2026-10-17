@@ -232,6 +232,112 @@ class PathDirectivesSpec extends RoutingSpec with Inside {
     "reject [/2147483648]".inThe(test()) // > Int.MaxValue
   }
 
+  "pathPrefix(IntNumber) followed by more path" should {
+    val test = testFor(pathPrefix(IntNumber) {
+      echoCaptureAndUnmatchedPath
+    })
+    "accept [/23/foo] and leave an absolute unmatchedPath".inThe(test("23:/foo"))
+    "accept [/23/] and leave the slash".inThe(test("23:/"))
+  }
+
+  "path(IntNumber)" should {
+    val test = testFor(path(IntNumber) {
+      echoCaptureAndUnmatchedPath
+    })
+    "accept [/23]".inThe(test("23:"))
+    "reject [/23/]".inThe(test())
+    "reject [/23/foo]".inThe(test())
+  }
+
+  """path(IntNumber / "foo")""" should {
+    val test = testFor(path(IntNumber / "foo") {
+      echoCaptureAndUnmatchedPath
+    })
+    "accept [/23/foo]".inThe(test("23:"))
+    "reject [/23foo]".inThe(test())
+    "reject [/23/bar]".inThe(test())
+    "reject [/23/foo/]".inThe(test())
+  }
+
+  """pathPrefix(IntNumber / "foo")""" should {
+    val test = testFor(pathPrefix(IntNumber / "foo") {
+      echoCaptureAndUnmatchedPath
+    })
+    "accept [/23/foo/bar]".inThe(test("23:/bar"))
+    "accept [/23/foobar]".inThe(test("23:bar"))
+  }
+
+  """pathPrefix(IntNumber) { path("foo") }""" should {
+    val test = testFor(pathPrefix(IntNumber) { _ =>
+      path("foo") {
+        echoUnmatchedPath
+      }
+    })
+    "accept [/23/foo]".inThe(test(""))
+    "reject [/23/bar]".inThe(test())
+  }
+
+  "pathPrefix(IntNumber) { pathEndOrSingleSlash }" should {
+    val test = testFor(pathPrefix(IntNumber) { _ =>
+      pathEndOrSingleSlash {
+        complete("ok")
+      }
+    })
+    "accept [/23]".inThe(test("ok"))
+    "accept [/23/]".inThe(test("ok"))
+    "reject [/23/foo]".inThe(test())
+  }
+
+  "path(LongNumber / Segment)" should {
+    val test = testFor(path(LongNumber / Segment) { (n, s) => complete(s"$n-$s") })
+    "accept [/7/abc]".inThe(test("7-abc"))
+    "reject [/7]".inThe(test())
+  }
+
+  """path(HexIntNumber / "x")""" should {
+    val test = testFor(path(HexIntNumber / "x") {
+      echoCaptureAndUnmatchedPath
+    })
+    "accept [/ff/x]".inThe(test("255:"))
+  }
+
+  """path(DoubleNumber / "x")""" should {
+    val test = testFor(path(DoubleNumber / "x") {
+      echoCaptureAndUnmatchedPath
+    })
+    "accept [/1.5/x]".inThe(test("1.5:"))
+  }
+
+  """path(JavaUUID / "x")""" should {
+    val test = testFor(path(JavaUUID / "x") {
+      echoCaptureAndUnmatchedPath
+    })
+    "accept [/bdea8652-f26c-40ca-8157-0b96a2a8389d/x]".inThe(test("bdea8652-f26c-40ca-8157-0b96a2a8389d:"))
+  }
+
+  """path("(\d+)".r / "x")""" should {
+    val test = testFor(path("(\\d+)".r / "x") {
+      echoCaptureAndUnmatchedPath
+    })
+    "accept [/12/x]".inThe(test("12:"))
+    "reject [/12x]".inThe(test())
+  }
+
+  """path("\d+".r / "x")""" should {
+    val test = testFor(path("\\d+".r / "x") {
+      echoCaptureAndUnmatchedPath
+    })
+    "accept [/12/x]".inThe(test("12:"))
+  }
+
+  "pathSuffix(IntNumber)" should {
+    val test = testFor(pathSuffix(IntNumber) {
+      echoCaptureAndUnmatchedPath
+    })
+    "accept [/orders/123] and leave the trailing slash".inThe(test("123:/orders/"))
+    "reject [/orders/abc]".inThe(test())
+  }
+
   "pathPrefix(CustomShortNumber)" should {
     object CustomShortNumber extends NumberMatcher[Short](Short.MaxValue, 10) {
       def fromChar(c: Char) = fromDecimalChar(c)
