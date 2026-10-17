@@ -123,7 +123,7 @@ val route: Route = (post & path("upload")) {
 
 ### fileUploadSpooled
 
-Like `fileUpload`, but decodes the body with http4s' mixed multipart decoder, which spools parts above 50 MiB (`fileUploadSpooled(field, maxSizeBeforeWrite)` changes the threshold) to a temporary file, and keeps that decoder and its files alive until the inner route has completed and the response body has been consumed. The part's stream can be read inside the route or streamed back as the response.
+Like `fileUpload`, but decodes the body with http4s' mixed multipart decoder, which spools parts above 50 MiB (`fileUploadSpooled(field, maxSizeBeforeWrite)` changes the threshold) to a temporary file, and keeps that decoder and its files alive until the inner route has completed and the response body has been consumed. The part's stream can be read inside the route or streamed back as the response. A body with more than 1000 parts (`FileUploadDirectives.MaxParts`) is rejected with a 400 ("Parts limit exceeded"). Up to `maxSizeBeforeWrite` bytes of every part stay on the heap while the body is decoded, so put `withSizeLimit` around upload routes.
 
 ```scala
 import fs2.io.file.{ Files, Path }
@@ -142,7 +142,7 @@ val route: Route = (post & path("upload")) {
 
 ### fileUploadAll
 
-Extracts all multipart file parts with the given field name as a sequence of `(FileInfo, Stream[IO, Byte])` tuples. Files are buffered to temporary files on disk and cleaned up after the stream is consumed. Parts above 50 MiB are spooled to a temporary file while the multipart body is decoded, so memory use stays bounded; parts without `Content-Type` are stored as `application/octet-stream`. A body with more than 1000 parts (`FileUploadDirectives.MaxParts`) is rejected with a 400 ("Parts limit exceeded") rather than silently truncated, and each part may carry at most 1 KiB of headers.
+Extracts all multipart file parts with the given field name as a sequence of `(FileInfo, Stream[IO, Byte])` tuples. Files are buffered to temporary files on disk and cleaned up after the stream is consumed. Parts above 64 KiB (`FileUploadDirectives.DiskSpoolThreshold`) are spooled to a temporary file while the multipart body is decoded, so at most 64 KiB of each part is held on the heap (put `withSizeLimit` around upload routes to bound the body as a whole); parts without `Content-Type` are stored as `application/octet-stream`. A body with more than 1000 parts (`FileUploadDirectives.MaxParts`) is rejected with a 400 ("Parts limit exceeded") rather than silently truncated, and each part may carry at most 1 KiB of headers.
 
 ```scala
 val route: Route = (post & path("upload-many")) {
@@ -154,7 +154,7 @@ val route: Route = (post & path("upload-many")) {
 
 ### storeUploadedFile
 
-Streams the bytes of a single multipart file part to disk. The destination file is determined by the provided function. Returns a tuple of `FileInfo` and the destination `File`. If multiple parts share the same name, only the first is used. On write failure, the destination file is deleted. Parts above 50 MiB are spooled to a temporary file while the multipart body is decoded, so memory use stays bounded; parts without `Content-Type` are stored as `application/octet-stream`. A body with more than 1000 parts (`FileUploadDirectives.MaxParts`) is rejected with a 400 ("Parts limit exceeded") rather than silently truncated, and each part may carry at most 1 KiB of headers.
+Streams the bytes of a single multipart file part to disk. The destination file is determined by the provided function. Returns a tuple of `FileInfo` and the destination `File`. If multiple parts share the same name, only the first is used. On write failure, the destination file is deleted. Parts above 64 KiB (`FileUploadDirectives.DiskSpoolThreshold`) are spooled to a temporary file while the multipart body is decoded, so at most 64 KiB of each part is held on the heap (put `withSizeLimit` around upload routes to bound the body as a whole); parts without `Content-Type` are stored as `application/octet-stream`. A body with more than 1000 parts (`FileUploadDirectives.MaxParts`) is rejected with a 400 ("Parts limit exceeded") rather than silently truncated, and each part may carry at most 1 KiB of headers.
 
 ```scala
 import java.io.File
@@ -169,7 +169,7 @@ val route: Route = (post & path("upload")) {
 
 ### storeUploadedFiles
 
-Streams all multipart file parts with the given field name to disk. Returns a sequence of `(FileInfo, File)` tuples. Parts above 50 MiB are spooled to a temporary file while the multipart body is decoded, so memory use stays bounded; parts without `Content-Type` are stored as `application/octet-stream`. A body with more than 1000 parts (`FileUploadDirectives.MaxParts`) is rejected with a 400 ("Parts limit exceeded") rather than silently truncated, and each part may carry at most 1 KiB of headers.
+Streams all multipart file parts with the given field name to disk. Returns a sequence of `(FileInfo, File)` tuples. Parts above 64 KiB (`FileUploadDirectives.DiskSpoolThreshold`) are spooled to a temporary file while the multipart body is decoded, so at most 64 KiB of each part is held on the heap (put `withSizeLimit` around upload routes to bound the body as a whole); parts without `Content-Type` are stored as `application/octet-stream`. A body with more than 1000 parts (`FileUploadDirectives.MaxParts`) is rejected with a 400 ("Parts limit exceeded") rather than silently truncated, and each part may carry at most 1 KiB of headers.
 
 ```scala
 import java.io.File
