@@ -3,6 +3,8 @@ package pl.iterators.stir.server.directives
 import org.http4s.{ Method, Status }
 import pl.iterators.stir.server._
 
+import java.util.Locale
+
 trait MethodDirectives {
   import BasicDirectives._
   import RouteDirectives._
@@ -100,9 +102,9 @@ trait MethodDirectives {
   def overrideMethodWithParameter(paramName: String): Directive0 =
     parameter(paramName.optional).flatMap {
       case Some(method) =>
-        Method.fromString(method.toUpperCase) match {
-          case Right(m) => mapRequest(_.withMethod(m))
-          case _        => complete(Status.NotImplemented)
+        MethodDirectives.knownMethods.get(method.toUpperCase(Locale.ROOT)) match {
+          case Some(m) => mapRequest(_.withMethod(m))
+          case None    => complete(Status.NotImplemented)
         }
       case None => pass
     }
@@ -112,6 +114,9 @@ object MethodDirectives extends MethodDirectives {
 
   /** The `QUERY` method, which http4s 0.23 does not define. `isSafe` / `isIdempotent` are false on this instance. */
   val QUERY: Method = Method.fromString("QUERY").fold(failure => throw failure, identity)
+
+  /** The methods `overrideMethodWithParameter` accepts, by upper-case name: http4s' registry plus `QUERY`. */
+  private[stir] val knownMethods: Map[String, Method] = (Method.all :+ QUERY).map(m => m.name -> m).toMap
 
   private val _extractMethod: Directive1[Method] =
     BasicDirectives.extract(_.request.method)
