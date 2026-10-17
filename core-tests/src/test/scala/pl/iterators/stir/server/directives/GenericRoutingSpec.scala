@@ -8,6 +8,7 @@ import org.scalatest.wordspec.AnyWordSpec
 import pl.iterators.stir.server._
 import pl.iterators.stir.testkit.{ RouteTestTimeout, ScalatestRouteTest }
 
+import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.duration._
 
 trait GenericRoutingSpec extends Matchers with Directives with ScalatestRouteTest { this: Suite =>
@@ -20,6 +21,14 @@ trait GenericRoutingSpec extends Matchers with Directives with ScalatestRouteTes
 
   def echoComplete[T]: T => Route = { x => complete(x.toString) }
   def echoComplete2[T, U]: (T, U) => Route = { (x, y) => complete(s"$x $y") }
+
+  /** The default exception handler recording the lines it logs, where Pekko's specs use an `EventFilter`. */
+  def recordingDefaultHandler(lines: AtomicReference[List[String]]): ExceptionHandler =
+    ExceptionHandler.default(Some((_, line) => IO { lines.updateAndGet(line :: _); () }))
+
+  /** The line the default exception handler logs for an error with the given message answered with a 500. */
+  def logged500(message: String): String =
+    ExceptionHandler.errorMessageTemplate(message, Status.InternalServerError.toString())
 }
 
 abstract class RoutingSpec extends AnyWordSpec with GenericRoutingSpec {}
