@@ -142,11 +142,6 @@ instead. Other differences that remain:
 - `selectPreferredLanguage` reads `Accept-Language` q-values as leniently as Pekko: `q=.5` and spaces around `;` and
   `=` are accepted (the header used to be ignored, picking the first language), and a q-value with more than three
   decimals is truncated instead of rounded (`q=0.4999` now ranks below `q=0.5`).
-- `entity` rejects every failure, as Pekko does: a request body stream that fails (a dropped connection, a broken
-  upstream) is a `MalformedRequestContentRejection` carrying the error, and a decoder raising an
-  `IllegalArgumentException` a `ValidationRejection`; both used to reach the exception handler as a 500.
-  `formFieldSeq`, `formFieldMap` and `formFieldMultiMap` likewise reject a body that fails while it is buffered (a
-  body over the size limit still answers 413, a slow one 408).
 
 ## Testkit differences
 
