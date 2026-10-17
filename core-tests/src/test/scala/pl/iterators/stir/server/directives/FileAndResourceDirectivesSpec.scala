@@ -6,10 +6,12 @@ import org.http4s.{ Charset, ContentCoding, Header, HttpDate, MediaType, Respons
 import org.http4s.headers.{ `Accept-Encoding`, `Content-Encoding`, `Content-Type`, `Last-Modified` }
 import org.http4s.{ Charset, ContentCoding, EntityTag, Header, HttpDate, MediaType, RangeUnit, Response, Status, Uri }
 import org.http4s.headers.{
+  `Accept-Ranges`,
   `Content-Encoding`,
   `Content-Range`,
   `Content-Type`,
   `If-Match`,
+  `If-Modified-Since`,
   `If-None-Match`,
   `If-Unmodified-Since`,
   `Last-Modified`,
@@ -20,7 +22,7 @@ import org.http4s.headers.Range.SubRange
 import org.typelevel.ci._
 import org.scalatest.{ Inside, Inspectors }
 import pl.iterators.stir.impl.util._
-import pl.iterators.stir.server.Route
+import pl.iterators.stir.server.{ Route, UnsatisfiableRangeRejection }
 
 import java.io.File
 import java.nio.file.{ Files => NioFiles, Paths }
@@ -286,6 +288,64 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
       encodeResponse(getFromResourceDirectory("precompressed")) ~> check {
         header[`Content-Encoding`] shouldEqual Some(`Content-Encoding`(ContentCoding.gzip))
         responseAs[String] shouldEqual "gzipped bytes"
+    "advertise Accept-Ranges on a plain 200 and reject a wholly unsatisfiable range" in {
+      val file = File.createTempFile("pekkoHttpTest", null)
+      try {
+        writeAllText("123", file)
+        Get() ~> getFromFile(file)          ~> check { header[`Accept-Ranges`] shouldEqual Some(`Accept-Ranges`.bytes) }
+        Get() ~> addHeader(Range(100, 200)) ~> getFromFile(file) ~> check {
+          rejection shouldEqual UnsatisfiableRangeRejection(SubRange(100L, 200L) :: Nil, 3)
+        }
+        Get() ~> addHeader(Range(100, 200)) ~> Route.seal(getFromFile(file)) ~> check {
+          status shouldEqual Status.RangeNotSatisfiable
+        }
+      } finally {
+        file.delete
+        ()
+      }
+    }
+    "serve the whole file when If-Range does not match the ETag" in {
+      val file = File.createTempFile("pekkoHttpTest", null)
+      try {
+        writeAllText("ABCDEFGHIJ", file)
+        Get() ~> addHeader(Range(0, 1)) ~> addHeader(Header.Raw(ci"If-Range", "\"stale\"")) ~> getFromFile(file) ~>
+        check {
+          status shouldEqual Status.Ok
+          responseAs[String] shouldEqual "ABCDEFGHIJ"
+        }
+      } finally {
+        file.delete
+        ()
+      }
+    }
+    "serve an empty file in full whatever the Range header, like Pekko" in {
+      val file = File.createTempFile("pekkoHttpTest", null)
+      try {
+        Get() ~> addHeader(Range(0, 1)) ~> getFromFile(file) ~> check {
+          status shouldEqual Status.Ok
+          responseAs[Array[Byte]].length shouldEqual 0
+        }
+      } finally {
+        file.delete
+        ()
+      }
+    }
+    "report the clamped Last-Modified on the 200 that the 304 later confirms" in {
+      val file = File.createTempFile("pekkoHttpTest", null)
+      try {
+        writeAllText("123", file)
+        file.setLastModified(System.currentTimeMillis() + 3600000L) // a modification time in the future
+        var lastModified: Option[HttpDate] = None
+        Get() ~> getFromFile(file) ~> check {
+          lastModified = header[`Last-Modified`].map(_.date)
+          lastModified.get.epochSecond should be <= System.currentTimeMillis() / 1000
+        }
+        Get() ~> addHeader(`If-Modified-Since`(lastModified.get)) ~> getFromFile(file) ~> check {
+          status shouldEqual Status.NotModified
+        }
+      } finally {
+        file.delete
+        ()
       }
     }
     "support files with registered MediaType and .gz suffix" in {
@@ -527,8 +587,16 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
       }
     }
     "carry an ETag and serve ranges, like files" in {
-      Get() ~> getFromResource("sample.html") ~> check { header[ETag] shouldBe defined }
-      Get() ~> addHeader(Range(0, 1))         ~> getFromResource("sample.html") ~> check {
+      var tag: Option[EntityTag] = None
+      Get() ~> getFromResource("sample.html") ~> check {
+        tag = header[ETag].map(_.tag)
+        tag shouldBe defined
+      }
+      Get() ~> addHeader(`If-None-Match`(tag.get)) ~> getFromResource("sample.html") ~> check {
+        status shouldEqual Status.NotModified
+        header[ETag].map(_.tag) shouldEqual tag
+      }
+      Get() ~> addHeader(Range(0, 1)) ~> getFromResource("sample.html") ~> check {
         status shouldEqual Status.PartialContent
         responseAs[Array[Byte]].length shouldEqual 2
       }

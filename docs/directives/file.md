@@ -41,8 +41,9 @@ val route: Route = path("download") {
 }
 ```
 
-Like Pekko's, the file and resource directives handle conditional and ranged requests themselves. Every response
-carries an `ETag` (from the file's size and modification time) and `Last-Modified`, `If-None-Match` and
+Like Pekko's, the file and resource directives handle conditional and ranged requests themselves. A file, and a
+resource whose length is known, carries an `ETag` (from its size and modification time) and `Last-Modified`;
+`If-None-Match` and
 `If-Modified-Since` answer `304 Not Modified` with those validators, `If-Match` and `If-Unmodified-Since` answer
 `412 Precondition Failed`, and a GET with a `Range` header gets a `206 Partial Content`: a single range on a file is
 read by seeking to it, several ranges are served as `multipart/byteranges` in one pass (see `withRangeSupport` for the
