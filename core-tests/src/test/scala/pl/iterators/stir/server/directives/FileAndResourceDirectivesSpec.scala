@@ -24,6 +24,7 @@ import pl.iterators.stir.server.{ Route, UnsatisfiableRangeRejection }
 
 import java.io.File
 import java.net.URLClassLoader
+import java.util.jar.{ JarEntry, JarOutputStream }
 import java.nio.file.{ Files => NioFiles, Paths }
 import java.time.{ LocalDate, ZoneOffset }
 import scala.annotation.unused
@@ -614,6 +615,36 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
       } finally {
         loader.close()
         NioFiles.deleteIfExists(dir.resolve("only-here.txt"))
+        NioFiles.deleteIfExists(dir)
+        ()
+      }
+    }
+    "serve a resource from a jar whose path has spaces and umlauts, repeatedly, and reject its directories" in {
+      // Pekko's "return the resource from an archive with spaces and umlauts" and "... the archive is shared between
+      // requests": the jar is built here instead of checked in
+      val dir = NioFiles.createTempDirectory("stir jar späces")
+      val jar = dir.resolve("lib with späces.jar")
+      val out = new JarOutputStream(NioFiles.newOutputStream(jar))
+      try {
+        out.putNextEntry(new JarEntry("inJar/"))
+        out.closeEntry()
+        out.putNextEntry(new JarEntry("inJar/test-resource.txt"))
+        out.write("I have spaces, too!".getBytes("UTF-8"))
+        out.closeEntry()
+      } finally out.close()
+      val loader = new URLClassLoader(Array(jar.toUri.toURL), null)
+      try {
+        def runCheck() = Get() ~> getFromResource("inJar/test-resource.txt", loader) ~> check {
+          mediaType shouldEqual MediaType.text.plain
+          responseAs[String] shouldEqual "I have spaces, too!"
+        }
+        runCheck()
+        runCheck()
+        Get() ~> getFromResource("inJar", loader)  ~> check { handled shouldEqual false }
+        Get() ~> getFromResource("inJar/", loader) ~> check { handled shouldEqual false }
+      } finally {
+        loader.close()
+        NioFiles.deleteIfExists(jar)
         NioFiles.deleteIfExists(dir)
         ()
       }
