@@ -187,7 +187,7 @@ object MiscDirectives extends MiscDirectives {
    * `entity`, `decodeRequest`, ...) must still get all of it. The look runs in a scope of its own, released once the
    * rest of the body has been read, or when the route rejects or fails or its response body ends
    * ([[RequestContext.run]]). Reading the body after that (a second time, or in the background after the response)
-   * gives the first chunk only.
+   * may give only the first chunk, or fail for a body that holds resources.
    */
   private[stir] final class SharedBody private (original: EntityBody[IO],
       cell: Ref[IO, Option[Deferred[IO, Either[Throwable, EntityBody[IO]]]]], releaseCell: Ref[IO, Option[IO[Unit]]]) {
