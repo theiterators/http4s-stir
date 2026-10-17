@@ -122,9 +122,9 @@ trait RouteTest extends RequestBuilding with WSTestRequestBuilding with RouteTes
   }
 
   /**
-   * A dummy that can be used as `~> runRoute` to run the route but without blocking for the result.
-   * The result of the pipeline is the result that can later be checked with `check`. See the
-   * "separate running route from checking" example from ScalatestRouteTestSpec.scala.
+   * Pekko's `~> runRoute`, kept so that such tests compile: the result can later be checked with `check(...)(result)`.
+   * Unlike Pekko's it does not separate running the route from checking it, as `~>` already waits for the route
+   * (within the `RouteTestTimeout`), so a route waiting on something the test does after `~>` times out.
    */
   def runRoute: RouteTestResult => RouteTestResult = identity
 
