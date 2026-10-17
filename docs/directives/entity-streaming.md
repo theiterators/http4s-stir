@@ -69,3 +69,37 @@ val route: Route = get {
 }
 // [{"id":"a","value":1.0},{"id":"b","value":2.5}]
 ```
+
+## Newline separated rendering
+
+`withFramingRenderer` replaces the renderer, as Pekko's `withFramingRenderer` does. Newline separated JSON objects
+instead of an array:
+
+```scala
+import fs2.{ Chunk, Pipe }
+
+val newlineSeparated: Pipe[IO, Chunk[Byte], Byte] =
+  frames => frames.flatMap(frame => Stream.chunk(frame) ++ Stream.emit('\n'.toByte))
+
+implicit val ndjsonStreaming: EntityStreamingSupport = EntityStreamingSupport.json().withFramingRenderer(newlineSeparated)
+// {"id":"a","value":1.0}
+// {"id":"b","value":2.5}
+```
+
+The renderer receives one encoded element per chunk and produces the response bytes; the content type stays the
+support's (`withContentType` changes it).
+
+## Parallel (un)marshalling
+
+Elements are encoded and decoded one at a time by default. `withParallelMarshalling(parallelism, unordered)`, as
+Pekko's, lets `asSourceOf` unmarshal and the stream marshaller encode up to `parallelism` elements at once, through
+fs2's `parEvalMap`; with `unordered = true` (`parEvalMapUnordered`) an element is emitted as soon as it is ready, so
+a large element does not hold back the smaller ones after it, at the price of the order.
+
+```scala
+implicit val parallelStreaming: EntityStreamingSupport =
+  EntityStreamingSupport.json().withParallelMarshalling(parallelism = 4, unordered = false)
+```
+
+`parallelism` must be at least 1. Parallelism only pays when the `Unmarshaller` or `EntityEncoder` does real work
+per element, such as a database lookup or a large serialisation; the framing itself is sequential.

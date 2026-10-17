@@ -23,6 +23,7 @@ trait FramedEntityStreamingDirectives extends MarshallingDirectives {
    * `Content-Type`-aware framing of the in-scope [[EntityStreamingSupport]], and each frame is decoded as UTF-8
    * text with the given `Unmarshaller`. A `Content-Type` the support does not accept rejects with an
    * `UnsupportedRequestContentTypeRejection`; a frame that breaks the framing limits fails the stream with a 400.
+   * Frames are unmarshalled with the support's `parallelism`, out of order when it is `unordered`.
    *
    * @group streaming
    */
@@ -41,12 +42,14 @@ trait FramedEntityStreamingDirectives extends MarshallingDirectives {
       support: EntityStreamingSupport): RequestToSourceUnmarshaller[T] =
     EntityDecoder.decodeBy(support.supported) { media =>
       DecodeResult.successT[IO, Stream[IO, T]](
-        media.body.through(support.framingDecoder).evalMap(frame => um(new String(frame.toArray, "UTF-8"))))
+        media.body.through(support.framingDecoder).through(
+          support.mapElements(frame => um(new String(frame.toArray, "UTF-8")))))
     }
 
   /**
-   * Renders a `Stream` of elements as a response: each element is encoded with its `EntityEncoder` and the frames
-   * are joined by the in-scope [[EntityStreamingSupport]], whose content type the response carries.
+   * Renders a `Stream` of elements as a response: each element is encoded with its `EntityEncoder`, with the
+   * support's `parallelism` and out of order when it is `unordered`, and the frames are joined by the in-scope
+   * [[EntityStreamingSupport]], whose content type the response carries.
    *
    * @group streaming
    */
@@ -54,7 +57,8 @@ trait FramedEntityStreamingDirectives extends MarshallingDirectives {
       support: EntityStreamingSupport): ToResponseMarshaller[Stream[IO, T]] =
     ToResponseMarshaller.negotiated((stream: Stream[IO, T]) =>
       IO.pure(Response[IO]().withContentType(support.contentType).withBodyStream(
-        stream.evalMap(element => encoder.toEntity(element).body.compile.to(Chunk)).through(support.framingRenderer))))
+        stream.through(support.mapElements(element => encoder.toEntity(element).body.compile.to(Chunk)))
+          .through(support.framingRenderer))))
 }
 
 object FramedEntityStreamingDirectives extends FramedEntityStreamingDirectives
