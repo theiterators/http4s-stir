@@ -40,7 +40,6 @@ The following directive categories and individual directives are **not available
 | Category | Status |
 |---|---|
 | `RangeDirectives` | Not implemented (trait is empty) |
-| `FramedEntityStreamingDirectives` | Not implemented (trait is empty) |
 
 ### Unimplemented individual directives
 
