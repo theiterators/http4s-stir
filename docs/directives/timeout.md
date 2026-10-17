@@ -39,8 +39,6 @@ val route: Route = path("slow-operation") {
 }
 ```
 
-Due to the inherent raciness of timeout mechanisms, it is not guaranteed that the timeout will be applied before a previously set timeout has expired.
-
 ## withoutRequestTimeout
 
 Runs the inner route without a route-local request timeout (`extractRequestTimeout` reports `Duration.Inf` inside). It cannot cancel the timeout of an enclosing `withRequestTimeout`; nest it the other way round.
@@ -59,6 +57,7 @@ val route: Route = path("streaming") {
 
 Replaces the response the nearest enclosing `withRequestTimeout` produces when it times out. Does nothing when
 no timeout is set.
+Due to the inherent raciness, a handler set after the timer already fired is not applied.
 
 ```scala
 import scala.concurrent.duration._

@@ -402,6 +402,16 @@ class FormFieldDirectivesSpec extends RoutingSpec {
         formFieldMap { echoComplete }
       } ~> check { responseAs[String] shouldEqual "TreeMap(age -> 42, firstName -> Mike)" }
     }
+    "ignore a part without a name" in {
+      val nameless = Part[IO](org.http4s.Headers(`Content-Type`(MediaType.text.plain)),
+        Stream.emits("x".getBytes("UTF-8")).covary[IO])
+      val multipart: Multipart[IO] =
+        Multiparts.forSync[IO].flatMap(_.multipart(Vector(nameless,
+          Part.formData[IO]("firstName", "Mike")))).unsafeRunSync()
+      Post("/", multipart).transformHeaders(_ ++ multipart.headers) ~> formFieldMap { echoComplete } ~> check {
+        responseAs[String] shouldEqual "TreeMap(firstName -> Mike)"
+      }
+    }
     "extract repeated multipart fields" in {
       multipartForm("hobby" -> "cooking", "hobby" -> "reading") ~> {
         formField("hobby".repeated) { echoComplete }

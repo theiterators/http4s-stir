@@ -72,7 +72,8 @@ absent) matches the given coding.
 
 Adds `Content-Encoding: gzip` to a response that one of the static file directives served from a `.svgz` file
 (the only precompressed media type Pekko recognises) when no `Content-Encoding` is set yet. http4s media types
-carry no "gzipped" flag, so the directive looks at the served file name instead.
+carry no "gzipped" flag, so the directive looks at the served file name instead. `encodeResponse` never compresses
+such a response, so the two directives can be nested in either order.
 
 ```scala
 val route: Route = pathPrefix("static") {

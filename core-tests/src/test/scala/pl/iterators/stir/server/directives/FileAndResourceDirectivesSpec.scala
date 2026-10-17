@@ -575,6 +575,11 @@ class FileAndResourceDirectivesSpec extends RoutingSpec with Inspectors with Ins
     "reject requests to file resources" in {
       Get() ~> listDirectoryContents(base + "/subDirectory/empty.pdf") ~> check { handled shouldEqual false }
     }
+    "render a symlinked directory as a directory" in {
+      Get("/") ~> listDirectoryContents(base + "/dirWithLink") ~> check {
+        responseAs[String] should include("""<a href="/linked-dir/">linked-dir/</a>""")
+      }
+    }
     "reject non-GET requests" in {
       Put() ~> listDirectoryContents(base + "/someDir") ~> check { handled shouldEqual false }
     }

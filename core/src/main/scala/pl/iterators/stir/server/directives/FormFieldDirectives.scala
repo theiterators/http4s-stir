@@ -92,8 +92,9 @@ object FormFieldDirectives {
 
   private def multipartFormDecoder: EntityDecoder[IO, UrlForm] =
     EntityDecoder.multipart[IO].flatMapR { multipart =>
-      val fields = multipart.parts.filter(_.filename.isEmpty).toList.traverse { part =>
-        part.bodyText.compile.string.map(value => part.name.getOrElse("") -> value)
+      val fields = multipart.parts.filter(part => part.filename.isEmpty && part.name.isDefined).toList.traverse {
+        part =>
+          part.bodyText.compile.string.map(value => part.name.getOrElse("") -> value)
       }
       DecodeResult.success(fields.map(values => UrlForm(values: _*)))
     }

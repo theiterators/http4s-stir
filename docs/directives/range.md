@@ -11,8 +11,8 @@ sidebar_position: 26
 Adds support for [RFC 7233](https://tools.ietf.org/html/rfc7233) byte ranges to the inner route: every GET
 response carries `Accept-Ranges: bytes`, and a GET request with a `Range: bytes=...` header receives a
 `206 Partial Content` slice of a `200` response, with the `Content-Range` header set. Several ranges are answered
-as `multipart/byteranges`; ranges that are at most one byte apart are merged into one part, and the parts are sent
-in ascending order in one pass over the body. Responses other than `200`, and non-GET requests, pass through
+as `multipart/byteranges`; ranges that are at most 80 bytes apart (Pekko's `range-coalescing-threshold`) are
+merged into one part, and the parts are sent in ascending order in one pass over the body. Responses other than `200`, and non-GET requests, pass through
 untouched.
 
 A request whose ranges all lie outside the entity is rejected with an `UnsatisfiableRangeRejection`

@@ -71,6 +71,21 @@ class CodingDirectivesSpec extends RoutingSpec {
         status shouldEqual Status.NotAcceptable
       }
     }
+    "not encode a precompressed svgz file whatever the nesting" in {
+      val file = java.io.File.createTempFile("stirHttpTest", ".svgz")
+      try {
+        java.nio.file.Files.write(file.toPath, "123".getBytes("UTF-8"))
+        Get() ~> addHeader(`Accept-Encoding`(ContentCoding.gzip)) ~> {
+          withPrecompressedMediaTypeSupport { encodeResponse { getFromFile(file) } }
+        } ~> check {
+          header[`Content-Encoding`] shouldEqual Some(`Content-Encoding`(ContentCoding.gzip))
+          responseAs[String] shouldEqual "123"
+        }
+      } finally {
+        file.delete
+        ()
+      }
+    }
     "not encode a response without entity" in {
       Get() ~> addHeader(`Accept-Encoding`(ContentCoding.gzip)) ~> encodeResponse(complete(Status.Ok)) ~> check {
         header[`Content-Encoding`] shouldEqual None
