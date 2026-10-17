@@ -19,8 +19,8 @@ object ContentNegotiation {
     }
 
   private def specificity(range: MediaRange): Int = range match {
-    case mediaType: MediaType => 2 + mediaType.extensions.size
+    case mediaType: MediaType       => 2 + mediaType.extensions.size
     case _ if range.mainType == "*" => 0
-    case _ => 1
+    case _                          => 1
   }
 }
