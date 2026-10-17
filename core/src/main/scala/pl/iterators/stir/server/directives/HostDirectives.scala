@@ -77,7 +77,12 @@ object HostDirectives extends HostDirectives {
   // proxy routing on Host must not be bypassed by an absolute-form target naming another host).
   private val _extractHost: Directive1[String] = extract { ctx =>
     val request = ctx.request
-    val defaultPort = request.uri.scheme.flatMap(scheme => if (scheme == Uri.Scheme.https) Some(443) else Some(80))
+    val defaultPort = request.uri.scheme.map(_.value.toLowerCase(Locale.ROOT)) match {
+      case Some("https") | Some("wss") => Some(443)
+      case Some("http") | Some("ws")   => Some(80)
+      case Some(_)                     => None
+      case None                        => Some(80) // an authority without a scheme, as code may build it
+    }
     def port(p: Option[Int]): Option[Int] = p.filterNot(defaultPort.contains)
     val fromUri = request.uri.authority.filter(_.host.value.nonEmpty).map(a => (address(a.host), port(a.port)))
     val fromHeader = request.headers.get[Host].map(h => (unbracketed(h.host).toLowerCase(Locale.ROOT), port(h.port)))
