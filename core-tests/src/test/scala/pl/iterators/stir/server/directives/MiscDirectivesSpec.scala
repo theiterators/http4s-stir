@@ -278,7 +278,11 @@ class MiscDirectivesSpec extends RoutingSpec {
       } ~> check { responseAs[String] shouldEqual "body:abcde" }
     }
     "fail a second read of a length-less body, as an alternative would otherwise get it truncated" in {
-      val surfaced = handleExceptions(ExceptionHandler { case e: IllegalStateException => complete(e.getMessage) })
+      // the failing read surfaces as an exception, or as a rejection where entity rejects every failure (#74)
+      val surfaced = handleExceptions(ExceptionHandler { case e: IllegalStateException => complete(e.getMessage) }) &
+        handleRejections(RejectionHandler.newBuilder().handle {
+          case MalformedRequestContentRejection(text, _) => complete(text)
+        }.result())
       http2(Post().withBodyStream(Stream("ab", "c").through(fs2.text.utf8.encode)))                ~>
       surfaced(entity(as[String])(_ => reject) ~ entity(as[String])(s => complete("second:" + s))) ~> check {
         responseAs[String] shouldEqual MiscDirectives.RereadMessage
