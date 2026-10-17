@@ -30,7 +30,8 @@ trait RespondWithDirectives {
    * @group response
    */
   def respondWithHeaders[A](responseHeaders: Seq[Header.Raw]): Directive0 =
-    mapResponseHeaders(Headers(responseHeaders.toList) ++ _)
+    // prepend; http4s' `Headers.++` would drop the added headers whose names the response already carries
+    mapResponseHeaders(headers => Headers(responseHeaders.toList ++ headers.headers))
 
   def respondWithHeaders(firstHeader: Header.Raw, otherHeaders: Header.Raw*): Directive0 =
     respondWithHeaders(firstHeader +: otherHeaders.toList)
