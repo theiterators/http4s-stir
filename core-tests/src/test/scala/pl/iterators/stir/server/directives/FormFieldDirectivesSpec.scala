@@ -295,6 +295,12 @@ class FormFieldDirectivesSpec extends RoutingSpec {
         formFieldSeq { echoComplete }
       } ~> check { responseAs[String] shouldEqual "Vector()" }
     }
+    "answer 413 over a real server for a form over the buffer limit, without letting an alternative re-read it" in {
+      val big = "a=" + ("x" * (9 * 1024 * 1024))
+      Post("/", big) ~> addHeader(`Content-Type`(MediaType.application.`x-www-form-urlencoded`)) ~!> {
+        formFieldMap(fields => complete(fields.size.toString)) ~ entity(as[String])(s => complete(s.length.toString))
+      } ~> check { status shouldEqual Status.PayloadTooLarge }
+    }
     "still answer 413 when sealed for a form over the size limit" in {
       Post("/", UrlForm("field" -> ("x" * 100))) ~> Route.seal(withSizeLimit(10)(formFieldSeq { echoComplete })) ~>
       check { status shouldEqual Status.PayloadTooLarge }
