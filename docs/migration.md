@@ -49,8 +49,6 @@ instead. Other differences that remain:
 - `parameter("x".repeated)` returns the values in the order of the query string; Pekko returns them reversed.
 - A header that http4s cannot parse is ignored where Pekko may parse it leniently (`selectPreferredLanguage` reads
   `Accept-Language` q-values as leniently as Pekko).
-- Over Ember's HTTP/2 the host directives see no host (`extractHost` gives `""`, `host(...)` rejects): Ember 0.23.36
-  drops the `:authority` pseudo-header, and HTTP/2 brings no `Host` header.
 - Over Ember's HTTP/2 a request carrying its host only in `:authority` (prior knowledge, HTTP/2 over TLS) has no host
   for the host directives (`extractHost` gives `""`, `host(...)` rejects): Ember 0.23.36 drops `:authority`.
 - A request whose URI authority and `Host` header disagree is answered 400 by Pekko; stir names no host for it
