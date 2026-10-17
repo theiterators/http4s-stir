@@ -62,7 +62,7 @@ object RequestContext {
     RequestContext(request, request.pathInfo)
 
   /**
-   * Runs a route the way a server or the testkit starts routing: on a request prepared by `MiscDirectives.prepare`,
+   * Runs a route the way `toHttpApp` and the testkit start routing: on a request prepared by `MiscDirectives.prepare`,
    * releasing what its shared body holds when the route rejects or fails, or when the response body ends.
    */
   private[stir] def run(request: Request[IO])(route: RequestContext => IO[RouteResult]): IO[RouteResult] =

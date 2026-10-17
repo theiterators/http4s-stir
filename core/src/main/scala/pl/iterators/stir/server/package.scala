@@ -24,7 +24,8 @@ package object server {
 
     def toHttpRoutes: HttpRoutes[IO] = {
       Kleisli(req =>
-        OptionT(RequestContext.run(req)(route).map {
+        // not `RequestContext.run`: a rejected request goes on to the next routes, which must get its body untouched
+        OptionT(route(RequestContext(req)).map {
           case RouteResult.Complete(response) => Some(response)
           case _                              => None
         }))

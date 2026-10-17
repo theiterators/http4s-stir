@@ -58,12 +58,14 @@ with `withEntity` or add the header.
 
 Over HTTP/2 a request body usually carries neither header. Pekko then decides from the frames (whether the stream
 ended with the headers), which http4s does not expose, so stir answers the same question by reading the first chunk
-of the body: `toHttpApp`, `toHttpRoutes` and the testkit route a length-less HTTP/2 request with a body that reads
-its first chunk once, on demand, and hands every reader (the alternatives of a route, `entity`, `decodeRequest`,
+of the body: `toHttpApp` and the testkit route a length-less HTTP/2 request with a body that reads its first chunk
+once, on demand, and hands every reader (the alternatives of a route, `entity`, `decodeRequest`,
 ...) the whole body. So `requestEntityEmpty` on such a request waits until the client sends its first bytes or ends
 the stream. Reading the body a second time gives only its first chunk, as a network body cannot be replayed. A
 body that a directive replaced (`mapRequest`, `toStrictEntity`, ...) is judged by its headers, a length-less one
-taken as present, as is a length-less HTTP/2 body on a hand-built `RequestContext`.
+taken as present, as is a length-less HTTP/2 body under `toHttpRoutes` (a request it rejects goes on to the next
+routes, which must get the body untouched) or on a hand-built `RequestContext`. The look is released when the
+response body ends, so a body read in the background after that gives its first chunk only.
 
 ```scala
 val route: Route = post {

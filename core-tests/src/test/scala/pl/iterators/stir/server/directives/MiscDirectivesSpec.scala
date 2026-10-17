@@ -5,7 +5,7 @@ import cats.effect.unsafe.IORuntime
 import cats.syntax.all._
 import com.comcast.ip4s._
 import fs2.Stream
-import org.http4s.{ Header, HttpVersion, LanguageTag, Method, Request, Status, Uri, UrlForm }
+import org.http4s.{ Header, HttpRoutes, HttpVersion, LanguageTag, Method, Request, Response, Status, Uri, UrlForm }
 import org.http4s.ember.client.EmberClientBuilder
 import org.http4s.ember.server.EmberServerBuilder
 import org.http4s.h2.H2Keys.Http2PriorKnowledge
@@ -220,6 +220,14 @@ class MiscDirectivesSpec extends RoutingSpec {
       http2(Post().withBodyStream(Stream.empty)) ~> mapRequest(_.withBodyStream(Stream.emits("abc".getBytes))) {
         requestEntityEmpty { complete("empty") } ~ complete("present")
       } ~> check { responseAs[String] shouldEqual "present" }
+    }
+    "leave the body alone for the routes after a rejecting toHttpRoutes" in {
+      val stir = requestEntityEmpty { complete("empty") }.toHttpRoutes
+      val other = HttpRoutes.of[IO] { case request =>
+        request.as[String].map(s => Response[IO]().withEntity("other:" + s))
+      }
+      val response = (stir <+> other).orNotFound.run(http2(Post().withBodyStream(oneShot)))
+      response.flatMap(_.as[String]).unsafeRunSync() shouldEqual "other:abc"
     }
     "keep the resources of the body open until the route has read it" in {
       val open = new AtomicBoolean(false)

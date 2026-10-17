@@ -158,8 +158,8 @@ object MiscDirectives extends MiscDirectives {
    * Whether the request is known to be empty. Over HTTP/1 the headers tell. An HTTP/2 body carries no
    * Content-Length and whether its stream ended with the headers only shows in the body, so the [[SharedBody]] that
    * routing starts with reads its first chunk. That answer holds only while the request still carries that body
-   * (possibly under `withSizeLimit`); a replaced length-less body, or one on a hand-built `RequestContext`, is taken
-   * as present.
+   * (possibly under `withSizeLimit`); a replaced length-less body, or one under `toHttpRoutes` or a hand-built
+   * `RequestContext`, is taken as present.
    */
   private val knownEmpty: Directive1[Boolean] =
     Directive[Tuple1[Boolean]] { inner => ctx =>
@@ -185,8 +185,9 @@ object MiscDirectives extends MiscDirectives {
    * The body of a length-less HTTP/2 request, read through a cell so that its first chunk can be looked at before
    * the route reads it: the network stream can be read only once, and every reader (the alternatives of a route,
    * `entity`, `decodeRequest`, ...) must still get all of it. The look runs in a scope of its own, released once the
-   * rest of the body has been read, or when routing ends without reading it ([[RequestContext.run]]). Reading the
-   * body a second time after that gives the first chunk only.
+   * rest of the body has been read, or when the route rejects or fails or its response body ends
+   * ([[RequestContext.run]]). Reading the body after that (a second time, or in the background after the response)
+   * gives the first chunk only.
    */
   private[stir] final class SharedBody private (original: EntityBody[IO],
       cell: Ref[IO, Option[Deferred[IO, Either[Throwable, EntityBody[IO]]]]], releaseCell: Ref[IO, Option[IO[Unit]]]) {
