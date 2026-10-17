@@ -51,8 +51,7 @@ case class RequestContext(request: Request[IO], unmatchedPath: Path) {
 
   /**
    * Bubbles the given error up the response chain where it is dealt with by the closest `handleExceptions`
-   * directive and its `ExceptionHandler`, unless the error is a `RejectionError`. In this case the
-   * wrapped rejection is unpacked and "executed".
+   * directive and its `ExceptionHandler` (stir has no `RejectionError`: to reject, use `reject`).
    */
   def fail(error: Throwable): IO[RouteResult] = IO.raiseError(error)
 }
