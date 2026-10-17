@@ -2,7 +2,8 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import org.http4s.{ Response, Status }
+import org.http4s.{ ContentCoding, MediaRange, MediaType, QValue, Response, Status }
+import org.http4s.headers.{ `Content-Encoding`, Accept, MediaRangeAndQValue }
 import pl.iterators.stir.server._
 
 import java.util.concurrent.atomic.AtomicReference
@@ -52,55 +53,45 @@ class ExecutionDirectivesSpec extends RoutingSpec {
         }
       }
     }
-//    "not interfere with alternative routes" in EventFilter[MyException.type](
-//      occurrences = 1,
-//      message = BasicRouteSpecs.defaultExnHandler500Error("Boom")).intercept {
-//      Get("/abc") ~>
-//        get {
-//          handleExceptions(handler)(reject) ~ { ctx =>
-//            throw MyException
-//          }
-//        } ~> check {
-//        status shouldEqual StatusCodes.InternalServerError
-//        responseAs[String] shouldEqual "There was an internal server error."
-//      }
-//    }
-//    "not handle other exceptions" in EventFilter[RuntimeException](
-//      occurrences = 1,
-//      message = BasicRouteSpecs.defaultExnHandler500Error("buh")).intercept {
-//      Get("/abc") ~>
-//        get {
-//          handleExceptions(handler) {
-//            throw new RuntimeException("buh")
-//          }
-//        } ~> check {
-//        status shouldEqual StatusCodes.InternalServerError
-//        responseAs[String] shouldEqual "There was an internal server error."
-//      }
-//    }
-//    "always fall back to a default content type" in EventFilter[RuntimeException](
-//      occurrences = 2,
-//      message = BasicRouteSpecs.defaultExnHandler500Error("buh2")).intercept {
-//      Get("/abc") ~> Accept(MediaTypes.`application/json`) ~>
-//        get {
-//          handleExceptions(handler) {
-//            throw new RuntimeException("buh2")
-//          }
-//        } ~> check {
-//        status shouldEqual StatusCodes.InternalServerError
-//        responseAs[String] shouldEqual "There was an internal server error."
-//      }
-//
-//      Get("/abc") ~> Accept(MediaTypes.`text/xml`, MediaRanges.`*/*`.withQValue(0f)) ~>
-//        get {
-//          handleExceptions(handler) {
-//            throw new RuntimeException("buh2")
-//          }
-//        } ~> check {
-//        status shouldEqual StatusCodes.InternalServerError
-//        responseAs[String] shouldEqual "There was an internal server error."
-//      }
-//    }
+    "not interfere with alternative routes" in {
+      val lines = new AtomicReference[List[String]](Nil)
+      Get("/abc") ~> handleExceptions(recordingDefaultHandler(lines)) {
+        get {
+          handleExceptions(handler)(reject) ~ { _ => throw MyException }
+        }
+      } ~> check {
+        status shouldEqual Status.InternalServerError
+        responseAs[String] shouldEqual "" // Pekko: "There was an internal server error."
+        lines.get shouldEqual List(logged500("Boom"))
+      }
+    }
+    "not handle other exceptions" in {
+      val lines = new AtomicReference[List[String]](Nil)
+      Get("/abc") ~> handleExceptions(recordingDefaultHandler(lines)) {
+        get {
+          handleExceptions(handler) { throw new RuntimeException("buh") }
+        }
+      } ~> check {
+        status shouldEqual Status.InternalServerError
+        lines.get shouldEqual List(logged500("buh"))
+      }
+    }
+    "always fall back to a default content type" in {
+      val lines = new AtomicReference[List[String]](Nil)
+      val route = handleExceptions(recordingDefaultHandler(lines)) {
+        get {
+          handleExceptions(handler) { throw new RuntimeException("buh2") }
+        }
+      }
+      Get("/abc") ~> addHeader(Accept(MediaType.application.json)) ~> route ~> check {
+        status shouldEqual Status.InternalServerError
+      }
+      Get("/abc")                                            ~> addHeader(Accept(MediaRangeAndQValue(MediaType.text.xml),
+        MediaRangeAndQValue(MediaRange.`*/*`, QValue.Zero))) ~> route ~> check {
+        status shouldEqual Status.InternalServerError
+      }
+      lines.get shouldEqual List(logged500("buh2"), logged500("buh2"))
+    }
   }
 
   "ExceptionHandler.seal(handler)(logAction)" should {
@@ -128,71 +119,61 @@ class ExecutionDirectivesSpec extends RoutingSpec {
     "handle encodeResponse inside RejectionHandler for non-success responses" in {
       val rejectionHandler: RejectionHandler = RejectionHandler.newBuilder()
         .handleNotFound {
-//          encodeResponseWith(Coders.Gzip) {
-          complete(Status.NotFound, "Not here!")
-//          }
+          encodeResponseWith(ContentCoding.gzip) {
+            complete(Status.NotFound, "Not here!")
+          }
         }.result()
 
       Get("/hell0") ~>
       get {
         handleRejections(rejectionHandler) {
-//            encodeResponseWith(Coders.Gzip) {
-          path("hello") {
-            get {
-              complete(Response[IO](status = Status.Ok).withEntity("world"))
+          encodeResponseWith(ContentCoding.gzip) {
+            path("hello") {
+              get {
+                complete(Response[IO](status = Status.Ok).withEntity("world"))
+              }
             }
           }
-//            }
         }
       } ~> check {
-//        response should haveContentEncoding(gzip)
+        header[`Content-Encoding`].map(_.contentCoding) shouldEqual Some(ContentCoding.gzip)
         status shouldEqual Status.NotFound
       }
     }
   }
 
-//  "Default handler" should {
-//    "handle `IllegalRequestException` with appropriate block of `ErrorHandler`" in EventFilter.warning(
-//      occurrences = 1,
-//      message = "Illegal request: 'Some summary.'. Completing with 409 Conflict response.").intercept {
-//      Get("/abc") ~>
-//        get {
-//          throw new IllegalRequestException(ErrorInfo(summary = "Some summary."), StatusCodes.Conflict)
-//        } ~> check {
-//        status shouldEqual StatusCodes.Conflict
-//      }
-//    }
-//
-//    "handle exceptions other than `IllegalRequestException` with appropriate block of `ErrorHandler`" in EventFilter[
-//      RuntimeException](
-//      occurrences = 1,
-//      message = BasicRouteSpecs.defaultExnHandler500Error("re")).intercept {
-//      Get("/abc") ~>
-//        get {
-//          throw new RuntimeException("re")
-//        }
-//    } ~> check {
-//      status shouldEqual StatusCodes.InternalServerError
-//    }
-//
-//    "show exception class if .getMessage == null" in EventFilter[NullPointerException](
-//      occurrences = 1,
-//      message = BasicRouteSpecs.defaultExnHandler500Error(
-//        s"${classOf[NullPointerException].getName} (No error message supplied)")).intercept {
-//      Get("/abc") ~> get {
-//        throw new NullPointerException
-//      } ~> check {
-//        status shouldEqual StatusCodes.InternalServerError
-//      }
-//    }
-//  }
+  "Default handler" should {
+    "handle `IllegalRequestException` with its status and message" in {
+      val lines = new AtomicReference[List[String]](Nil)
+      Get("/abc") ~> handleExceptions(recordingDefaultHandler(lines)) {
+        get { throw IllegalRequestException(Status.Conflict, "Some summary.") }
+      } ~> check {
+        status shouldEqual Status.Conflict
+        responseAs[String] shouldEqual "Some summary."
+        lines.get shouldEqual List(ExceptionHandler.errorMessageTemplate("Some summary.", Status.Conflict.toString()))
+      }
+    }
+    "handle exceptions other than `IllegalRequestException`" in {
+      val lines = new AtomicReference[List[String]](Nil)
+      Get("/abc") ~> handleExceptions(recordingDefaultHandler(lines)) { get { throw new RuntimeException("re") } } ~>
+      check {
+        status shouldEqual Status.InternalServerError
+        lines.get shouldEqual List(logged500("re"))
+      }
+    }
+    "show exception class if .getMessage == null" in {
+      val lines = new AtomicReference[List[String]](Nil)
+      Get("/abc") ~> handleExceptions(recordingDefaultHandler(lines)) { get { throw new NullPointerException } } ~>
+      check {
+        status shouldEqual Status.InternalServerError
+        lines.get shouldEqual List(logged500(s"${classOf[NullPointerException].getName} (No error message supplied)"))
+      }
+    }
+  }
 
   def exceptionShouldBeHandled(route: Route) =
     Get("/abc") ~> route ~> check {
       status shouldEqual Status.InternalServerError
       responseAs[String] shouldEqual "Pling! Plong! Something went wrong!!!"
     }
-
-//  def haveContentEncoding(encoding: HttpEncoding): Matcher[HttpResponse] =
-//    be(Some(`Content-Encoding`(encoding))).compose { (_: HttpResponse).header[`Content-Encoding`] }
 }
