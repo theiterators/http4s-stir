@@ -9,6 +9,7 @@ import org.http4s.{
   DecodeFailure,
   DecodeResult,
   EntityDecoder,
+  HttpVersion,
   InvalidMessageBodyFailure,
   MediaRange,
   MediaType,
@@ -17,7 +18,7 @@ import org.http4s.{
   Status
 }
 import org.http4s.circe._
-import org.http4s.headers.{ `Content-Type`, Accept, MediaRangeAndQValue }
+import org.http4s.headers.{ `Content-Length`, `Content-Type`, Accept, MediaRangeAndQValue }
 import org.scalatest.Inside
 import pl.iterators.stir.common.EntityStreamingSupport
 import pl.iterators.stir.marshalling.{ ToResponseMarshallable, ToResponseMarshaller }
@@ -214,6 +215,39 @@ class MarshallingDirectivesSpec extends RoutingSpec with Inside {
       Post("/", jsonBody) ~> addHeader(`Content-Type`(MediaType.application.json)) ~> {
         entity(as[String]) { s => complete(s) }
       } ~> check { responseAs[String] shouldEqual jsonBody }
+    }
+    "reject with RequestEntityExpectedRejection when the request has no entity" in {
+      Put() ~> echoJson                                              ~> check { rejection shouldEqual RequestEntityExpectedRejection }
+      Put() ~> addHeader(`Content-Type`(MediaType.application.json)) ~> echoJson ~> check {
+        rejection shouldEqual RequestEntityExpectedRejection
+      }
+    }
+    "complete with 400 'Request entity expected but not supplied' for a missing entity when sealed" in {
+      Put() ~> Route.seal(echoJson) ~> check {
+        status shouldEqual Status.BadRequest
+        responseAs[String] shouldEqual "Request entity expected but not supplied"
+      }
+    }
+    "prefer the UnsupportedRequestContentTypeRejection when an empty request has an unsupported Content-Type" in {
+      Put() ~> addHeader(`Content-Type`(MediaType.text.plain)) ~> echoJson ~> check {
+        rejection shouldBe an[UnsupportedRequestContentTypeRejection]
+      }
+    }
+    "report a malformed length-less HTTP/2 body as malformed, not as missing" in {
+      val http2 = Post("/", "nope").withHttpVersion(HttpVersion.`HTTP/2`).removeHeader[`Content-Length`]
+      http2 ~> addHeader(`Content-Type`(MediaType.application.json)) ~> echoJson ~> check {
+        rejection shouldBe a[MalformedRequestContentRejection]
+      }
+    }
+    "decode a missing entity as an empty String" in {
+      Put() ~> entity(as[String]) { s => complete("[" + s + "]") } ~> check { responseAs[String] shouldEqual "[]" }
+    }
+    "cancel the RequestEntityExpectedRejection when another alternative accepts the request" in {
+      val acceptsThenRejects: Route = entity(as[String]) { _ => reject(MissingCookieRejection("c")) }
+      Put() ~> (echoJson ~ acceptsThenRejects)                  ~> check { rejections shouldEqual List(MissingCookieRejection("c")) }
+      Put() ~> (echoJson ~ reject(MissingCookieRejection("c"))) ~> check {
+        rejections shouldEqual List(RequestEntityExpectedRejection, MissingCookieRejection("c"))
+      }
     }
   }
 }

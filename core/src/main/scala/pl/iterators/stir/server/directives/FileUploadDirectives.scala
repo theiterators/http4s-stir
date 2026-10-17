@@ -108,7 +108,7 @@ trait FileUploadDirectives {
             }
           }
       }
-    } & cancelRejections(classOf[UnsupportedRequestContentTypeRejection])
+    } & cancelRejections(RequestEntityExpectedRejection.getClass, classOf[UnsupportedRequestContentTypeRejection])
 
   /**
    * Collects each body part that is a multipart file with the given field name as a tuple containing metadata and
@@ -171,7 +171,7 @@ trait FileUploadDirectives {
         case Right(files)    => inner(Tuple1(files))(ctx)
         case Left(rejection) => IO.pure(RouteResult.Rejected(rejection :: Nil))
       }
-    } & cancelRejections(classOf[UnsupportedRequestContentTypeRejection])
+    } & cancelRejections(RequestEntityExpectedRejection.getClass, classOf[UnsupportedRequestContentTypeRejection])
 
   private def store(part: Part[IO], destFn: FileInfo => File): IO[(FileInfo, File)] = {
     val info = fileInfo(part)
