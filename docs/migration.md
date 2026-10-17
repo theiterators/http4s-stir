@@ -46,6 +46,11 @@ instead. Other differences that remain:
 - The resource directives (`getFromResource`, `getFromResourceDirectory`) only work on the JVM: on Scala Native and
   Scala.js an application using them fails to link (no `java.net.URL`; Native's class loader has only
   `getResourceAsStream`).
+- An `Accept-Language` (or other) header that http4s cannot parse is ignored, where Pekko parses leniently: Pekko's
+  `q=.5` is not a valid RFC 7231 q-value, so `selectPreferredLanguage` then picks the first language.
+- `complete(status)` and `complete((status, headers))` for a status that allows an entity send an empty body, and so
+  does the default exception handler's 500; Pekko sends the status's default message as `text/plain` (for example
+  "The requested resource could not be found." for 404, "There was an internal server error." for 500).
 - `parameter("x".repeated)` returns the values in the order of the query string; Pekko returns them reversed.
 - A header that http4s cannot parse is ignored where Pekko may parse it leniently (`selectPreferredLanguage` reads
   `Accept-Language` q-values as leniently as Pekko).
@@ -124,6 +129,9 @@ instead. Other differences that remain:
   requests (206, 416) as Pekko does.
 - `getFromResource` rejects a directory entry inside a jar instead of serving it as an empty body.
 - `logRequestResultWith(show)` is new; a `show` that fails fails the request, as in Pekko.
+- `complete(status, value)` (with or without headers) sends no entity when the status allows none (1xx, 204, 205, 304),
+  as Pekko does; the value used to be sent as the body. Without an entity such a response is not negotiated either
+  (Pekko still answers a 204 with an unacceptable value's type with 406).
 - `complete` negotiates the response's `Content-Type` against the request's `Accept` header, as Pekko does: a
   representation the client does not accept is rejected with `UnacceptedResponseContentTypeRejection` (406 when sealed,
   "Resource representation is only available with these types:" followed by the types). Clients sending `*/*` or no

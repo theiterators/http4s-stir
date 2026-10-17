@@ -2,7 +2,7 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import org.http4s.{ Header, Method, Request, Response, Status, Uri }
+import org.http4s.{ Header, Headers, Method, Request, Response, Status, Uri }
 import org.scalatest.wordspec.AnyWordSpec
 import org.typelevel.ci.CIString
 import pl.iterators.stir.marshalling.ToResponseMarshallable
@@ -12,6 +12,22 @@ class RouteDirectivesSpec extends AnyWordSpec with GenericRoutingSpec {
   override implicit def runtime: IORuntime = IORuntime.global
 
   "The `complete` directive" should {
+    "send no entity for a status that allows none, with or without headers, as Pekko" in {
+      val custom = Headers(Header.Raw(CIString("X-A"), "a"))
+      for (status <- List(Status.NoContent, Status.ResetContent, Status.NotModified)) {
+        Get() ~> complete(status, "x") ~> check {
+          response.status shouldEqual status
+          responseAs[String] shouldEqual ""
+          response.headers.get(CIString("Content-Type")) shouldEqual None
+          response.headers.get(CIString("Content-Length")) shouldEqual None
+        }
+        Get() ~> complete(status, custom, "x") ~> check {
+          responseAs[String] shouldEqual ""
+          response.headers.get(CIString("X-A")).map(_.head.value) shouldEqual Some("a")
+          response.headers.get(CIString("Content-Type")) shouldEqual None
+        }
+      }
+    }
     "be chainable with the `&` operator" in {
       Get() ~> (get & complete("yeah")) ~> check { responseAs[String] shouldEqual "yeah" }
     }
