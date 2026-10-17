@@ -36,9 +36,27 @@ Path directives, method directives, parameter directives, header directives, and
 Every Pekko HTTP directive category has a counterpart in http4s-stir. The few directives without one are tied to
 the Pekko runtime and have no meaning on http4s: `withExecutionContext` / `extractExecutionContext`,
 `withMaterializer` / `extractMaterializer`, `extractActorSystem`, `withLog` / `extractLog`, `withSettings` /
-`mapSettings` / `extractSettings` / `extractParserSettings`, `onCompleteWithBreaker` (needs a circuit breaker) and
-`completeWith` (promise based; use `complete(io)`). Settings-driven behaviour (range limits, strict form timeout,
-size limits) is set per directive instead.
+`mapSettings` / `extractSettings` / `extractParserSettings` and `onCompleteWithBreaker` (needs a circuit breaker).
+Settings-driven behaviour (range limits, strict form timeout, size limits, the decode limit) is set per directive
+instead. Other differences that remain:
+
+- `Marshaller.oneOf` and `Accept-Charset` negotiation are not ported: http4s encoders have one content type and a
+  fixed charset. Chain `complete(json) ~ complete(text)` to offer several representations.
+- WebSocket `permessage-deflate` (the `shouldCompress` overloads) needs server support http4s 0.23 lacks.
+- The resource directives (`getFromResource`, `getFromResourceDirectory`) only work on the JVM: on Scala Native and
+  Scala.js an application using them fails to link (no `java.net.URL`; Native's class loader has only
+  `getResourceAsStream`).
+- An `Accept-Language` (or other) header that http4s cannot parse is ignored, where Pekko parses leniently: Pekko's
+  `q=.5` is not a valid RFC 7231 q-value, so `selectPreferredLanguage` then picks the first language.
+- `parameterMultiMap` lists a parameter without a value (`?flag`) with no values, where Pekko lists one empty value;
+  `parameterSeq` gives `("flag", "")` as Pekko does. For a bare `?`, `parameterSeq` is empty as in Pekko, while
+  `parameterMap` gives `Map("" -> "")` and `parameterMultiMap` `Map("" -> List())` (Pekko: empty maps).
+- Content negotiation differs from Pekko for wildcard ranges with parameters: stir ignores `charset` on every range
+  (Pekko only on `type/subtype` ranges, so its `text/*;charset=...` never matches) and does not count a wildcard
+  range's parameters towards its specificity.
+- `fileUploadAll` creates its temporary files with `File.createTempFile` (the default permissions minus the umask);
+  Pekko creates them owner-only. The spool files of the other upload directives are owner-only.
+- `Route.seal` takes no log action; use `handleExceptions(ExceptionHandler.seal(handler)(logAction))` around the route.
 
 ## Behaviour changes in 0.7
 
@@ -64,6 +82,40 @@ size limits) is set per directive instead.
 - The form directives parse url-encoded bodies themselves instead of through http4s' `UrlForm` decoder: `;` no
   longer separates fields (`a=1;b=2` is one field, as in Pekko) and characters that http4s rejected with a 400 when
   unencoded (spaces, quotes, brackets, non-ASCII) are accepted literally.
+- `IntNumber`, `LongNumber`, `HexIntNumber`, `HexLongNumber` and one-group regex matchers leave an absolute
+  remainder, so `IntNumber / "x"` matches `/42/x` as in Pekko. All number and regex matchers (including
+  `DoubleNumber` and `JavaUUID`) no longer skip an unconsumed leading slash: `rawPathPrefix(IntNumber)` rejects `/23`,
+  `"a" ~ IntNumber` rejects `/a/23`, and `pathSuffix(IntNumber)` leaves `/orders/` for `/orders/123` and rejects
+  `/orders/123/`.
+- `respondWithHeader(s)` adds its headers in front of the inner route's and keeps a same-named header the route
+  set, as Pekko does; 0.6.1 dropped the added header in that case. To replace a header, use
+  `mapResponseHeaders(_.put(header))`. `respondWithDefaultHeader(s)` adds a header only when the route did not set
+  it, and now puts the missing defaults first, as Pekko does (0.6.1 appended them).
+- `ExceptionHandler.seal(handler)(logAction)` passes the log action to the default fallback; 0.6.1 ignored it.
+- `overrideMethodWithParameter` answers `501 Not Implemented` for an unknown method name and matches names
+  independently of the default locale.
+- `withRangeSupport` and the coding directives (`decodeRequest`, `encodeResponse` and friends) are new in 0.7.
+  `withRangeSupport` rejects a `Range` request for a response of unknown length with
+  `UnsatisfiableRangeRejection(ranges, -1)` (416 when sealed); `decodeRequest` bounds the decoded body to 8 MiB
+  (`CodingDirectives.DefaultDecodeMaxBytes`, Pekko's `decode-max-size`, 413 above it) and answers a corrupt
+  compressed body with 400 (`MalformedRequestContentRejection` from `entity`), as Pekko does.
+- The disk-based upload directives no longer decode the whole multipart body in memory: `storeUploadedFile(s)` and
+  `fileUploadAll` spool parts above 64 KiB to disk, `fileUploadSpooled` above 50 MiB, and a body with more than 1000
+  parts is rejected with a 400.
+- `fileUploadAll` deletes its temporary files once the response body has been consumed, or as soon as the route
+  rejects, fails or is cancelled; a part stream kept past the request fails. 0.6.1 kept each file until its stream was
+  read and relied on `deleteOnExit`.
+- The testkit bounds `~>` and `~!>` with an implicit `RouteTestTimeout`, 1 second by default as in Pekko: a route
+  that does not answer in time fails the test with "Request was neither completed nor rejected within 1 second", and
+  reading the response (`response`, `responseAs`, `chunks`, `trailer`) is bounded the same way ("Response entity was
+  not read within ...").
+  Declare `implicit val routeTestTimeout: RouteTestTimeout = RouteTestTimeout(5.seconds)` for slower routes.
+- The static file and resource directives type content like Pekko: text types carry `charset=UTF-8`, an unknown
+  extension is `application/octet-stream`, and `name.ext.gz` / `.svgz` are served with the inner type and
+  `Content-Encoding: gzip`. They answer conditional requests (`ETag`, `Last-Modified`, 304 and 412) and `Range`
+  requests (206, 416) as Pekko does.
+- `getFromResource` rejects a directory entry inside a jar instead of serving it as an empty body.
+- `logRequestResultWith(show)` is new; a `show` that fails fails the request, as in Pekko.
 - `complete` negotiates the response's `Content-Type` against the request's `Accept` header, as Pekko does: a
   representation the client does not accept is rejected with `UnacceptedResponseContentTypeRejection` (406 when sealed,
   "Resource representation is only available with these types:" followed by the types). Clients sending `*/*` or no
@@ -78,4 +130,5 @@ The http4s-stir testkit differs from the Pekko HTTP testkit in the following way
 - **Synchronous execution**: all test assertions run synchronously; there is no async test support.
 - **Chunk inspection**: `chunks`, `chunksStream` and `trailer` expose the body chunks and trailer headers; there is no `ChunkStreamPart` model.
 - **Limited request building**: some minor header convenience methods available in the Pekko HTTP testkit are missing.
-- **WebSocket testing**: `isWebSocketUpgrade` and `expectWebSocketUpgradeWithProtocol` work as in Pekko for the handshake decision; the testkit cannot exchange frames.
+- **WebSocket testing**: `WS(uri, probe, subprotocols*)` and `WSProbe` exchange frames with the handler in memory, as in Pekko, but the probe talks to the handler as the directive received it (no ping/pong filtering or defragmentation) and over `~!>` no frames are exchanged. `isWebSocketUpgrade` and `expectWebSocketUpgradeWithProtocol` work as in Pekko.
+- **Timeouts**: `RouteTestTimeout` bounds `~>` and `~!>` (1 second by default) and fails the test on the test thread.

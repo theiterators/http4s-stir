@@ -126,7 +126,10 @@ complete(IO.pure("Async result"))
 
 `complete` negotiates the produced `Content-Type` against the request's `Accept` header the way Pekko's marshallers
 do: without an `Accept` header everything is acceptable; otherwise the most specific matching media range decides, a
-quality of `0` meaning "not acceptable". A representation the client does not accept is rejected with an
+quality of `0` meaning "not acceptable". (Two differences from Pekko for wildcard ranges with parameters: stir
+ignores a `charset` parameter on every range, while Pekko ignores it only on `type/subtype` ranges, so its
+`text/*;charset=utf-8` never matches; and Pekko counts a wildcard range's parameters towards its specificity.) A
+representation the client does not accept is rejected with an
 `UnacceptedResponseContentTypeRejection` (406 when sealed, listing the types the route can produce), so a later
 alternative that produces an accepted type can still complete the request:
 
