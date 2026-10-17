@@ -38,6 +38,17 @@ val route: Route = post {
 }
 ```
 
+### Failures
+
+Framing errors (an object or line over the limit, a body that is not an array of objects, trailing content after the
+last object, a body cut off inside an object) fail the element stream with a `400 Bad Request`
+`IllegalRequestException` as soon as the offending byte is read; the elements before it are still delivered. When
+the route consumes the stream before completing, as above, the exception reaches the `ExceptionHandler` and the
+client gets the 400. When the route streams the elements straight into the response, the status has already been
+sent and the response body fails instead. An element the `Unmarshaller` cannot decode fails the stream with the
+unmarshaller's own exception (a 500 under the default handler); throw an `IllegalRequestException` from the
+unmarshaller to answer with a 400.
+
 `asSourceOf[T](support)` takes the support explicitly. Combine with `withoutSizeLimit` or a generous
 `withSizeLimit` for unbounded uploads.
 
