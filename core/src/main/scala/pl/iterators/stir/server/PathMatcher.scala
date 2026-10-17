@@ -317,7 +317,7 @@ trait ImplicitPathMatcherConstruction {
                 case Some(m) if segment.decoded().substring(m.end).nonEmpty =>
                   Matched(pathWithSegments(path, Path.Segment(segment.decoded().substring(m.end)) +: tail),
                     Tuple1(m.group(1)))
-                case Some(m) => Matched(pathWithSegments(path, tail), Tuple1(m.group(1)))
+                case Some(m) => Matched(pathWithSegments(path.toAbsolute, tail), Tuple1(m.group(1)))
                 case None    => Unmatched
               }
             case _ if path.isEmpty && matchesEmptyPath => PathMatcher.EmptyMatch
@@ -481,7 +481,7 @@ trait PathMatchers {
             if (value == minusOne) Unmatched
             else Matched(
               if (ix < segment.length) pathWithSegments(path, Path.Segment(segment.substring(ix)) +: tail)
-              else pathWithSegments(path, tail),
+              else pathWithSegments(path.toAbsolute, tail),
               Tuple1(value))
           } else {
             if (value == minusOne) digits(ix + 1, a)
