@@ -6,7 +6,9 @@ import org.http4s.{ Response, Status }
 import fs2.{ text, Stream }
 import pl.iterators.stir.server.{ ExceptionHandler, Route, RouteResult }
 
+import java.util.concurrent.ThreadLocalRandom
 import scala.collection.mutable.ListBuffer
+import scala.concurrent.TimeoutException
 import scala.concurrent.duration._
 
 class BasicDirectivesSpec extends RoutingSpec {
@@ -147,94 +149,6 @@ class BasicDirectivesSpec extends RoutingSpec {
       }
     }
   }
-//
-//  "The `extractStrictEntity` directive" should {
-//    "change request to contain strict entity for inner routes" in {
-//      val chunks = () => List("Akka", "HTTP").map(HttpEntity.Chunk(_)).iterator
-//      val entity = HttpEntity.Chunked(ContentTypes.`text/plain(UTF-8)`, Source.fromIterator(chunks))
-//
-//      Post("/abc", entity) ~> {
-//        extractRequestEntity { before =>
-//          extractStrictEntity(200.millis) { _ =>
-//            extractRequestEntity { after =>
-//              complete(Seq(before, after).map(_.isStrict).mkString(" => "))
-//            }
-//          }
-//        }
-//      } ~> check { responseAs[String] shouldEqual "false => true" }
-//    }
-//
-//    "only consume data once when nested" in {
-//      val randomStream = Iterator.continually(ThreadLocalRandom.current.nextInt(0, 2).toString).take(100)
-//      val chunks = Source.fromIterator(() => randomStream.map(HttpEntity.Chunk(_)))
-//      val entity = HttpEntity.Chunked(ContentTypes.`text/plain(UTF-8)`, chunks)
-//
-//      Post("/abc", entity) ~> {
-//        extractStrictEntity(200.millis) { outer =>
-//          extractStrictEntity(200.millis) { inner =>
-//            /* Check that the string representations of the outer and inner
-//             * random number sequences are identical. */
-//            complete(Seq(outer, inner).map(_.data.utf8String).distinct.size.toString)
-//          }
-//        }
-//      } ~> check { responseAs[String] shouldEqual "1" }
-//    }
-//
-//    "return 408 Request Timeout status on timeout" in {
-//      val neverEndingEntity = HttpEntity(ContentTypes.`text/plain(UTF-8)`, Source.maybe[ByteString])
-//      val timeout = 10.milliseconds
-//
-//      Post("/abc", neverEndingEntity) ~> {
-//        extractStrictEntity(timeout) { _ =>
-//          complete("content")
-//        }
-//      } ~> check {
-//        entityAs[String] shouldEqual s"Request timed out after $timeout while waiting for entity data"
-//        status shouldEqual StatusCodes.RequestTimeout
-//      }
-//    }
-//
-//    "return 400 Bad Request if max size is exceeded" in {
-//      val request = HttpEntity(ContentTypes.`text/plain(UTF-8)`, Source.single(ByteString("abcd")))
-//      val timeout = 10.milliseconds
-//
-//      Post("/abc", request) ~> {
-//        extractStrictEntity(timeout, 2) { _ =>
-//          complete("content")
-//        }
-//      } ~> check {
-//        entityAs[String] shouldEqual "Request too large"
-//        status shouldEqual StatusCodes.BadRequest
-//      }
-//    }
-//
-//    "return 400 Bad request on EntityStreamException" in {
-//      val errorMessage = "An EntityStreamException error"
-//      val errorDetail = "The internal details of the error"
-//      val entity = Source.failed(EntityStreamException(errorMessage, errorDetail))
-//      val request = HttpEntity(ContentTypes.`text/plain(UTF-8)`, entity)
-//      val timeout = 10.milliseconds
-//
-//      Post("/abc", request) ~> {
-//        extractStrictEntity(timeout) { _ =>
-//          complete("content")
-//        }
-//      } ~> check {
-//        entityAs[String] shouldEqual errorMessage
-//        status shouldEqual StatusCodes.BadRequest
-//      }
-//    }
-//
-//    "return 500 InternalServerError status if response generation timed out" in {
-//      Get("/abc") ~> {
-//        extractStrictEntity(1.second) { _ =>
-//          throw new TimeoutException()
-//        }
-//      } ~> check {
-//        status shouldEqual StatusCodes.InternalServerError
-//      }
-//    }
-//  }
 
   "The `toStrictEntity` directive" should {
     "let the inner route consume the entity more than once" in {
@@ -274,6 +188,34 @@ class BasicDirectivesSpec extends RoutingSpec {
       Post("/", "abc") ~> extractStrictEntity(1.second) { bytes =>
         entity(as[String]) { body => complete(new String(bytes.toArray, "UTF-8") + body) }
       } ~> check { responseAs[String] shouldEqual "abcabc" }
+    }
+    "only consume data once when nested" in {
+      val randomBody: Stream[IO, Byte] =
+        Stream.repeatEval(IO(ThreadLocalRandom.current.nextInt(0, 2).toString)).take(100).through(text.utf8.encode)
+      Post().withBodyStream(randomBody) ~> extractStrictEntity(200.millis) { outer =>
+        extractStrictEntity(200.millis) { inner =>
+          complete(Seq(outer, inner).map(bytes => new String(bytes.toArray, "UTF-8")).distinct.size.toString)
+        }
+      } ~> check { responseAs[String] shouldEqual "1" }
+    }
+    "return 408 Request Timeout status on timeout" in {
+      val timeout = 10.milliseconds
+      Post().withBodyStream(Stream.never[IO]) ~> extractStrictEntity(timeout) { _ => complete("content") } ~> check {
+        status shouldEqual Status.RequestTimeout
+        responseAs[String] shouldEqual s"Request timed out after $timeout while waiting for entity data"
+      }
+    }
+    "return 413 if max size is exceeded (Pekko: 400 Request too large)" in {
+      Post().withBodyStream(Stream.emits("abcd".getBytes("UTF-8")).covary[IO]) ~>
+      extractStrictEntity(1.second, 2) { _ => complete("content") }            ~> check {
+        status shouldEqual Status.PayloadTooLarge
+        responseAs[String] shouldEqual "Incoming entity size exceeded size limit (2 bytes)"
+      }
+    }
+    "return 500 InternalServerError status if response generation timed out" in {
+      Get() ~> extractStrictEntity(1.second) { _ => throw new TimeoutException() } ~> check {
+        status shouldEqual Status.InternalServerError
+      }
     }
   }
 }

@@ -1,7 +1,9 @@
 package pl.iterators.stir.server.directives
 
+import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import org.http4s.{ Method, Status }
+import org.http4s.{ MediaType, Method, Response, Status }
+import org.http4s.headers.{ `Content-Length`, `Content-Type` }
 import pl.iterators.stir.server._
 
 import java.util.Locale
@@ -39,24 +41,27 @@ class MethodDirectivesSpec extends RoutingSpec {
     }
   }
 
-//  "head" should {
-//    val headRoute = head {
-//      complete(HttpEntity.Default(
-//        ContentTypes.`application/octet-stream`,
-//        12345L,
-//        Source.empty))
-//    }
-//
-//    "allow manual complete" in {
-//      Head() ~> headRoute ~> check {
-//        status shouldEqual StatusCodes.OK
-//
-//        val lengthF = response._3.dataBytes.runFold(0)((c, _) => c + 1)
-//        val length = Await.result(lengthF, Duration(100, "millis"))
-//        length shouldEqual 0
-//      }
-//    }
-//  }
+  "head" should {
+    val headRoute = head {
+      complete(Response[IO](Status.Ok)
+        .withContentType(`Content-Type`(MediaType.application.`octet-stream`))
+        .putHeaders(`Content-Length`.unsafeFromLong(12345L)))
+    }
+
+    "allow manual complete" in {
+      Head() ~> headRoute ~> check {
+        status shouldEqual Status.Ok
+        responseAs[Array[Byte]] shouldBe empty
+      }
+    }
+    "allow manual complete over a real server, keeping the declared length" in {
+      Head() ~!> headRoute ~> check {
+        status shouldEqual Status.Ok
+        header[`Content-Length`].map(_.length) shouldEqual Some(12345L)
+        responseAs[Array[Byte]] shouldBe empty
+      }
+    }
+  }
 
   "two failed `get` directives" should {
     "only result in a single Rejection" in {
@@ -106,35 +111,35 @@ class MethodDirectivesSpec extends RoutingSpec {
     }
   }
 
-//  "MethodRejections under a successful match" should {
-//    "be cancelled if the match happens after the rejection" in {
-//      Put() ~> {
-//        get { completeOk } ~
-//          put { reject(RequestEntityExpectedRejection) }
-//      } ~> check {
-//        rejections shouldEqual List(RequestEntityExpectedRejection)
-//      }
-//    }
-//    "be cancelled if the match happens after the rejection (example 2)" in {
-//      Put() ~> {
-//        (get & complete(Ok)) ~ (put & reject(RequestEntityExpectedRejection))
-//      } ~> check {
-//        rejections shouldEqual List(RequestEntityExpectedRejection)
-//      }
-//    }
-//    "be cancelled if the match happens before the rejection" in {
-//      Put() ~> {
-//        put { reject(RequestEntityExpectedRejection) } ~ get { completeOk }
-//      } ~> check {
-//        rejections shouldEqual List(RequestEntityExpectedRejection)
-//      }
-//    }
-//    "be cancelled if the match happens before the rejection (example 2)" in {
-//      Put() ~> {
-//        (put & reject(RequestEntityExpectedRejection)) ~ (get & complete(Ok))
-//      } ~> check {
-//        rejections shouldEqual List(RequestEntityExpectedRejection)
-//      }
-//    }
-//  }
+  "MethodRejections under a successful match" should {
+    "be cancelled if the match happens after the rejection" in {
+      Put() ~> {
+        get { completeOk } ~
+        put { reject(RequestEntityExpectedRejection) }
+      } ~> check {
+        rejections shouldEqual List(RequestEntityExpectedRejection)
+      }
+    }
+    "be cancelled if the match happens after the rejection (example 2)" in {
+      Put() ~> {
+        (get & complete(Status.Ok)) ~ (put & reject(RequestEntityExpectedRejection))
+      } ~> check {
+        rejections shouldEqual List(RequestEntityExpectedRejection)
+      }
+    }
+    "be cancelled if the match happens before the rejection" in {
+      Put() ~> {
+        put { reject(RequestEntityExpectedRejection) } ~ get { completeOk }
+      } ~> check {
+        rejections shouldEqual List(RequestEntityExpectedRejection)
+      }
+    }
+    "be cancelled if the match happens before the rejection (example 2)" in {
+      Put() ~> {
+        (put & reject(RequestEntityExpectedRejection)) ~ (get & complete(Status.Ok))
+      } ~> check {
+        rejections shouldEqual List(RequestEntityExpectedRejection)
+      }
+    }
+  }
 }
