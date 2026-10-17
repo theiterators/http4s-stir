@@ -295,14 +295,17 @@ class FormFieldDirectivesSpec extends RoutingSpec {
         formFieldSeq { echoComplete }
       } ~> check { responseAs[String] shouldEqual "Vector()" }
     }
-//    "reject with MalformedRequestContentRejection if request entity fails" in {
-//      val failedSource = Source.failed(new IllegalStateException("Form was stapled wrongly"))
-//      Post("/", HttpEntity(`application/x-www-form-urlencoded`, failedSource)) ~>
-//        formFieldSeq { echoComplete } ~>
-//        check {
-//          rejection shouldBe a[MalformedRequestContentRejection]
-//        }
-//    }
+    "still answer 413 when sealed for a form over the size limit" in {
+      Post("/", UrlForm("field" -> ("x" * 100))) ~> Route.seal(withSizeLimit(10)(formFieldSeq { echoComplete })) ~>
+      check { status shouldEqual Status.PayloadTooLarge }
+    }
+    "reject with MalformedRequestContentRejection if request entity fails" in {
+      val failed = Stream.raiseError[IO](new IllegalStateException("Form was stapled wrongly"))
+      Post().withBodyStream(failed) ~> addHeader(`Content-Type`(MediaType.application.`x-www-form-urlencoded`)) ~>
+      formFieldSeq { echoComplete } ~> check {
+        rejection should matchPattern { case MalformedRequestContentRejection("Form was stapled wrongly", _) => }
+      }
+    }
   }
 
   "The 'formFieldMultiMap' directive" should {

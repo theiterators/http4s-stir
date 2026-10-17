@@ -231,6 +231,22 @@ class MarshallingDirectivesSpec extends RoutingSpec with Inside {
   }
 
   "The 'entity' directive" should {
+    "reject with MalformedRequestContentRejection when the entity stream fails, as Pekko" in {
+      val failed = Stream.raiseError[IO](new IllegalStateException("connection lost"))
+      Post().withBodyStream(failed) ~> entity(as[String])(s => complete(s)) ~> check {
+        inside(rejection) { case MalformedRequestContentRejection(message, _: IllegalStateException) =>
+          message shouldEqual "connection lost"
+        }
+      }
+    }
+    "reject with ValidationRejection when the decoder raises an IllegalArgumentException, as Pekko" in {
+      val strict: EntityDecoder[IO, Int] =
+        EntityDecoder.decodeBy(MediaRange.`*/*`)(_ =>
+          DecodeResult[IO, Int](IO.raiseError(new IllegalArgumentException("no"))))
+      Post("/", "x") ~> entity(strict)(n => complete(n.toString)) ~> check {
+        inside(rejection) { case ValidationRejection("no", Some(_: IllegalArgumentException)) => }
+      }
+    }
     "decode a body whose Content-Type matches the decoder" in {
       Post("/", jsonBody) ~> addHeader(`Content-Type`(MediaType.application.json)) ~> echoJson ~> check {
         responseAs[String] shouldEqual jsonBody

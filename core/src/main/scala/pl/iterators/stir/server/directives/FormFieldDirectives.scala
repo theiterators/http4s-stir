@@ -11,6 +11,7 @@ import org.http4s.{
   MediaType,
   MediaTypeMismatch,
   MediaTypeMissing,
+  Status,
   Uri,
   UrlForm
 }
@@ -55,9 +56,19 @@ object FormFieldDirectives {
   /** How long a field directive waits for the form body before failing the request with 408 (10 s, as Pekko). */
   private[stir] val StrictFormTimeout: FiniteDuration = 10.seconds
 
+  // a body that fails while it is buffered is a MalformedRequestContentRejection, as Pekko's formFieldSeq rejects
+  // every failure of its form unmarshaller; the timeout stays a 408
   private val _formFieldSeq: Directive1[Seq[(String, String)]] =
-    BasicDirectives.toStrictEntity(StrictFormTimeout).tflatMap(_ => entity(formFieldsDecoder)).map(fields =>
-      fields: Seq[(String, String)])
+    bufferedForm.tflatMap(_ => entity(formFieldsDecoder)).map(fields => fields: Seq[(String, String)])
+
+  private def bufferedForm: Directive0 =
+    Directive { inner => ctx =>
+      BasicDirectives.strictRequest(ctx, StrictFormTimeout, BasicDirectives.DefaultMaxToStrictBytes).attempt.flatMap {
+        case Right(strict)                                                         => inner(())(ctx.copy(request = strict))
+        case Left(e: IllegalRequestException) if e.status == Status.RequestTimeout => IO.raiseError(e)
+        case Left(e)                                                               => ctx.reject(MalformedRequestContentRejection(e.getMessage.nullAsEmpty, e))
+      }
+    }
   private val _formFieldMap: Directive1[Map[String, String]] = _formFieldSeq.map(toMap)
 
   private val _formFieldMultiMap: Directive1[Map[String, List[String]]] = {

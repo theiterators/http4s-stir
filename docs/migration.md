@@ -131,6 +131,11 @@ instead. Other differences that remain:
   of the text. Error responses (4xx, 5xx: `complete(Status.NotFound, "not found")`) are sent whatever the client
   accepts, as Pekko sends them through an opaque fallback, and exception and rejection handlers are exempt. To keep the old behaviour for a
   route, wrap it in `mapRequestContext(_.withAcceptAll)`; see "Content negotiation" in the marshalling directives.
+- `entity` rejects every failure, as Pekko does: a request body stream that fails (a dropped connection, a broken
+  upstream) is a `MalformedRequestContentRejection` carrying the error, and a decoder raising an
+  `IllegalArgumentException` a `ValidationRejection`; both used to reach the exception handler as a 500.
+  `formFieldSeq`, `formFieldMap` and `formFieldMultiMap` likewise reject a body that fails while it is buffered (a
+  body over the size limit still answers 413, a slow one 408).
 
 ## Testkit differences
 
