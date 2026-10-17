@@ -46,8 +46,6 @@ instead. Other differences that remain:
 - The resource directives (`getFromResource`, `getFromResourceDirectory`) only work on the JVM: on Scala Native and
   Scala.js an application using them fails to link (no `java.net.URL`; Native's class loader has only
   `getResourceAsStream`).
-- An `Accept-Language` (or other) header that http4s cannot parse is ignored, where Pekko parses leniently: Pekko's
-  `q=.5` is not a valid RFC 7231 q-value, so `selectPreferredLanguage` then picks the first language.
 - `StrictForm` and `StrictForm.FileData` are not ported: the form-field directives read the text parts of a multipart
   body and skip a part with a `filename` (Pekko returns its content); read file parts with `fileUpload` /
   `storeUploadedFile`.
