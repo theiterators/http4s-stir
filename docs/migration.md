@@ -64,16 +64,17 @@ instead. Other differences that remain:
   of any size. Wrap the routes that read bodies, or the whole route, in `withSizeLimit`
   (`withSizeLimit(8L * 1024 * 1024)(route).toHttpApp`).
 - `extractClientIP` also reads a client-sent `Remote-Address` header (after `X-Forwarded-For` and `X-Real-Ip`);
-  Pekko only uses the address its server records there. Like `X-Forwarded-For`, it is only trustworthy behind a
-  proxy that sets it.
+  Pekko ignores that header and falls back to the connection address its server records. Like `X-Forwarded-For`,
+  it is only trustworthy behind a proxy that sets or strips it.
 - The testkit's `~>` sends the request URI as given, with no default host (Pekko's testkit uses
-  `http://example.com`): `extractUri` is relative and `host(...)` needs an absolute URI or a `Host` header.
+  `http://example.com`): `extractUri` is relative and `host(...)` needs the request to name its host.
 - `withRequestTimeout` cancels the inner route when it fires and its default answer is an empty 503; Pekko keeps the
   route running and answers with a text body.
 - The CSV framing of `EntityStreamingSupport.csv()` drops empty lines, strips a `\r` before `\n` and accepts a last
   line without a newline; Pekko's line framing does none of these.
-- There are no `Option`, `Either` or `Try` marshallers and no `entity(as[Option[T]])`; complete a value or a status
-  explicitly.
+- stir has no `Option`, `Either` or `Try` marshallers. With circe's codecs in scope `complete(option)` still compiles
+  but sends `null` with 200 where Pekko answers 404 for `None`, and `as[Option[T]]` decodes a JSON `null` rather
+  than an empty body; match on the option and complete explicitly.
 - `extractUri` gives the request URI as received (relative under HTTP/1); Pekko gives the effective, absolute URI.
 - An empty file is served with the `Content-Type` of its extension; Pekko sends an empty entity without one.
 - Content negotiation differs from Pekko for wildcard ranges with parameters: stir ignores `charset` on every range
