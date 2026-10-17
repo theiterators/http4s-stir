@@ -107,7 +107,7 @@ trait MiscDirectives {
       case _ => MiscDirectives.limitBytes(original, maxBytes)
     }
     request.withAttributes(request.attributes.insert(MiscDirectives.LimitedBodyKey,
-      MiscDirectives.LimitedBody(original, limited, maxBytes))).withBodyStream(limited)
+      MiscDirectives.LimitedBody(original, limited))).withBodyStream(limited)
   }
 
   /**
@@ -129,7 +129,7 @@ object MiscDirectives extends MiscDirectives {
   import RouteDirectives._
 
   /** The body `withSizeLimit` found and the limited stream it installed, so a later directive can tell them apart. */
-  private[stir] final case class LimitedBody(original: EntityBody[IO], limited: EntityBody[IO], maxBytes: Long)
+  private[stir] final case class LimitedBody(original: EntityBody[IO], limited: EntityBody[IO])
 
   private[stir] val LimitedBodyKey: Key[LimitedBody] = Key.newKey[SyncIO, LimitedBody].unsafeRunSync()
 
@@ -154,25 +154,18 @@ object MiscDirectives extends MiscDirectives {
   private val _extractDirectClientIP: Directive1[Option[IpAddress]] = extract(_.request.remote.map(_.host))
 
   /**
-   * Whether the request is known to be empty. Over HTTP/1 the headers tell; an HTTP/2 body carries no
-   * Content-Length and whether its stream ended with the headers only shows in the body, so its first chunk is read
-   * and put back (under an enclosing `withSizeLimit` the limited stream is rebuilt, so `withoutSizeLimit` still
-   * works after it).
+   * Whether the request is known to be empty. Over HTTP/1 the headers tell. An HTTP/2 body carries no
+   * Content-Length and whether its stream ended with the headers only shows in the body, so the [[SharedBody]] that
+   * routing starts with reads its first chunk; without one (a hand-built `RequestContext`) such a body is taken as
+   * present.
    */
   private val knownEmpty: Directive1[Boolean] =
     Directive[Tuple1[Boolean]] { inner => ctx =>
       val request = ctx.request
-      if (!lengthlessHttp2(request)) inner(Tuple1(isKnownEmpty(request)))(ctx)
-      else {
-        val stored = request.attributes.lookup(LimitedBodyKey).filter(_.limited eq request.body)
-        val source = stored.fold(request.body)(_.original)
-        request.attributes.lookup(BodyPeekKey).fold(peek(source))(_.peek(source)).flatMap { body =>
-          val restored = stored.fold(request.withBodyStream(body)) { limit =>
-            val limited = limitBytes(body, limit.maxBytes)
-            request.withAttribute(LimitedBodyKey, LimitedBody(body, limited, limit.maxBytes)).withBodyStream(limited)
-          }
-          inner(Tuple1(body eq EmptyBody))(ctx.copy(request = restored))
-        }
+      request.attributes.lookup(SharedBodyKey) match {
+        case Some(shared)                     => shared.isEmpty.flatMap(empty => inner(Tuple1(empty))(ctx))
+        case None if lengthlessHttp2(request) => inner(Tuple1(false))(ctx)
+        case None                             => inner(Tuple1(isKnownEmpty(request)))(ctx)
       }
     }
 
@@ -180,43 +173,65 @@ object MiscDirectives extends MiscDirectives {
     request.httpVersion.major >= 2 && request.contentLength.isEmpty
 
   /**
-   * Shares the first look at a length-less HTTP/2 body between the alternatives of a route: the stream can be read
-   * only once, so the alternative after a `requestEntityEmpty` that rejected must get the chunk that one read.
+   * The body of a length-less HTTP/2 request, read through a cell so that its first chunk can be looked at before
+   * the route reads it: the network stream can be read only once, and every reader (the alternatives of a route,
+   * `entity`, `decodeRequest`, ...) must still get all of it. The look runs in a scope of its own that stays open
+   * until the rest of the body has been read (or failed, or been cancelled); a body that is never read past its
+   * first chunk leaves that scope to the server's connection handling.
    */
-  private[stir] final class BodyPeek(
-      cell: Ref[IO, Option[(EntityBody[IO], Deferred[IO, Either[Throwable, EntityBody[IO]]])]]) {
-    def peek(source: EntityBody[IO]): IO[EntityBody[IO]] =
+  private[stir] final class SharedBody private (original: EntityBody[IO],
+      cell: Ref[IO, Option[Deferred[IO, Either[Throwable, EntityBody[IO]]]]]) {
+
+    /** The original body with its first chunk already read, or `EmptyBody` when it has no bytes. */
+    private val peeked: IO[EntityBody[IO]] =
       Deferred[IO, Either[Throwable, EntityBody[IO]]].flatMap { result =>
-        cell.modify {
-          case existing @ Some((peeked, done)) if peeked eq source => existing -> done.get.rethrow
-          case _                                                   =>
-            Some(source -> result) -> MiscDirectives.peek(source).guaranteeCase {
-              case Outcome.Succeeded(body) => body.flatMap(b => result.complete(Right(b))).void
-              case Outcome.Errored(error)  => result.complete(Left(error)).void
-              case Outcome.Canceled()      => result.complete(Left(new CancellationException("The body was not read"))).void
-            }
-        }.flatten
+        IO.uncancelable { poll =>
+          cell.modify {
+            case existing @ Some(done) => existing -> poll(done.get).rethrow
+            case None                  =>
+              Some(result) -> poll(SharedBody.peek(original)).guaranteeCase {
+                case Outcome.Succeeded(body) => body.flatMap(b => result.complete(Right(b))).void
+                case Outcome.Errored(error)  => result.complete(Left(error)).void
+                case Outcome.Canceled()      =>
+                  cell.set(None) *> result.complete(Left(new CancellationException("The body was not read"))).void
+              }
+          }.flatten
+        }
       }
+
+    val isEmpty: IO[Boolean] = peeked.map(_ eq EmptyBody)
+
+    val body: EntityBody[IO] = Stream.eval(peeked).flatten
   }
 
-  private[stir] val BodyPeekKey: Key[BodyPeek] = Key.newKey[SyncIO, BodyPeek].unsafeRunSync()
+  private[stir] object SharedBody {
+    def apply(original: EntityBody[IO]): IO[SharedBody] =
+      Ref.of[IO, Option[Deferred[IO, Either[Throwable, EntityBody[IO]]]]](None).map(new SharedBody(original, _))
 
-  /** Prepares a request for routing: a length-less HTTP/2 request gets the shared [[BodyPeek]]. */
+    /** Reads up to the first non-empty chunk in a scope that is closed once the returned body has been read. */
+    private def peek(body: EntityBody[IO]): IO[EntityBody[IO]] = {
+      def go(stream: EntityBody[IO]): Pull[IO, EntityBody[IO], Unit] =
+        stream.pull.uncons.flatMap {
+          case None                                 => Pull.output1(EmptyBody)
+          case Some((chunk, rest)) if chunk.isEmpty => go(rest)
+          case Some((chunk, rest))                  => Pull.output1(Stream.chunk(chunk) ++ rest)
+        }
+      go(body).stream.compile.resource.lastOrError.allocated.flatMap { case (peeked, release) =>
+        if (peeked eq EmptyBody) release.as(EmptyBody)
+        else IO.ref(false).map { released =>
+          peeked.onFinalize(released.getAndSet(true).flatMap(done => if (done) IO.unit else release))
+        }
+      }
+    }
+  }
+
+  private[stir] val SharedBodyKey: Key[SharedBody] = Key.newKey[SyncIO, SharedBody].unsafeRunSync()
+
+  /** Prepares a request for routing: a length-less HTTP/2 request gets its body through a [[SharedBody]]. */
   private[stir] def prepare(request: Request[IO]): IO[Request[IO]] =
     if (!lengthlessHttp2(request)) IO.pure(request)
-    else Ref.of[IO, Option[(EntityBody[IO], Deferred[IO, Either[Throwable, EntityBody[IO]]])]](None)
-      .map(cell => request.withAttribute(BodyPeekKey, new BodyPeek(cell)))
-
-  /** The body with its first non-empty chunk read and put back, or `EmptyBody` when it has no bytes. */
-  private def peek(body: EntityBody[IO]): IO[EntityBody[IO]] = {
-    def go(stream: EntityBody[IO]): Pull[IO, EntityBody[IO], Unit] =
-      stream.pull.uncons.flatMap {
-        case None                                 => Pull.output1(EmptyBody)
-        case Some((chunk, rest)) if chunk.isEmpty => go(rest)
-        case Some((chunk, rest))                  => Pull.output1(Stream.chunk(chunk) ++ rest)
-      }
-    go(body).stream.compile.lastOrError
-  }
+    else
+      SharedBody(request.body).map(shared => request.withAttribute(SharedBodyKey, shared).withBodyStream(shared.body))
 
   private val _requestEntityEmpty: Directive0 =
     knownEmpty.flatMap(if (_) pass else reject)

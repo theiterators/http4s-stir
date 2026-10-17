@@ -54,11 +54,15 @@ val route: Route = extractDirectClientIP { maybeIp =>
 `requestEntityPresent` does the opposite and rejects with a `RequestEntityExpectedRejection` (400 when sealed).
 A request counts as empty when it declares `Content-Length: 0` or declares neither `Content-Length` nor
 `Transfer-Encoding`; an in-memory test request built from a raw stream carries no `Content-Length`, so build it
-with `withEntity` or add the header. Over HTTP/2 a request body usually carries neither header; there these
-directives read the first chunk of a body without `Content-Length` to find out whether it has any bytes, and put
-it back for the inner route (an enclosing `withSizeLimit` still applies, and `withoutSizeLimit` still lifts it).
-So `requestEntityEmpty` on such a request waits until the client sends the first bytes or ends the stream, as
-Pekko, which sees the end of the stream in the HTTP/2 frames, answers the same question.
+with `withEntity` or add the header.
+
+Over HTTP/2 a request body usually carries neither header. Pekko then decides from the frames (whether the stream
+ended with the headers), which http4s does not expose, so stir answers the same question by reading the first chunk
+of the body: `toHttpApp`, `toHttpRoutes` and the testkit route a length-less HTTP/2 request with a body that reads
+its first chunk once, on demand, and hands every reader (the alternatives of a route, `entity`, `decodeRequest`,
+...) the whole body. So `requestEntityEmpty` on such a request waits until the client sends its first bytes or ends
+the stream. A route run on a hand-built `RequestContext` does not get that body, and the directives then take a
+length-less HTTP/2 body as present.
 
 ```scala
 val route: Route = post {

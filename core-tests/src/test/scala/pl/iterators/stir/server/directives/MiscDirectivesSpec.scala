@@ -178,17 +178,33 @@ class MiscDirectivesSpec extends RoutingSpec {
     val emptyOrBody: Route =
       requestEntityEmpty { complete("empty") } ~ requestEntityPresent { entity(as[String])(s => complete("body:" + s)) }
 
+    val emptyOrEntity: Route =
+      requestEntityEmpty { complete("empty") } ~ entity(as[String])(s => complete("body:" + s))
+
     "treat a length-less body as present and pass all of it on" in {
       val body = Stream("ab", "c", "", "de").through(fs2.text.utf8.encode)
       http2(Post().withBodyStream(body)) ~> emptyOrBody ~> check { responseAs[String] shouldEqual "body:abcde" }
     }
-    "read a body that can be read only once a single time across alternatives" in {
+    def oneShot: Stream[IO, Byte] = {
       val read = new AtomicBoolean(false)
-      val oneShot = Stream.eval(IO(read.getAndSet(true))).flatMap { again =>
+      Stream.eval(IO(read.getAndSet(true))).flatMap { again =>
         if (again) Stream.raiseError[IO](new IllegalStateException("read twice"))
         else Stream("ab", "c").through(fs2.text.utf8.encode)
       }
+    }
+    "read a body that can be read only once a single time across alternatives" in {
       http2(Post().withBodyStream(oneShot)) ~> emptyOrBody ~> check { responseAs[String] shouldEqual "body:abc" }
+    }
+    "hand the whole body to an alternative that reads it without these directives" in {
+      http2(Post().withBodyStream(oneShot)) ~> emptyOrEntity ~> check { responseAs[String] shouldEqual "body:abc" }
+    }
+    "keep the resources of the body open until the route has read it" in {
+      val open = new AtomicBoolean(false)
+      val body = Stream.bracket(IO(open.set(true)))(_ => IO(open.set(false))).flatMap { _ =>
+        Stream("ab", "c").evalTap(_ => IO(open.get).flatMap(IO.raiseUnless(_)(new IllegalStateException("closed"))))
+      }.through(fs2.text.utf8.encode)
+      http2(Post().withBodyStream(body)) ~> emptyOrBody ~> check { responseAs[String] shouldEqual "body:abc" }
+      open.get shouldEqual false
     }
     "treat a length-less body without bytes as empty" in {
       http2(Post().withBodyStream(Stream.empty)) ~> emptyOrBody                         ~> check { responseAs[String] shouldEqual "empty" }
@@ -208,22 +224,27 @@ class MiscDirectivesSpec extends RoutingSpec {
     }
     "tell an empty request from one with a body over a real HTTP/2 connection" in {
       val app = extractRequest { request =>
-        mapResponse(_.putHeaders("X-Version" -> request.httpVersion.renderString)) { emptyOrBody }
+        mapResponse(_.putHeaders("X-Version" -> request.httpVersion.renderString)) {
+          path("entity")(emptyOrEntity) ~ emptyOrBody
+        }
       }.toHttpApp
       val responses = (for {
         server <- EmberServerBuilder.default[IO].withHttp2.withHost(ipv4"127.0.0.1").withPort(port"0")
           .withHttpApp(app).withShutdownTimeout(Duration.Zero).build
         client <- EmberClientBuilder.default[IO].withHttp2.build
       } yield (server, client)).use { case (server, client) =>
-        val uri = Uri.unsafeFromString(s"http://127.0.0.1:${server.address.getPort}/")
-        def send(request: Request[IO]): IO[(String, Option[String])] =
+        def send(request: Request[IO], path: String = ""): IO[(String, Option[String])] = {
+          val uri = Uri.unsafeFromString(s"http://127.0.0.1:${server.address.getPort}/$path")
           client.run(request.withUri(uri).withAttribute(Http2PriorKnowledge, ())).use { response =>
             response.as[String].map(_ -> response.headers.get(CIString("X-Version")).map(_.head.value))
           }
+        }
         val streamed = Stream("ab", "c").through(fs2.text.utf8.encode).covary[IO]
-        (send(Request[IO](Method.POST)), send(Request[IO](Method.POST).withBodyStream(streamed))).tupled
+        List(send(Request[IO](Method.POST)), send(Request[IO](Method.POST).withBodyStream(streamed)),
+          send(Request[IO](Method.POST), "entity"), send(Request[IO](Method.POST).withBodyStream(streamed), "entity"))
+          .sequence
       }.unsafeRunSync()
-      responses shouldEqual (("empty", Some("HTTP/2.0")), ("body:abc", Some("HTTP/2.0")))
+      responses shouldEqual List("empty", "body:abc", "empty", "body:abc").map(_ -> Some("HTTP/2.0"))
     }
   }
 
