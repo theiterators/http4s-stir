@@ -3,7 +3,7 @@ package pl.iterators.stir.server.directives
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import com.comcast.ip4s._
-import org.http4s.{ Header, HttpVersion, Request, Status, UrlForm }
+import org.http4s.{ Header, HttpVersion, LanguageTag, Request, Status, UrlForm }
 import org.http4s.headers.`X-Forwarded-For`
 import org.typelevel.ci.CIString
 import pl.iterators.stir.server._
@@ -12,6 +12,77 @@ import scala.concurrent.duration._
 
 class MiscDirectivesSpec extends RoutingSpec {
   override implicit def runtime: IORuntime = IORuntime.global
+
+  /** `selectFrom("en", "de")` runs `selectPreferredLanguage(en, de)` and returns the language it picked. */
+  trait SelectFrom {
+    def apply(languages: String*): String
+  }
+
+  private def languageTag(s: String): LanguageTag = s.split('-').toList match {
+    case primary :: subTags => LanguageTag(primary, subTags: _*)
+    case Nil                => LanguageTag(s)
+  }
+
+  implicit class AcceptLanguageTest(acceptLanguageHeader: String) {
+    def test(body: SelectFrom => Any): Unit =
+      s"properly handle `$acceptLanguageHeader`" in {
+        val Array(name, value) = acceptLanguageHeader.split(':')
+        val header = Header.Raw(CIString(name.trim), value.trim)
+        body { languages =>
+          val first = languageTag(languages.head)
+          val more = languages.tail.map(languageTag)
+          Get() ~> addHeader(header) ~> selectPreferredLanguage(first, more: _*) { selected =>
+            complete((selected.primaryTag :: selected.subTags).mkString("-"))
+          } ~> check { responseAs[String] }
+        }
+      }
+  }
+
+  "the selectPreferredLanguage directive" should {
+    // Pekko's table: the header on the left, the preferred of the offered languages on the right. Pekko writes
+    // `q=.5`; http4s follows RFC 7231 (`qvalue = ( "0" [ "." 0*3DIGIT ] ) / ...`) and rejects it, so the table
+    // uses `0.5`, and the leading-dot form is pinned separately below
+    "Accept-Language: de, en".test { selectFrom =>
+      selectFrom("de", "en") shouldEqual "de"
+      selectFrom("en", "de") shouldEqual "en"
+    }
+    "Accept-Language: en, de;q=0.5".test { selectFrom =>
+      selectFrom("de", "en") shouldEqual "en"
+      selectFrom("en", "de") shouldEqual "en"
+    }
+    "Accept-Language: en;q=0.5, de".test { selectFrom =>
+      selectFrom("de", "en") shouldEqual "de"
+      selectFrom("en", "de") shouldEqual "de"
+    }
+    "Accept-Language: en-US, en;q=0.7, *;q=0.1, de;q=0.5".test { selectFrom =>
+      selectFrom("en", "en-US") shouldEqual "en-US"
+      selectFrom("de", "en") shouldEqual "en"
+      selectFrom("de", "hu") shouldEqual "de"
+      selectFrom("de-DE", "hu") shouldEqual "de-DE"
+      selectFrom("hu", "es") shouldEqual "hu"
+      selectFrom("es", "hu") shouldEqual "es"
+    }
+    "Accept-Language: en, *;q=0.5, de;q=0".test { selectFrom =>
+      selectFrom("es", "de") shouldEqual "es"
+      selectFrom("de", "es") shouldEqual "es"
+      selectFrom("es", "en") shouldEqual "en"
+    }
+    "Accept-Language: en, *;q=0".test { selectFrom =>
+      selectFrom("es", "de") shouldEqual "es"
+      selectFrom("de", "es") shouldEqual "de"
+      selectFrom("es", "en") shouldEqual "en"
+    }
+    "fall back to the first language when Accept-Language cannot be parsed, such as `q=.5`" in {
+      Get()                                                                                               ~> addHeader(Header.Raw(CIString("Accept-Language"), "en, de;q=.5")) ~>
+      selectPreferredLanguage(LanguageTag("de"), LanguageTag("en")) { lang => complete(lang.primaryTag) } ~> check {
+        responseAs[String] shouldEqual "de"
+      }
+    }
+    "fall back to the first language without Accept-Language" in {
+      Get() ~> selectPreferredLanguage(LanguageTag("de"), LanguageTag("en")) { lang => complete(lang.primaryTag) } ~>
+      check { responseAs[String] shouldEqual "de" }
+    }
+  }
 
   "the extractClientIP directive" should {
     "extract from a X-Forwarded-For header" in {

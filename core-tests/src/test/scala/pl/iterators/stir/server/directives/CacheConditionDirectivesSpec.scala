@@ -103,5 +103,106 @@ class CacheConditionDirectivesSpec extends RoutingSpec {
         header[ETag] shouldEqual None
       }
     }
+    // the cases below are Pekko's CacheConditionDirectivesSpec ones that had no counterpart yet
+    val earlier = HttpDate.unsafeFromEpochSecond(timestamp.epochSecond - 60)
+    val later = HttpDate.unsafeFromEpochSecond(timestamp.epochSecond + 60)
+    def weak: Route = conditional(EntityTag("fresh", EntityTag.Weak), timestamp) { completeOk }
+    def timestampedOnly: Route = conditional(timestamp) { completeOk }
+    def rangeHeaderSeen: Route = (conditional(tag, timestamp) & optionalHeaderValueByType[Range]) { range =>
+      complete(range.isDefined.toString)
+    }
+
+    "ignore If-Modified-Since if If-None-Match is defined" in {
+      Get() ~> addHeaders(`If-None-Match`(tag), `If-Modified-Since`(earlier)) ~> taggedAndTimestamped ~> check {
+        status shouldEqual Status.NotModified
+      }
+      Get() ~> addHeaders(`If-None-Match`(EntityTag("old")), ifModifiedSince) ~> taggedAndTimestamped ~> check {
+        status shouldEqual Status.Ok
+      }
+    }
+    "return NotModified for matching resources whatever else the If-None-Match lists" in {
+      Get()                ~> addHeaders(`If-None-Match`(tag, EntityTag("some"), EntityTag("other")), ifModifiedSince) ~>
+      taggedAndTimestamped ~> check {
+        status shouldEqual Status.NotModified
+        header[ETag] shouldEqual Some(ETag(tag))
+        header[`Last-Modified`] shouldEqual Some(`Last-Modified`(timestamp))
+      }
+      Get() ~> addHeaders(`If-None-Match`(tag), `If-Modified-Since`(later)) ~> taggedAndTimestamped ~> check {
+        status shouldEqual Status.NotModified
+      }
+    }
+    "return NotModified for matching weak resources" in {
+      val weakTag = EntityTag("fresh", EntityTag.Weak)
+      Get() ~> addHeader(`If-None-Match`(tag)) ~> weak ~> check {
+        status shouldEqual Status.NotModified
+        header[ETag] shouldEqual Some(ETag(weakTag))
+      }
+      Get() ~> addHeader(`If-None-Match`(weakTag)) ~> weak ~> check {
+        status shouldEqual Status.NotModified
+        header[ETag] shouldEqual Some(ETag(weakTag))
+      }
+    }
+    "return normally for If-Match: * and a matching If-Unmodified-Since on an unsafe method" in {
+      Put() ~> addHeader(`If-Match`.`*`) ~> taggedAndTimestamped ~> check {
+        status shouldEqual Status.Ok
+        header[ETag] shouldEqual Some(ETag(tag))
+      }
+      Put() ~> addHeader(`If-Match`(tag))   ~> taggedAndTimestamped ~> check { status shouldEqual Status.Ok }
+      Put() ~> addHeader(ifUnmodifiedSince) ~> taggedAndTimestamped ~> check { status shouldEqual Status.Ok }
+    }
+    "return PreconditionFailed without validators for non-matching If-Match/If-Unmodified-Since on a PUT" in {
+      Put() ~> addHeader(`If-Match`(EntityTag("old"))) ~> taggedAndTimestamped ~> check {
+        status shouldEqual Status.PreconditionFailed
+        header[ETag] shouldEqual None
+        header[`Last-Modified`] shouldEqual None
+      }
+      Put() ~> addHeader(`If-Unmodified-Since`(earlier)) ~> taggedAndTimestamped ~> check {
+        status shouldEqual Status.PreconditionFailed
+      }
+    }
+    "ignore If-Unmodified-Since if If-Match is defined" in {
+      Put() ~> addHeaders(`If-Match`(tag), `If-Unmodified-Since`(earlier)) ~> taggedAndTimestamped ~> check {
+        status shouldEqual Status.Ok
+      }
+      Put() ~> addHeaders(`If-Match`(EntityTag("old")), ifModifiedSince) ~> taggedAndTimestamped ~> check {
+        status shouldEqual Status.PreconditionFailed
+      }
+    }
+    "not filter out a Range header if If-Range does match the timestamp" in {
+      Get() ~> addHeaders(`If-Range`.LastModified(timestamp): `If-Range`, Range(0, 10)) ~> rangeHeaderSeen ~> check {
+        status shouldEqual Status.Ok
+        responseAs[String] shouldEqual "true"
+      }
+    }
+    "filter out a Range header if If-Range doesn't match the timestamp" in {
+      Get() ~> addHeaders(`If-Range`.LastModified(earlier): `If-Range`, Range(0, 10)) ~> rangeHeaderSeen ~> check {
+        status shouldEqual Status.Ok
+        responseAs[String] shouldEqual "false"
+      }
+    }
+    "not filter out a Range header if If-Range does match the ETag" in {
+      Get() ~> addHeaders(`If-Range`.ETag(tag): `If-Range`, Range(0, 10)) ~> rangeHeaderSeen ~> check {
+        status shouldEqual Status.Ok
+        responseAs[String] shouldEqual "true"
+      }
+    }
+    "filter out a Range header if If-Range doesn't match the ETag" in {
+      Get() ~> addHeaders(`If-Range`.ETag(EntityTag("other")): `If-Range`, Range(0, 10)) ~> rangeHeaderSeen ~> check {
+        status shouldEqual Status.Ok
+        responseAs[String] shouldEqual "false"
+      }
+    }
+    "ignore If-Match if the ETag is omitted" in {
+      Get() ~> addHeader(`If-Match`(EntityTag("old"))) ~> timestampedOnly ~> check {
+        status shouldEqual Status.Ok
+        header[`Last-Modified`] shouldEqual Some(`Last-Modified`(timestamp))
+      }
+    }
+    "ignore If-None-Match if the ETag is omitted" in {
+      Get() ~> addHeader(`If-None-Match`(EntityTag("old"))) ~> timestampedOnly ~> check {
+        status shouldEqual Status.Ok
+        header[`Last-Modified`] shouldEqual Some(`Last-Modified`(timestamp))
+      }
+    }
   }
 }
