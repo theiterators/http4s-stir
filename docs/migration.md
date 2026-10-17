@@ -46,8 +46,6 @@ instead. Other differences that remain:
 - The resource directives (`getFromResource`, `getFromResourceDirectory`) only work on the JVM: on Scala Native and
   Scala.js an application using them fails to link (no `java.net.URL`; Native's class loader has only
   `getResourceAsStream`).
-- An `Accept-Language` (or other) header that http4s cannot parse is ignored, where Pekko parses leniently: Pekko's
-  `q=.5` is not a valid RFC 7231 q-value, so `selectPreferredLanguage` then picks the first language.
 - `complete(status)` and `complete((status, headers))` for a status that allows an entity send an empty body, and so
   does the default exception handler's 500; Pekko sends the status's default message as `text/plain` (for example
   "The requested resource could not be found." for 404, "There was an internal server error." for 500).
