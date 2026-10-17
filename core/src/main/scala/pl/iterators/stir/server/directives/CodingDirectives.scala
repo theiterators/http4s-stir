@@ -6,6 +6,7 @@ import fs2.compression.{ Compression, DeflateParams, InflateParams, ZLibParams }
 import fs2.io.compression.fs2ioCompressionForIO
 import org.http4s.{ ContentCoding, EntityBody, QValue, Request, Response, Status, TransferCoding }
 import org.http4s.headers.{ `Accept-Encoding`, `Content-Encoding`, `Content-Length`, `Transfer-Encoding` }
+import pl.iterators.stir.impl.util._
 import pl.iterators.stir.server._
 
 import scala.util.control.NonFatal
@@ -148,7 +149,7 @@ object CodingDirectives extends CodingDirectives {
 
   /** A response served from a `.svgz` file is already gzipped; never compress it again. */
   private def isPrecompressed(response: Response[IO]): Boolean =
-    response.attributes.lookup(FileAndResourceDirectives.ServedNameKey).exists(_.toLowerCase.endsWith(".svgz"))
+    response.attributes.lookup(FileAndResourceDirectives.ServedNameKey).exists(_.toRootLowerCase.endsWith(".svgz"))
 
   /**
    * Passes requests known to carry no body: `Content-Length: 0`, or an HTTP/1.x request with neither a length nor

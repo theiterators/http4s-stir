@@ -3,6 +3,7 @@ package pl.iterators.stir.unmarshalling
 import cats.implicits._
 import java.util.UUID
 import scala.collection.immutable
+import pl.iterators.stir.impl.util._
 
 trait PredefinedFromStringUnmarshallers {
   implicit val byteFromStringUnmarshaller: Unmarshaller[String, Byte] =
@@ -25,7 +26,7 @@ trait PredefinedFromStringUnmarshallers {
 
   implicit val booleanFromStringUnmarshaller: Unmarshaller[String, Boolean] =
     Unmarshaller.strict[String, Boolean] { string =>
-      string.toLowerCase match {
+      string.toRootLowerCase match {
         case "true" | "yes" | "on" | "1"  => true
         case "false" | "no" | "off" | "0" => false
         case ""                           => throw Unmarshaller.NoContentException

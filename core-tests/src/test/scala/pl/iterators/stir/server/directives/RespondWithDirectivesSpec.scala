@@ -68,9 +68,9 @@ class RespondWithDirectivesSpec extends RoutingSpec {
     "add the given headers to a response if the header was missing before" in {
       Get() ~> route() ~> check { headers.headers shouldEqual customHeader :: customHeader2 :: Nil }
     }
-    "not update an existing header" in {
+    "not update an existing header, adding the missing defaults first as Pekko does" in {
       Get() ~> route(existingHeader) ~> check {
-        headers.headers shouldEqual List(existingHeader, customHeader2)
+        headers.headers shouldEqual List(customHeader2, existingHeader)
       }
     }
   }

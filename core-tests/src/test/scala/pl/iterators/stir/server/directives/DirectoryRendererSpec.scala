@@ -5,6 +5,7 @@ import org.scalatest.wordspec.AnyWordSpec
 import pl.iterators.stir.server.directives.DirectoryListing.Entry
 
 import java.time.{ Instant, ZoneOffset }
+import java.util.Locale
 import java.time.format.DateTimeFormatter
 import scala.util.Random
 
@@ -51,6 +52,17 @@ class DirectoryRendererSpec extends AnyWordSpec with Matchers {
       cases.foreach { case (bytes, expected) =>
         withClue(s"$bytes: ") { DirectoryRenderer.humanReadableByteCount(bytes) shouldEqual expected }
       }
+    }
+  }
+
+  "humanReadableByteCount under a Turkish default locale" should {
+    "still use a decimal point" in {
+      val previous = Locale.getDefault
+      Locale.setDefault(Locale.forLanguageTag("tr-TR"))
+      try {
+        DirectoryRenderer.humanReadableByteCount(1500000L) shouldEqual "1.5 MB"
+        DirectoryRenderer.humanReadableByteCount(1234L) shouldEqual "1.2 kB"
+      } finally Locale.setDefault(previous)
     }
   }
 
