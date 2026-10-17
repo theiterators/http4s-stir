@@ -4,7 +4,7 @@ import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import cats.syntax.all._
 import fs2.{ text, Stream }
-import org.http4s.{ Headers, MediaType, Request, Response }
+import org.http4s.{ Headers, MediaType, Request, Response, Status }
 import org.http4s.headers.{ `Content-Disposition`, `Content-Type` }
 import org.http4s.multipart.{ Multipart, Multiparts, Part }
 import org.typelevel.ci._
@@ -57,6 +57,30 @@ class FileUploadDirectivesSpec extends RoutingSpec {
     "reject with MissingFormFieldRejection when no part has the field name" in {
       upload(textPart("other", "a.txt", "abc")) ~> fileUpload("file") { _ => completeOk } ~> check {
         rejection shouldEqual MissingFormFieldRejection("file")
+      }
+    }
+  }
+
+  "the disk-based upload directives" should {
+    "store every part of a body with more than 50 parts" in {
+      val parts = (1 to 60).map(i => textPart("file", s"$i.txt", s"content $i"))
+      upload(parts: _*) ~> storeUploadedFiles("file", tempDest) { files => complete(files.size.toString) } ~> check {
+        responseAs[String] shouldEqual "60"
+      }
+    }
+    "find a part beyond the 50th with fileUploadSpooled" in {
+      val parts = (1 to 60).map(i => textPart(s"file$i", s"$i.txt", s"content $i"))
+      upload(parts: _*) ~> fileUploadSpooled("file55") { case (info, _) => complete(info.fileName) } ~> check {
+        responseAs[String] shouldEqual "55.txt"
+      }
+    }
+    "reject a body with more parts than FileUploadDirectives.MaxParts with 400 when sealed" in {
+      val parts = (1 to FileUploadDirectives.MaxParts + 1).map(i => textPart("file", s"$i.txt", "x"))
+      upload(parts: _*)                                                                           ~>
+      Route.seal(storeUploadedFiles("file", tempDest) { files => complete(files.size.toString) }) ~>
+      check {
+        status shouldEqual Status.BadRequest
+        responseAs[String] should include("Parts limit exceeded")
       }
     }
   }
