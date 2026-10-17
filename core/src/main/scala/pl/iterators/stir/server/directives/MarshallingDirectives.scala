@@ -112,7 +112,7 @@ object MarshallingDirectives extends MarshallingDirectives {
     case _                                          => rejectionFor(failure)
   }
 
-  /** `Content-Length: 0`, or an HTTP/1.x request without a length and not chunked (HTTP/2 bodies carry no length). */
+  /** `Content-Length: 0`, or an HTTP/1.x request without a length and not chunked (an HTTP/2 body need not declare one). */
   private def knownEmptyBody(request: Request[IO]): Boolean =
     MiscDirectives.isKnownEmpty(request) && !(request.httpVersion.major >= 2 && request.contentLength.isEmpty)
 

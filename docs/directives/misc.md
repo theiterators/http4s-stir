@@ -56,7 +56,8 @@ A request counts as empty when it declares `Content-Length: 0` or declares neith
 `Transfer-Encoding`; an in-memory test request built from a raw stream carries no `Content-Length`, so build it
 with `withEntity` or add the header. Over HTTP/2 a request body carries neither header, so these directives
 only recognise `Content-Length: 0` there; a length-less HTTP/2 body counts as empty, and the first time that
-happens in a process a warning is printed to stderr so the heuristic is visible.
+happens in a process a warning is printed to stderr so the heuristic is visible. `entity` makes the opposite call
+and never treats a length-less HTTP/2 body as missing (see the marshalling directives).
 
 ```scala
 val route: Route = post {

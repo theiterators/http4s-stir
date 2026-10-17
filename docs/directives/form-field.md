@@ -148,7 +148,8 @@ url-encoded bodies and the text parts of a `multipart/form-data` body keep their
 Every form directive parses an url-encoded body the same way: fields are separated by `&` only (a `;` is part of a
 value, as in Pekko and the WHATWG url-encoded format), the first `=` separates name and value, `+` is a space,
 percent sequences are decoded with the body's charset (UTF-8 by default), and any other character is taken
-literally. Pekko rejects unencoded characters outside the `token` set with a 400; stir accepts them.
+literally. Pekko rejects a space, a control or non-ASCII character, a `#` or a malformed percent sequence with a
+400; stir accepts them literally.
 
 ```scala
 val route: Route = path("data") {

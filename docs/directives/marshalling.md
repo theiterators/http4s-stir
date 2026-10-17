@@ -20,7 +20,8 @@ A request known to carry no body (`Content-Length: 0`, or an HTTP/1.x request wi
 that the decoder cannot decode yields a `RequestEntityExpectedRejection` (400, "Request entity expected but not
 supplied") instead, as Pekko's unmarshallers do on an empty entity; `as[String]` decodes it as `""`. The check reads
 the headers, not the body: a chunked body with zero bytes and a length-less HTTP/2 body are not recognised as empty,
-so their decoder failures are reported as they are. The 415 and the "entity expected" rejections are cancelled when
+so their decoder failures are reported as they are (`requestEntityEmpty`/`requestEntityPresent` make the opposite
+call for HTTP/2, see the misc directives). The 415 and the "entity expected" rejections are cancelled when
 a later route alternative accepts the request.
 
 `as[String]` accepts every content type, as in Pekko HTTP; the directives provide their own
