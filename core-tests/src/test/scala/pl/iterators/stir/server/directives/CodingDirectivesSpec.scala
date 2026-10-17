@@ -5,7 +5,7 @@ import cats.effect.unsafe.IORuntime
 import fs2.Stream
 import fs2.text.utf8
 import fs2.compression.{ Compression, DeflateParams, InflateParams, ZLibParams }
-import org.http4s.{ ContentCoding, QValue, Status }
+import org.http4s.{ ContentCoding, Method, QValue, Request, Status }
 import org.http4s.headers.{ `Accept-Encoding`, `Content-Encoding` }
 import pl.iterators.stir.server._
 
@@ -150,6 +150,18 @@ class CodingDirectivesSpec extends RoutingSpec {
       Post("/", "")             ~> addHeader(`Content-Encoding`(ContentCoding.unsafeFromString("br"))) ~>
       decodeRequest(completeOk) ~>
       check { status shouldEqual Status.Ok }
+    }
+    "pass a bodiless request without Content-Length through decodeRequestWith(gzip), as Pekko does" in {
+      Request[IO](method = Method.POST) ~> decodeRequestWith(ContentCoding.gzip)(completeOk) ~> check {
+        status shouldEqual Status.Ok
+      }
+    }
+    "pass a bodiless request without Content-Length through whatever its Content-Encoding" in {
+      Request[IO](method = Method.POST).putHeaders(`Content-Encoding`(ContentCoding.deflate)) ~>
+      decodeRequestWith(ContentCoding.gzip)(completeOk)                                       ~> check { status shouldEqual Status.Ok }
+    }
+    "pass a bodiless GET through decodeRequest" in {
+      Get() ~> decodeRequest(completeOk) ~> check { status shouldEqual Status.Ok }
     }
     "reject with UnsupportedRequestEncodingRejection for an unknown encoding" in {
       Post("/", "body") ~> addHeader(`Content-Encoding`(ContentCoding.unsafeFromString("br"))) ~> decodeRequest(echo) ~>

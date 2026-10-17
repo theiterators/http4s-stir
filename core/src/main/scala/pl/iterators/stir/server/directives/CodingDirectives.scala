@@ -69,7 +69,7 @@ trait CodingDirectives {
           .putHeaders(`Transfer-Encoding`(TransferCoding.chunked))
       }
 
-    contentLengthZero |
+    MiscDirectives.requestEntityEmpty |
     (requestEncodedWith(decoder) & applyDecoder &
     cancelRejections(classOf[UnsupportedRequestEncodingRejection]))
   }
@@ -144,10 +144,6 @@ object CodingDirectives extends CodingDirectives {
   /** A response served from a `.svgz` file is already gzipped; never compress it again. */
   private def isPrecompressed(response: Response[IO]): Boolean =
     response.attributes.lookup(FileAndResourceDirectives.ServedNameKey).exists(_.toLowerCase.endsWith(".svgz"))
-
-  /** Passes only requests that declare `Content-Length: 0`; a bodiless request without that header has no encoding. */
-  private val contentLengthZero: Directive0 =
-    extract(_.request.contentLength.contains(0L)).flatMap(if (_) pass else reject)
 
   private def requestEncoding(request: Request[IO]): ContentCoding =
     request.headers.get[`Content-Encoding`].map(_.contentCoding).getOrElse(ContentCoding.identity)
