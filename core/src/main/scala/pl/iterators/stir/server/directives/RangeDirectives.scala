@@ -22,8 +22,9 @@ trait RangeDirectives {
    * http://tools.ietf.org/html/rfc7233 and adds an `Accept-Ranges: bytes` header to every GET response.
    * Several ranges are coalesced when they are at most 80 bytes apart and answered as `multipart/byteranges`;
    * more than 16 ranges reject with a [[TooManyRangesRejection]]. Ranges beyond the entity reject with an
-   * [[UnsatisfiableRangeRejection]] (`416` when sealed), as do responses without a `Content-Length`.
-   * Only `200` responses are sliced; everything else passes through unchanged.
+   * [[UnsatisfiableRangeRejection]] (`416` when sealed). Only `200` responses with a `Content-Length` are sliced;
+   * everything else passes through unchanged, as does a request whose `Range` header holds an invalid byte range
+   * (RFC 7233 requires such a header to be ignored).
    *
    * @group range
    */
@@ -39,7 +40,7 @@ trait RangeDirectives {
     extractRequest.flatMap { request =>
       val ranges = if (request.method == Method.GET) request.headers.get[Range] else None
       ranges match {
-        case Some(Range(unit, subRanges)) if unit == RangeUnit.Bytes =>
+        case Some(Range(unit, subRanges)) if unit == RangeUnit.Bytes && subRanges.forall(isValid) =>
           if (subRanges.size <= rangeCountLimit)
             applyRanges(subRanges.toList, rangeCoalescingThreshold) & acceptByteRanges
           else reject(TooManyRangesRejection(rangeCountLimit))
@@ -61,8 +62,8 @@ trait RangeDirectives {
                 multipartResponse(response, parts, length).map(RouteResult.Complete(_))
             }
           case None =>
-            // ranges are not supported for responses of unknown length (chunked)
-            IO.pure(RouteResult.Rejected(UnsatisfiableRangeRejection(ranges, -1) :: Nil))
+            // a response of unknown length (chunked) cannot be sliced and is served in full, as Pekko does
+            IO.pure(RouteResult.Complete(response))
         }
     }
 }
@@ -90,6 +91,10 @@ object RangeDirectives extends RangeDirectives {
     case SubRange(first, None) if first >= 0       => IndexRange(first, entityLength)
     case SubRange(negativeSuffix, _)               => IndexRange(math.max(0, entityLength + negativeSuffix), entityLength)
   }
+
+  /** RFC 7233 2.1: a last position before the first makes the byte range, and the whole header, invalid. */
+  private[stir] def isValid(range: SubRange): Boolean =
+    if (range.first >= 0) range.second.forall(_ >= range.first) else range.second.isEmpty
 
   private[stir] def isSatisfiable(entityLength: Long)(range: SubRange): Boolean =
     if (range.first >= 0) range.first < entityLength else true
