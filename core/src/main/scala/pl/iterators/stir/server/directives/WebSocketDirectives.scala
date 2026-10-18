@@ -2,13 +2,15 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.{ IO, SyncIO }
 import fs2.{ Pipe, Stream }
-import org.http4s.{ Header, Headers, Protocol, Request, Response, Status }
+import org.http4s.{ Header, Headers, Method, Protocol, Request, Response, Status }
 import org.http4s.headers.{ Connection, Upgrade }
 import org.http4s.server.websocket.WebSocketBuilder2
 import org.http4s.websocket.WebSocketFrame
 import org.typelevel.ci._
 import org.typelevel.vault.Key
 import pl.iterators.stir.server._
+
+import java.util.Base64
 
 /**
  * @groupname websocket WebSocket directives
@@ -117,9 +119,28 @@ object WebSocketDirectives extends WebSocketDirectives {
   private def withHandler(response: Response[IO], handler: WebSocketHandler): Response[IO] =
     response.withAttribute(WebSocketHandlerKey, handler)
 
+  private val SecWebSocketVersion = ci"Sec-WebSocket-Version"
+  private val SecWebSocketKey = ci"Sec-WebSocket-Key"
+
+  /**
+   * A WebSocket upgrade as Pekko's server recognises one (RFC 6455 4.2.1): a `GET` with `Connection: upgrade`,
+   * `Upgrade: websocket`, a `Sec-WebSocket-Version` listing 13 and a `Sec-WebSocket-Key` that is 16 bytes in base64.
+   * Anything else is not offered to the WebSocket directives.
+   */
   private[stir] def isWebSocketUpgrade(request: Request[IO]): Boolean =
+    request.method == Method.GET &&
     request.headers.get[Connection].exists(_.hasUpgrade) &&
-    request.headers.get[Upgrade].exists(_.values.exists(_.name == WebSocketProtocolName))
+    request.headers.get[Upgrade].exists(_.values.exists(_.name == WebSocketProtocolName)) &&
+    request.headers.get(SecWebSocketVersion).exists(_.exists(_.value.split(',').exists(_.trim == "13"))) &&
+    request.headers.get(SecWebSocketKey).exists(header => isValidKey(header.head.value))
+
+  // 16 bytes in padded base64, as Pekko's header grammar requires (`getDecoder` alone also takes it unpadded)
+  private def isValidKey(key: String): Boolean = {
+    val trimmed = key.trim
+    trimmed.length == 24 && trimmed.endsWith("==") &&
+    (try Base64.getDecoder.decode(trimmed).length == 16
+    catch { case _: IllegalArgumentException => false })
+  }
 
   private[stir] def offeredProtocols(request: Request[IO]): Seq[String] =
     request.headers.get(SecWebSocketProtocol).toList.flatMap(_.toList)

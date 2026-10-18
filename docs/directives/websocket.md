@@ -6,7 +6,7 @@ sidebar_position: 21
 
 # WebSocket Directives
 
-WebSocket directives handle WebSocket upgrade requests within stir routes. A request that is not a WebSocket upgrade (no `Connection: Upgrade` / `Upgrade: websocket` headers) is rejected with an `ExpectedWebSocketRequestRejection` (400 when sealed), so a plain GET on the same path can be served by the next route alternative.
+WebSocket directives handle WebSocket upgrade requests within stir routes. A request that is not a WebSocket upgrade as Pekko's server recognises one (a `GET` with `Connection: Upgrade`, `Upgrade: websocket`, `Sec-WebSocket-Version: 13` and a valid `Sec-WebSocket-Key`) is rejected with an `ExpectedWebSocketRequestRejection` (400 when sealed), so a plain GET on the same path can be served by the next route alternative.
 
 ## handleWebSocketMessages
 

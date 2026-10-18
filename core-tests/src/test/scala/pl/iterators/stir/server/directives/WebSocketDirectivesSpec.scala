@@ -3,7 +3,7 @@ package pl.iterators.stir.server.directives
 import cats.effect.{ Deferred, IO }
 import cats.effect.unsafe.IORuntime
 import fs2.{ Pipe, Stream }
-import org.http4s.{ Header, Protocol, Status }
+import org.http4s.{ Header, Protocol, Request, Status }
 import org.http4s.headers.{ Connection, Upgrade }
 import org.http4s.server.websocket.WebSocketBuilder2
 import org.http4s.websocket.WebSocketFrame
@@ -40,6 +40,37 @@ class WebSocketDirectivesSpec extends RoutingSpec {
       Get("/ws") ~> handleWebSocketMessages(ws, echo) ~> check {
         rejection shouldEqual ExpectedWebSocketRequestRejection
       }
+    }
+    "reject an upgrade that is not a GET, as Pekko's server does not offer it" in {
+      Post("/ws") ~> upgradeHeaders ~> handleWebSocketMessages(ws, echo) ~> check {
+        rejection shouldEqual ExpectedWebSocketRequestRejection
+      }
+    }
+    "reject an upgrade without a Sec-WebSocket-Key" in {
+      Get("/ws")                        ~> upgradeHeaders ~> ((_: Request[IO]).removeHeader(ci"Sec-WebSocket-Key")) ~>
+      handleWebSocketMessages(ws, echo) ~> check { rejection shouldEqual ExpectedWebSocketRequestRejection }
+    }
+    "reject an upgrade whose Sec-WebSocket-Key is not 16 bytes in base64" in {
+      Get("/ws")                        ~> upgradeHeaders ~> ((_: Request[IO]).putHeaders(Header.Raw(ci"Sec-WebSocket-Key", "c2hvcnQ="))) ~>
+      handleWebSocketMessages(ws, echo) ~> check { rejection shouldEqual ExpectedWebSocketRequestRejection }
+    }
+    "reject an upgrade whose Sec-WebSocket-Key lacks its padding" in {
+      Get("/ws") ~> upgradeHeaders ~>
+      ((_: Request[IO]).putHeaders(Header.Raw(ci"Sec-WebSocket-Key",
+        "dGhlIHNhbXBsZSBub25jZQ")))     ~>
+      handleWebSocketMessages(ws, echo) ~> check { rejection shouldEqual ExpectedWebSocketRequestRejection }
+    }
+    "reject an upgrade for a Sec-WebSocket-Version other than 13" in {
+      Get("/ws")                        ~> upgradeHeaders ~> ((_: Request[IO]).putHeaders(Header.Raw(ci"Sec-WebSocket-Version", "8"))) ~>
+      handleWebSocketMessages(ws, echo) ~> check { rejection shouldEqual ExpectedWebSocketRequestRejection }
+    }
+    "reject an upgrade without a Sec-WebSocket-Version" in {
+      Get("/ws")                        ~> upgradeHeaders ~> ((_: Request[IO]).removeHeader(ci"Sec-WebSocket-Version")) ~>
+      handleWebSocketMessages(ws, echo) ~> check { rejection shouldEqual ExpectedWebSocketRequestRejection }
+    }
+    "accept a Sec-WebSocket-Version listing 13 among others" in {
+      Get("/ws")                        ~> upgradeHeaders ~> ((_: Request[IO]).putHeaders(Header.Raw(ci"Sec-WebSocket-Version", "8, 13"))) ~>
+      handleWebSocketMessages(ws, echo) ~> check { status shouldEqual Status.SwitchingProtocols }
     }
     "let the next alternative handle a plain request" in {
       Get("/ws") ~> (handleWebSocketMessages(ws, echo) ~ complete("plain")) ~> check {
