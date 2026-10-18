@@ -19,6 +19,16 @@ class Specs2RouteTestSpec extends Specification with Specs2RouteTest {
 
   "The ScalatestRouteTest should support" should {
 
+    "evaluateTo failing instead of hanging on an IO that never completes" in {
+      (IO.never[Int] must evaluateTo(1)) must throwA[java.util.concurrent.TimeoutException]
+    }
+
+    "haveFailedWith failing, and saying it timed out, on an IO that never completes" in {
+      (IO.never[Int] must haveFailedWith(new RuntimeException("x"))) must throwA[FailureException].like {
+        case FailureException(failure) => failure.message must contain("TimeoutException")
+      }
+    }
+
     "failing a test whose route never completes once the route test timeout elapses" in {
       implicit val timeout: RouteTestTimeout = RouteTestTimeout(300.millis)
       val never: Route = _ => IO.never

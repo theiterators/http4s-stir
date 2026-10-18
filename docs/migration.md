@@ -79,8 +79,11 @@ instead. Other differences that remain:
 - There is no default request-body size limit (Pekko: `max-content-length`, 8 MiB): `entity(as[String])` reads a body
   of any size. Wrap the routes that read bodies, or the whole route, in `withSizeLimit`
   (`withSizeLimit(8L * 1024 * 1024)(route).toHttpApp`).
-- The testkit's `~>` sends the request URI as given, with no default host (Pekko's testkit uses
-  `http://example.com`): `extractUri` is relative and `host(...)` needs the request to name its host.
+- The testkit carries its default host as a `Host` header, which Pekko's testkit does not add, rather than in the
+  URI: `~>` adds `Host: example.com` to a request that names no host and keeps its URI as given, where Pekko makes it
+  absolute (`http://example.com/...`). So `extractUri` is relative in stir's tests, as it is behind stir's server, and
+  `headerValueByName("Host")` finds the header. `DefaultHostInfo` has no `securedConnection`: the scheme comes from
+  the request.
 - `withRequestTimeout` cancels the inner route when it fires and its default answer is an empty 503; Pekko keeps the
   route running and answers with a text body.
 - The CSV framing of `EntityStreamingSupport.csv()` drops empty lines, strips a `\r` before `\n` and accepts a last
@@ -141,6 +144,14 @@ instead. Other differences that remain:
   list (`Sec-WebSocket-Version: 8, 13`) is an upgrade, as in Pekko, but Ember's handshake refuses it (400). A client
   offering only an older version now gets the 400 for a missing upgrade, as from Pekko, where Ember answered
   `426 Upgrade Required` after the route had accepted it.
+- Testkit: `~>` adds `Host: example.com` to a request that names no host (`host(...)` used to reject and
+  `extractHost` to give `""`; declare an implicit `DefaultHostInfo` for another host), so tests that check every
+  request header or a logged request line now see it. As in Pekko, `addHeader` puts the header before the request's
+  headers instead of replacing one of the same name (a typed lookup still finds the latest, but the logged header
+  order changes) and `addHeaders` after them; an entity header such as `Content-Type` still replaces. `response` no
+  longer shows a `Transfer-Encoding: chunked` the route did not send, and `evaluateTo`, `haveFailedWith` and the
+  marshalling helpers fail after `marshallingTimeout` (one second, as Pekko) instead of waiting forever; a suite that
+  defines its own `def marshallingTimeout` now needs `override`.
 
 ## Behaviour changes in 0.7
 

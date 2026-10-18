@@ -2,7 +2,7 @@ package pl.iterators.stir.testkit
 
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import org.http4s.{ Header, Headers, MediaType, Response }
+import org.http4s.{ BasicCredentials, Header, Headers, MediaType, Response }
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
@@ -12,7 +12,7 @@ import pl.iterators.stir.server._
 import org.http4s.Status._
 import fs2._
 import org.http4s.Method.{ GET, PUT }
-import org.http4s.headers.{ `Content-Type`, `X-Forwarded-Proto` }
+import org.http4s.headers.{ `Content-Type`, `X-Forwarded-Proto`, Authorization }
 
 import java.util.Locale
 import scala.concurrent.duration._
@@ -199,5 +199,78 @@ class ScalatestRouteTestSpec extends AnyFreeSpec with Matchers with ScalatestRou
       }
     }
 
+    "addHeader prepending and addHeaders appending, keeping headers of the same name, as Pekko" in {
+      Get() ~> addHeader("X-A", "1") ~> addHeader("X-A", "2") ~> addHeaders(Header.Raw(CIString("X-A"), "3")) ~> {
+        extractRequest(request =>
+          complete(request.headers.get(CIString("X-A")).toList.flatMap(_.toList).map(_.value)
+            .mkString(",")))
+      } ~> check { responseAs[String] shouldEqual "2,1,3" }
+    }
+
+    "a later addHeader overriding an earlier one for a typed lookup, as Pekko" in {
+      Get()                                                  ~> addHeader(Authorization(BasicCredentials("alice", "x"))) ~>
+      addHeader(Authorization(BasicCredentials("bob", "y"))) ~> {
+        extractRequest(r => complete(r.headers.get[Authorization].fold("")(_.credentials.toString)))
+      } ~> check { responseAs[String] should include(BasicCredentials("bob", "y").token) }
+    }
+
+    "an entity header from addHeader replacing the body's" in {
+      Post("/", "text") ~> addHeader(`Content-Type`(MediaType.application.json)) ~> {
+        extractRequest(request =>
+          complete(request.headers.get(CIString("Content-Type")).toList.flatMap(_.toList).size
+            .toString))
+      } ~> check { responseAs[String] shouldEqual "1" }
+    }
+
+    "a request's own unparseable Host header kept" in {
+      Get("/x")                                                                                        ~> addHeader("Host", "bad host") ~> extractRequest(r =>
+        complete(r.headers.get(CIString("Host")).toList.flatMap(_.toList).map(_.value).mkString(","))) ~> check {
+        responseAs[String] shouldEqual "bad host"
+      }
+    }
+
+    "a response with only the headers the route sent" in {
+      Get() ~> complete("hi") ~> check {
+        response.headers.headers.map(_.name.toString).sorted shouldEqual List("Content-Length", "Content-Type")
+      }
+    }
+
+    "a default Host header for a request that names no host, as Pekko (example.com)" in {
+      Get("/x?a=1") ~> extractUri(uri => complete(uri.renderString)) ~> check {
+        responseAs[String] shouldEqual "/x?a=1"
+      }
+      Get("/x") ~> extractHost(host => complete(host)) ~> check { responseAs[String] shouldEqual "example.com" }
+      Get("/x") ~> host("example.com")(complete("ok")) ~> check { status shouldEqual Ok }
+    }
+
+    "the request's own Host header" in {
+      Get("/x")                                                                                        ~> addHeader("Host", "api.test:8080") ~> extractRequest(r =>
+        complete(r.headers.get(CIString("Host")).toList.flatMap(_.toList).map(_.value).mkString(","))) ~> check {
+        responseAs[String] shouldEqual "api.test:8080"
+      }
+    }
+
+    "no Host header for an absolute request URI" in {
+      Get("https://other.test/x")                                                       ~>
+      extractRequest(r => complete(r.headers.get(CIString("Host")).isDefined.toString)) ~>
+      check { responseAs[String] shouldEqual "false" }
+      Get("https://other.test/x") ~> extractHost(host => complete(host)) ~> check {
+        responseAs[String] shouldEqual "other.test"
+      }
+    }
+
+    "a custom default host" in {
+      implicit val defaultHost: DefaultHostInfo = DefaultHostInfo(org.http4s.headers.Host("custom.test"))
+      Get("/x") ~> extractHost(host => complete(host)) ~> check { responseAs[String] shouldEqual "custom.test" }
+    }
+
+    "evaluateTo failing instead of hanging on an IO that never completes" in {
+      val failure = intercept[Exception] { IO.never[Int] should evaluateTo(1) }
+      failure.getMessage should include("1 second")
+    }
+
+    "haveFailedWith failing instead of hanging on an IO that never completes" in {
+      intercept[Exception] { IO.never[Int] should haveFailedWith(new RuntimeException) }
+    }
   }
 }

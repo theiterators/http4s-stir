@@ -7,7 +7,7 @@ import fs2.{ Chunk, Stream }
 import org.http4s._
 import org.http4s.ember.client.EmberClientBuilder
 import org.http4s.ember.server._
-import org.http4s.headers.{ `Content-Type`, Upgrade }
+import org.http4s.headers.{ `Content-Type`, Host, Upgrade }
 import org.typelevel.ci.CIString
 import pl.iterators.stir.server._
 import pl.iterators.stir.server.directives.WebSocketDirectives.WebSocketHandlerKey
@@ -152,17 +152,28 @@ trait RouteTest extends RequestBuilding with WSTestRequestBuilding with RouteTes
     type Out
     def apply(request: Request[IO], f: A => B): Out
   }
-//
-//  case class DefaultHostInfo(host: Host, securedConnection: Boolean)
-//  object DefaultHostInfo {
-//    implicit def defaultHost: DefaultHostInfo = DefaultHostInfo(Host("example.com"), securedConnection = false)
-//  }
+
+  /**
+   * The `Host` header `~>` adds to a request that has neither a `Host` header nor an absolute URI, as every HTTP/1.1
+   * request to a server carries one (`example.com` by default, the host Pekko's testkit uses; declare an implicit
+   * `DefaultHostInfo` to change it). Pekko's testkit puts the host into an absolute request URI instead; stir keeps
+   * the URI as given, as stir's server hands routes the URI as received.
+   */
+  case class DefaultHostInfo(host: Host)
+  object DefaultHostInfo {
+    implicit def defaultHost: DefaultHostInfo = DefaultHostInfo(Host("example.com"))
+  }
   object TildeArrow {
     implicit object InjectIntoRequestTransformer extends TildeArrow[Request[IO], Request[IO]] {
       type Out = Request[IO]
       def apply(request: Request[IO], f: Request[IO] => Request[IO]) = f(request)
     }
-    implicit def injectIntoRoute(implicit timeout: RouteTestTimeout)
+    @deprecated("kept for binary compatibility; `~>` uses injectIntoRouteWithDefaultHost", "0.7.1")
+    def injectIntoRoute(timeout: RouteTestTimeout)
+        : TildeArrow[RequestContext, IO[RouteResult]] { type Out = RouteTestResult } =
+      injectIntoRouteWithDefaultHost(timeout, DefaultHostInfo.defaultHost)
+
+    implicit def injectIntoRouteWithDefaultHost(implicit timeout: RouteTestTimeout, defaultHostInfo: DefaultHostInfo)
         : TildeArrow[RequestContext, IO[RouteResult]] { type Out = RouteTestResult } =
       new TildeArrow[RequestContext, IO[RouteResult]] {
         type Out = RouteTestResult
@@ -177,7 +188,7 @@ trait RouteTest extends RequestBuilding with WSTestRequestBuilding with RouteTes
 //          val routingLog = RoutingLog(system.classicSystem.log)
 
           val routeTestResult = new RouteTestResult(timeout)
-          val effectiveRequest = request
+          val effectiveRequest = RouteTest.withDefaultHost(request, defaultHostInfo.host)
 
           val sealedExceptionHandler = ExceptionHandler.seal(testExceptionHandler)()
 
@@ -216,6 +227,11 @@ trait RouteTest extends RequestBuilding with WSTestRequestBuilding with RouteTes
   }
 }
 private[stir] object RouteTest {
+
+  /** The request with the default `Host` header when it names no host itself. */
+  def withDefaultHost(request: Request[IO], defaultHost: Host): Request[IO] =
+    if (request.uri.authority.isDefined || request.headers.get(CIString("Host")).isDefined) request
+    else request.putHeaders(defaultHost)
 
   def runRouteClientServer(request: Request[IO], route: Route, timeout: FiniteDuration): IO[Response[IO]] = {
     val resources = for {

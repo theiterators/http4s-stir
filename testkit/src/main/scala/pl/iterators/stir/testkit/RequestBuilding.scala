@@ -52,12 +52,25 @@ trait RequestBuilding {
   val Head = new RequestBuilder(HEAD)
   val Query = new RequestBuilder(QUERY)
 
-  def addHeader(header: Header.ToRaw): RequestTransformer = _.putHeaders(header)
+  /**
+   * Adds the header before the request's headers, as Pekko's `addHeader`, so it is the one a typed lookup of a
+   * single-value header finds (a later `addHeader` overrides an earlier one) while a header of the same name stays.
+   * The entity headers (`Content-Type`, `Content-Length`, `Transfer-Encoding`), which Pekko keeps in the entity rather
+   * than among the headers, replace the request's own instead.
+   */
+  def addHeader(header: Header.ToRaw): RequestTransformer = request => {
+    val added = header.values
+    request.withHeaders(Headers(added ++ RequestBuilding.withoutReplaced(request.headers.headers, added)))
+  }
 
   def addHeader(headerName: String, headerValue: String): RequestTransformer =
-    _.putHeaders(Header.Raw(CIString(headerName), headerValue))
+    addHeader(Header.Raw(CIString(headerName), headerValue))
 
-  def addHeaders(first: Header.ToRaw, more: Header.ToRaw*): RequestTransformer = _.putHeaders(Seq(first) ++ more: _*)
+  /** Adds the headers after the request's headers, as Pekko's `addHeaders`; entity headers replace, as in `addHeader`. */
+  def addHeaders(first: Header.ToRaw, more: Header.ToRaw*): RequestTransformer = request => {
+    val added = (first +: more).flatMap(_.values)
+    request.withHeaders(Headers(RequestBuilding.withoutReplaced(request.headers.headers, added) ++ added))
+  }
 
   def mapHeaders(f: Headers => Headers): RequestTransformer = _.transformHeaders(f)
 
@@ -83,4 +96,13 @@ trait RequestBuilding {
   implicit def header2AddHeader(header: Header.ToRaw): RequestTransformer = addHeader(header)
 }
 
-object RequestBuilding extends RequestBuilding
+object RequestBuilding extends RequestBuilding {
+  private val EntityHeaders: Set[CIString] =
+    Set(CIString("Content-Type"), CIString("Content-Length"), CIString("Transfer-Encoding"))
+
+  /** The request's headers without the entity headers that `added` replaces. */
+  private def withoutReplaced(headers: List[Header.Raw], added: Seq[Header.Raw]): List[Header.Raw] = {
+    val replaced = added.map(_.name).filter(EntityHeaders).toSet
+    headers.filterNot(h => replaced(h.name))
+  }
+}

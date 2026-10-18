@@ -15,7 +15,7 @@ class HeaderDirectivesSpec extends RoutingSpec with Inside {
   override implicit def runtime: IORuntime = IORuntime.global
   "The headerValuePF directive" should {
     lazy val myHeaderValue = headerValuePF {
-      case h if Connection.parse(h.value).isRight =>
+      case h if h.name == CIString("Connection") && Connection.parse(h.value).isRight =>
         Connection.parse(h.value).getOrElse(throw new IllegalStateException("")).values.head
     }
 
@@ -133,7 +133,7 @@ class HeaderDirectivesSpec extends RoutingSpec with Inside {
 
   "The optionalHeaderValue directive" should {
     lazy val myHeaderValue = optionalHeaderValue {
-      case h if Connection.parse(h.value).isRight =>
+      case h if h.name == CIString("Connection") && Connection.parse(h.value).isRight =>
         Some(Connection.parse(h.value).getOrElse(throw new IllegalStateException("")).values.head)
       case _ => None
     }

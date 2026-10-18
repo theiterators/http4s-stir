@@ -62,6 +62,18 @@ Get("/hello") ~> route ~> check {
 
 The `~>` operator applies the request to the route without starting an HTTP server. The route is sealed for exceptions but not for rejections, allowing rejection inspection in tests.
 
+A request that names no host (no `Host` header and a relative URI) gets `Host: example.com`, as every HTTP/1.1
+request to a server carries one, so `host(...)` and `extractHost` work in tests. Pekko's testkit uses the same host
+but puts it into an absolute request URI instead; stir keeps the URI as given (`extractUri` is `/hello`), as stir's
+server hands routes the URI as received.
+Declare an implicit `DefaultHostInfo` in the suite to use another host:
+
+```scala
+import org.http4s.headers.Host
+
+implicit val defaultHost: DefaultHostInfo = DefaultHostInfo(Host("api.test"))
+```
+
 ## The `~!>` Operator
 
 The `~!>` operator runs the route through a fully fledged HTTP server (Ember). This is useful for testing directives that depend on actual server behavior, at the cost of additional overhead:
@@ -90,6 +102,10 @@ import scala.concurrent.duration._
 
 implicit val routeTestTimeout: RouteTestTimeout = RouteTestTimeout(5.seconds)
 ```
+
+The `evaluateTo` and `haveFailedWith` matchers and the marshalling helpers (`marshal`, `unmarshalValue`, ...) wait
+at most `marshallingTimeout` (one second, as Pekko's `pekko.http.testkit.marshalling.timeout`) for their `IO`; override
+`def marshallingTimeout` in the suite for slower ones.
 
 The bound relies on cancellation: work the route runs in an uncancelable region (for example a blocking call inside
 `IO.blocking` that never returns) still has to finish before the failure is reported.
@@ -187,7 +203,10 @@ Builders that accept an entity require an implicit `EntityEncoder[IO, T]` for th
 `WS(uri, probe, subprotocols*)` builds a WebSocket upgrade request driven by a `WSProbe`; see "WebSocket Routes".
 
 A request built with a body (`Post("/", body)`) carries the `Content-Type` and `Content-Length` the body's
-`EntityEncoder` produces, as a real client would send; override with `addHeader`.
+`EntityEncoder` produces, as a real client would send; override with `addHeader`, which replaces those entity headers
+(`Content-Type`, `Content-Length`, `Transfer-Encoding`). As in Pekko, `addHeader` puts any other header before all of
+the request's headers, keeping those of the same name (so a later `addHeader` is the one a typed lookup finds), and
+`addHeaders` puts them after the request's headers.
 
 ## Request Transformers
 
@@ -195,9 +214,9 @@ Transform requests before sending them to a route:
 
 | Transformer | Description |
 |---|---|
-| `addHeader(header)` | Add a single header. |
+| `addHeader(header)` | Add a header before the request's headers, keeping any of the same name (an entity header replaces the request's). |
 | `addHeader(name, value)` | Add a header by name and value strings. |
-| `addHeaders(first, more*)` | Add multiple headers. |
+| `addHeaders(first, more*)` | Add headers after the request's own. |
 | `removeHeader(name)` | Remove headers by name. |
 | `removeHeader[T]` | Remove headers by typed header type. |
 | `removeHeaders(names*)` | Remove headers by multiple names. |

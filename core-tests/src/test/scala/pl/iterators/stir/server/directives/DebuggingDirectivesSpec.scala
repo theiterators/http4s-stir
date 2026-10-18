@@ -39,7 +39,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
       resetDebugMsg()
       Get("/hello") ~> route ~> check {
         response.status shouldEqual Status.Ok
-        normalizedDebugMsg() shouldEqual "HTTP/1.1 GET /hello Headers()\n"
+        normalizedDebugMsg() shouldEqual "HTTP/1.1 GET /hello Headers(Host: example.com)\n"
       }
     }
   }
@@ -64,7 +64,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
       Get("/hello") ~> route ~> check {
         response.status shouldEqual Status.Ok
         normalizedDebugMsg() shouldEqual
-        """|HTTP/1.1 GET /hello Headers()
+        """|HTTP/1.1 GET /hello Headers(Host: example.com)
            |HTTP/1.1 200 OK Headers()
            |""".stripMarginWithNewline("\n")
       }
@@ -75,7 +75,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
       jsonRequest(json) ~> logRequestResult(logAction = logAction, redaction = LogRedaction.none)(echoJson) ~> check {
         responseAs[String] shouldEqual jsonResponse
         normalizedDebugMsg() shouldEqual
-        """|HTTP/1.1 POST /login Headers(Content-Length: 37, Content-Type: application/json) body="{"user":"alice","password":"hunter2"}"
+        """|HTTP/1.1 POST /login Headers(Content-Length: 37, Content-Type: application/json, Host: example.com) body="{"user":"alice","password":"hunter2"}"
            |HTTP/1.1 200 OK Headers(Content-Length: 37, Content-Type: application/json) body="{"access_token":"tok","expires":3600}"
            |""".stripMarginWithNewline("\n")
       }
@@ -87,7 +87,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
       check {
         responseAs[String] shouldEqual jsonResponse
         normalizedDebugMsg() shouldEqual
-        """|HTTP/1.1 POST /login Headers(Content-Length: 46, Content-Type: application/json) body="{\n  "user": "alice",\n  "password": "hunter2"\n}"
+        """|HTTP/1.1 POST /login Headers(Content-Length: 46, Content-Type: application/json, Host: example.com) body="{\n  "user": "alice",\n  "password": "hunter2"\n}"
            |HTTP/1.1 200 OK Headers(Content-Length: 37, Content-Type: application/json) body="{"access_token":"tok","expires":3600}"
            |""".stripMarginWithNewline("\n")
       }
@@ -99,7 +99,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
         echoJson)       ~> check {
         responseAs[String] shouldEqual jsonResponse
         normalizedDebugMsg() shouldEqual
-        """|HTTP/1.1 POST /login Headers(Content-Length: 37, Content-Type: application/json) body="{"user":"a" ... (37 bytes total)
+        """|HTTP/1.1 POST /login Headers(Content-Length: 37, Content-Type: application/json, Host: example.com) body="{"user":"a" ... (37 bytes total)
            |HTTP/1.1 200 OK Headers(Content-Length: 37, Content-Type: application/json) body="{"access_t" ... (37 bytes total)
            |""".stripMarginWithNewline("\n")
       }
@@ -111,7 +111,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
       check {
         responseAs[String] shouldEqual "ok"
         normalizedDebugMsg() shouldEqual
-        """|HTTP/1.1 POST /login Headers(Content-Length: 37, Content-Type: application/json) body=<not consumed> (37 bytes total)
+        """|HTTP/1.1 POST /login Headers(Content-Length: 37, Content-Type: application/json, Host: example.com) body=<not consumed> (37 bytes total)
            |HTTP/1.1 200 OK Headers(Content-Length: 2, Content-Type: text/plain; charset=UTF-8) body="ok"
            |""".stripMarginWithNewline("\n")
       }
@@ -124,7 +124,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
       chunked ~> logRequestResult(logAction = logAction, redaction = LogRedaction.none)(echoJson) ~> check {
         responseAs[String] shouldEqual jsonResponse
         normalizedDebugMsg() shouldEqual
-        """|HTTP/1.1 POST /login Headers(Transfer-Encoding: chunked, Content-Type: application/json)
+        """|HTTP/1.1 POST /login Headers(Transfer-Encoding: chunked, Content-Type: application/json, Host: example.com)
            |HTTP/1.1 200 OK Headers(Content-Length: 37, Content-Type: application/json) body="{"access_token":"tok","expires":3600}"
            |""".stripMarginWithNewline("\n")
       }
@@ -139,7 +139,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
       }) ~> check {
         responseAs[String] shouldEqual "ok"
         normalizedDebugMsg() shouldEqual
-        """|HTTP/1.1 POST /upload Headers(Content-Length: 3, Content-Type: application/octet-stream) body="0001ff"
+        """|HTTP/1.1 POST /upload Headers(Content-Length: 3, Content-Type: application/octet-stream, Host: example.com) body="0001ff"
            |HTTP/1.1 200 OK Headers(Content-Length: 2, Content-Type: text/plain; charset=UTF-8) body="ok"
            |""".stripMarginWithNewline("\n")
       }
@@ -163,7 +163,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
         entity(as[String]) { _ => complete("ok") }) ~> check {
         responseAs[String] shouldEqual "ok"
         normalizedDebugMsg() shouldEqual
-        """|HTTP/1.1 POST /t Headers(Content-Length: 11, Content-Type: text/plain; charset=UTF-8) body="hello world"
+        """|HTTP/1.1 POST /t Headers(Content-Length: 11, Content-Type: text/plain; charset=UTF-8, Host: example.com) body="hello world"
            |HTTP/1.1 200 OK Headers(Content-Length: 2, Content-Type: text/plain; charset=UTF-8) body="ok"
            |""".stripMarginWithNewline("\n")
       }
@@ -176,7 +176,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
       Get("/s") ~> logRequestResult(logAction = logAction, redaction = LogRedaction.none)(streamed) ~> check {
         responseAs[String] shouldEqual "abc"
         normalizedDebugMsg() shouldEqual
-        """|HTTP/1.1 GET /s Headers()
+        """|HTTP/1.1 GET /s Headers(Host: example.com)
            |HTTP/1.1 200 OK Headers() body="abc" ... (??? bytes total)
            |""".stripMarginWithNewline("\n")
       }
@@ -188,7 +188,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
         parameter("pin".as[Int]) { _ => complete("ok") }) ~> check {
         handled shouldBe false
         normalizedDebugMsg() shouldEqual
-        """|HTTP/1.1 GET /q?pin=12ab-SECRET Headers()
+        """|HTTP/1.1 GET /q?pin=12ab-SECRET Headers(Host: example.com)
            |Request was rejected with rejections: MalformedQueryParamRejection(pin,'12ab-SECRET' is not a valid 32-bit signed integer value,Some(java.lang.NumberFormatException: For input string: "12ab-SECRET"))
            |""".stripMarginWithNewline("\n")
       }
@@ -200,7 +200,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
         parameter("password".requiredValue("SERVER_CANARY")) { _ => complete("ok") }) ~> check {
         handled shouldBe false
         normalizedDebugMsg() shouldEqual
-        """|HTTP/1.1 GET /q?password=x Headers()
+        """|HTTP/1.1 GET /q?password=x Headers(Host: example.com)
            |Request was rejected with rejections: InvalidRequiredValueForQueryParamRejection(password,SERVER_CANARY,x)
            |""".stripMarginWithNewline("\n")
       }
@@ -213,7 +213,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
         formField("cardNumber".as[Long]) { _ => complete("ok") }) ~> check {
         handled shouldBe false
         normalizedDebugMsg() shouldEqual
-        """|HTTP/1.1 POST /pay Headers(Content-Length: 30, Content-Type: application/x-www-form-urlencoded; charset=UTF-8) body="cardNumber=9999999999999999999"
+        """|HTTP/1.1 POST /pay Headers(Content-Length: 30, Content-Type: application/x-www-form-urlencoded; charset=UTF-8, Host: example.com) body="cardNumber=9999999999999999999"
            |Request was rejected with rejections: MalformedFormFieldRejection(cardNumber,'9999999999999999999' is not a valid 64-bit signed integer value,Some(java.lang.NumberFormatException: For input string: "9999999999999999999"))
            |""".stripMarginWithNewline("\n")
       }
@@ -228,7 +228,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
         logAction = logAction, redaction = LogRedaction.none)(failing { (_: Nothing) => complete("ok") }) ~> check {
         handled shouldBe false
         normalizedDebugMsg() shouldEqual
-        """|HTTP/1.1 GET /h Headers(Authorization: <REDACTED>)
+        """|HTTP/1.1 GET /h Headers(Authorization: <REDACTED>, Host: example.com)
            |Request was rejected with rejections: MalformedHeaderRejection(Authorization,bad: Bearer SECRET-TOKEN,Some(java.lang.IllegalArgumentException: bad: Bearer SECRET-TOKEN))
            |""".stripMarginWithNewline("\n")
       }
@@ -240,7 +240,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
         redaction = LogRedaction.none)(completeOk)                  ~> check {
         response.status shouldEqual Status.Ok
         normalizedDebugMsg() shouldEqual
-        """|HTTP/1.1 GET /hello Headers(Referer: http://[)
+        """|HTTP/1.1 GET /hello Headers(Referer: http://[, Host: example.com)
            |HTTP/1.1 200 OK Headers()
            |""".stripMarginWithNewline("\n")
       }
@@ -253,7 +253,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
       Get("/go") ~> logRequestResult(logAction = logAction, redaction = LogRedaction.none)(redirect) ~> check {
         response.status shouldEqual Status.Found
         normalizedDebugMsg() shouldEqual
-        """|HTTP/1.1 GET /go Headers()
+        """|HTTP/1.1 GET /go Headers(Host: example.com)
            |HTTP/1.1 302 Found Headers(Location: https://app.example/cb?access_token=X&x=1)
            |""".stripMarginWithNewline("\n")
       }
@@ -355,7 +355,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
       login ~> logRequestResult(logAction = logAction)(echoJson) ~> check {
         responseAs[String] shouldEqual jsonResponse
         normalizedDebugMsg() shouldEqual
-        """|HTTP/1.1 POST /login?token=REDACTED&x=1 Headers(Content-Length: 37, Content-Type: application/json, X-Api-Key: <REDACTED>, Authorization: <REDACTED>) body="{"user":"alice","password":"REDACTED"}"
+        """|HTTP/1.1 POST /login?token=REDACTED&x=1 Headers(Content-Length: 37, Content-Type: application/json, X-Api-Key: <REDACTED>, Authorization: <REDACTED>, Host: example.com) body="{"user":"alice","password":"REDACTED"}"
            |HTTP/1.1 200 OK Headers(Content-Length: 37, Content-Type: application/json) body="{"access_token":"REDACTED","expires":3600}"
            |""".stripMarginWithNewline("\n")
       }
@@ -366,7 +366,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
       jsonRequest(prettyJson) ~> logRequestResult(logAction = logAction)(echoJson) ~> check {
         responseAs[String] shouldEqual jsonResponse
         normalizedDebugMsg() should startWith(
-          "HTTP/1.1 POST /login Headers(Content-Length: 46, Content-Type: application/json) body=\"{\"user\":\"alice\",\"password\":\"REDACTED\"}\"\n")
+          "HTTP/1.1 POST /login Headers(Content-Length: 46, Content-Type: application/json, Host: example.com) body=\"{\"user\":\"alice\",\"password\":\"REDACTED\"}\"\n")
       }
     }
 
@@ -375,7 +375,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
       jsonRequest(json) ~> logRequestResult(logAction = logAction, maxBodyBytes = 10)(echoJson) ~> check {
         responseAs[String] shouldEqual jsonResponse
         normalizedDebugMsg() shouldEqual
-        """|HTTP/1.1 POST /login Headers(Content-Length: 37, Content-Type: application/json) body="{"user":"a"}" ... (37 bytes total)
+        """|HTTP/1.1 POST /login Headers(Content-Length: 37, Content-Type: application/json, Host: example.com) body="{"user":"a"}" ... (37 bytes total)
            |HTTP/1.1 200 OK Headers(Content-Length: 37, Content-Type: application/json) body="{}" ... (37 bytes total)
            |""".stripMarginWithNewline("\n")
       }
@@ -387,7 +387,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
         logAction = logAction)(formField("user") { _ => complete("ok") })            ~> check {
         responseAs[String] shouldEqual "ok"
         normalizedDebugMsg() should startWith(
-          "HTTP/1.1 POST /login Headers(Content-Length: 27, Content-Type: application/x-www-form-urlencoded; charset=UTF-8) body=\"user=alice&password=REDACTED\"\n")
+          "HTTP/1.1 POST /login Headers(Content-Length: 27, Content-Type: application/x-www-form-urlencoded; charset=UTF-8, Host: example.com) body=\"user=alice&password=REDACTED\"\n")
       }
     }
 
@@ -410,7 +410,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
       xml ~> logRequestResult(logAction = logAction)(entity(as[String]) { _ => complete("ok") }) ~> check {
         responseAs[String] shouldEqual "ok"
         normalizedDebugMsg() should startWith(
-          "HTTP/1.1 POST /x Headers(Content-Length: 8, Content-Type: application/xml) body=<hidden> (8 bytes total)\n")
+          "HTTP/1.1 POST /x Headers(Content-Length: 8, Content-Type: application/xml, Host: example.com) body=<hidden> (8 bytes total)\n")
       }
       val binary = Post("/upload").withEntity(Array[Byte](0, 1, -1))
         .withContentType(`Content-Type`(MediaType.application.`octet-stream`))
@@ -418,7 +418,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
       binary ~> logRequestResult(logAction = logAction)(entity(as[Array[Byte]]) { _ => complete("ok") }) ~> check {
         responseAs[String] shouldEqual "ok"
         normalizedDebugMsg() should startWith(
-          "HTTP/1.1 POST /upload Headers(Content-Length: 3, Content-Type: application/octet-stream) body=<hidden> (3 bytes total)\n")
+          "HTTP/1.1 POST /upload Headers(Content-Length: 3, Content-Type: application/octet-stream, Host: example.com) body=<hidden> (3 bytes total)\n")
       }
     }
 
@@ -431,7 +431,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
       latin ~> logRequestResult(logAction = logAction)(entity(as[String]) { _ => complete("ok") }) ~> check {
         responseAs[String] shouldEqual "ok"
         normalizedDebugMsg() should startWith(
-          "HTTP/1.1 POST /x Headers(Content-Length: 27, Content-Type: application/json; charset=ISO-8859-1) body=\"{\"password\":\"REDACTED\",\"note\":\"é\"}\"\n")
+          "HTTP/1.1 POST /x Headers(Content-Length: 27, Content-Type: application/json; charset=ISO-8859-1, Host: example.com) body=\"{\"password\":\"REDACTED\",\"note\":\"é\"}\"\n")
       }
     }
 
@@ -451,7 +451,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
         responseAs[String] shouldEqual "intact"
         pulls.get.unsafeRunSync() shouldEqual 3
         normalizedDebugMsg() should startWith(
-          s"[1] HTTP/1.1 POST /login Headers(Content-Length: ${text.length}, Content-Type: application/json) body=")
+          s"[1] HTTP/1.1 POST /login Headers(Content-Length: ${text.length}, Content-Type: application/json, Host: example.com) body=")
         normalizedDebugMsg() should include("[3] HTTP/1.1 200 OK")
         (normalizedDebugMsg() should not).include("hunter2")
       }
@@ -462,7 +462,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
       jsonRequest("{\"a\":\"x\ny\"}") ~> logRequestResult(logAction = logAction)(echoJson) ~> check {
         responseAs[String] shouldEqual jsonResponse
         normalizedDebugMsg() should startWith(
-          "HTTP/1.1 POST /login Headers(Content-Length: 11, Content-Type: application/json) body=\"{\"a\":\"x\\ny\"}\"\n")
+          "HTTP/1.1 POST /login Headers(Content-Length: 11, Content-Type: application/json, Host: example.com) body=\"{\"a\":\"x\\ny\"}\"\n")
       }
     }
 
@@ -471,7 +471,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
       jsonRequest("""{"a":"bc"}""") ~> logRequestResult(logAction = logAction, maxBodyBytes = 10)(echoJson) ~> check {
         responseAs[String] shouldEqual jsonResponse
         normalizedDebugMsg() should startWith(
-          "HTTP/1.1 POST /login Headers(Content-Length: 10, Content-Type: application/json) body=\"{\"a\":\"bc\"}\"\n")
+          "HTTP/1.1 POST /login Headers(Content-Length: 10, Content-Type: application/json, Host: example.com) body=\"{\"a\":\"bc\"}\"\n")
       }
       val streamed =
         complete(Response[IO](Status.Ok, body = Stream.chunk(Chunk.array("0123456789".getBytes("UTF-8"))).covary[IO])
@@ -492,13 +492,14 @@ class DebuggingDirectivesSpec extends RoutingSpec {
         logAction = logAction)(completeOk) ~> check {
         response.status shouldEqual Status.Ok
         normalizedDebugMsg() should
-        startWith("HTTP/1.1 GET /hello Headers(Referer: https://app.example/cb?access_token=REDACTED&x=1)\n")
+        startWith(
+          "HTTP/1.1 GET /hello Headers(Referer: https://app.example/cb?access_token=REDACTED&x=1, Host: example.com)\n")
       }
       resetDebugMsg()
       Get("/hello").putHeaders(Header.Raw(ci"Referer", "http://[")) ~> logRequestResult(logAction = logAction)(
         completeOk)                                                 ~> check {
         response.status shouldEqual Status.Ok
-        normalizedDebugMsg() should startWith("HTTP/1.1 GET /hello Headers(Referer: <REDACTED>)\n")
+        normalizedDebugMsg() should startWith("HTTP/1.1 GET /hello Headers(Referer: <REDACTED>, Host: example.com)\n")
       }
       val redirect = complete(Response[IO](Status.Found).putHeaders(
         Header.Raw(ci"Location", "https://app.example/cb?access_token=X&x=1")))
@@ -506,7 +507,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
       Get("/go") ~> logRequestResult(logAction = logAction)(redirect) ~> check {
         response.status shouldEqual Status.Found
         normalizedDebugMsg() shouldEqual
-        """|HTTP/1.1 GET /go Headers()
+        """|HTTP/1.1 GET /go Headers(Host: example.com)
            |HTTP/1.1 302 Found Headers(Location: https://app.example/cb?access_token=REDACTED&x=1)
            |""".stripMarginWithNewline("\n")
       }
@@ -520,7 +521,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
       logRequestResult(logAction = logAction)(implicitGrant)                                               ~> check {
         response.status shouldEqual Status.Found
         normalizedDebugMsg() shouldEqual
-        """|HTTP/1.1 GET /authorize Headers(Referer: https://spa.example/#/login?id_token=REDACTED)
+        """|HTTP/1.1 GET /authorize Headers(Referer: https://spa.example/#/login?id_token=REDACTED, Host: example.com)
            |HTTP/1.1 302 Found Headers(Location: https://app.example/cb?x=1#access_token=REDACTED&expires_in=3600&state=%7Bs%7D)
            |""".stripMarginWithNewline("\n")
       }
@@ -532,7 +533,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
         parameter("password".requiredValue("SERVER_CANARY")) { _ => complete("ok") }) ~> check {
         handled shouldBe false
         normalizedDebugMsg() shouldEqual
-        """|HTTP/1.1 GET /q?password=REDACTED Headers()
+        """|HTTP/1.1 GET /q?password=REDACTED Headers(Host: example.com)
            |Request was rejected with rejections: InvalidRequiredValueForQueryParamRejection(password,<REDACTED>,<REDACTED>)
            |""".stripMarginWithNewline("\n")
       }
@@ -557,7 +558,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
         parameter("pin".as[Int]) { _ => complete("ok") }) ~> check {
         handled shouldBe false
         normalizedDebugMsg() shouldEqual
-        """|HTTP/1.1 GET /q?pin=REDACTED Headers()
+        """|HTTP/1.1 GET /q?pin=REDACTED Headers(Host: example.com)
            |Request was rejected with rejections: MalformedQueryParamRejection(pin,<REDACTED>)
            |""".stripMarginWithNewline("\n")
       }
@@ -569,7 +570,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
         logAction = logAction)(failing { (_: Nothing) => complete("ok") })       ~> check {
         handled shouldBe false
         normalizedDebugMsg() shouldEqual
-        """|HTTP/1.1 GET /h Headers(Authorization: <REDACTED>)
+        """|HTTP/1.1 GET /h Headers(Authorization: <REDACTED>, Host: example.com)
            |Request was rejected with rejections: MalformedHeaderRejection(Authorization,<REDACTED>)
            |""".stripMarginWithNewline("\n")
       }
@@ -596,7 +597,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
         redaction = policy)(route)                                            ~> check {
         handled shouldBe false
         normalizedDebugMsg() shouldEqual
-        """|HTTP/1.1 POST /pay Headers(Content-Length: 30, Content-Type: application/x-www-form-urlencoded; charset=UTF-8) body="cardNumber=REDACTED"
+        """|HTTP/1.1 POST /pay Headers(Content-Length: 30, Content-Type: application/x-www-form-urlencoded; charset=UTF-8, Host: example.com) body="cardNumber=REDACTED"
            |Request was rejected with rejections: MalformedFormFieldRejection(cardNumber,<REDACTED>)
            |""".stripMarginWithNewline("\n")
       }
@@ -621,7 +622,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
       Get("/password-reset/XYZ123?x=1")                                                     ~> logRequestResult(logAction = logAction,
         redaction = LogRedaction.default.redactPath("/password-reset/{token}"))(completeOk) ~> check {
         response.status shouldEqual Status.Ok
-        normalizedDebugMsg() should startWith("HTTP/1.1 GET /password-reset/REDACTED?x=1 Headers()\n")
+        normalizedDebugMsg() should startWith("HTTP/1.1 GET /password-reset/REDACTED?x=1 Headers(Host: example.com)\n")
       }
       val tokenRequests = BodyRedactor.when(_.request.exists(_.uri.path.renderString == "/oauth/token"))(
         BodyRedactor.jsonKeepOnly(Set("grant_type", "scope")))
@@ -647,7 +648,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
         redaction = LogRedaction.default.withBodyRedactor(BodyRedactor.hidden))(echoJson) ~> check {
         responseAs[String] shouldEqual jsonResponse
         normalizedDebugMsg() shouldEqual
-        """|HTTP/1.1 POST /login Headers(Content-Length: 37, Content-Type: application/json) body=<hidden> (37 bytes total)
+        """|HTTP/1.1 POST /login Headers(Content-Length: 37, Content-Type: application/json, Host: example.com) body=<hidden> (37 bytes total)
            |HTTP/1.1 200 OK Headers(Content-Length: 37, Content-Type: application/json) body=<hidden> (37 bytes total)
            |""".stripMarginWithNewline("\n")
       }
@@ -658,7 +659,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
         completeOk) ~> check {
         response.status shouldEqual Status.Ok
         normalizedDebugMsg() should
-        startWith("HTTP/1.1 GET /users/7/tokens/REDACTED?pin=REDACTED&iban=REDACTED Headers()\n")
+        startWith("HTTP/1.1 GET /users/7/tokens/REDACTED?pin=REDACTED&iban=REDACTED Headers(Host: example.com)\n")
       }
       resetDebugMsg()
       jsonRequest("""{"pin":"1234","password":"x"}""")           ~> logRequestResult(logAction = logAction,
@@ -674,7 +675,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
       jsonRequest(json) ~> logRequestResult(logAction = logAction, redaction = throwing)(echoJson) ~> check {
         responseAs[String] shouldEqual jsonResponse
         normalizedDebugMsg() shouldEqual
-        """|HTTP/1.1 POST /login Headers(Content-Length: 37, Content-Type: application/json) body=<redaction failed: java.lang.IllegalStateException> (37 bytes total)
+        """|HTTP/1.1 POST /login Headers(Content-Length: 37, Content-Type: application/json, Host: example.com) body=<redaction failed: java.lang.IllegalStateException> (37 bytes total)
            |HTTP/1.1 200 OK Headers(Content-Length: 37, Content-Type: application/json) body=<redaction failed: java.lang.IllegalStateException> (37 bytes total)
            |""".stripMarginWithNewline("\n")
       }
@@ -683,7 +684,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
       Get("/hello?token=t") ~> logRequestResult(logAction = logAction, redaction = badUri)(completeOk) ~> check {
         response.status shouldEqual Status.Ok
         normalizedDebugMsg() should
-        startWith("HTTP/1.1 GET <redaction failed: java.lang.IllegalStateException> Headers()\n")
+        startWith("HTTP/1.1 GET <redaction failed: java.lang.IllegalStateException> Headers(Host: example.com)\n")
       }
       resetDebugMsg()
       Get("/hello").putHeaders(Header.Raw(ci"X-Probe", "1")) ~>
@@ -691,7 +692,8 @@ class DebuggingDirectivesSpec extends RoutingSpec {
         completeOk) ~> check {
         response.status shouldEqual Status.Ok
         normalizedDebugMsg() should
-        startWith("HTTP/1.1 GET /hello Headers(<redaction failed: java.lang.IllegalStateException>)\n")
+        startWith(
+          "HTTP/1.1 GET /hello Headers(<redaction failed: java.lang.IllegalStateException>)\n")
       }
       val failingLog: Option[String => IO[Unit]] = Some(_ => IO.raiseError(new IllegalStateException("log")))
       jsonRequest(json) ~> logRequestResult(logAction = failingLog)(echoJson) ~> check {
@@ -713,7 +715,7 @@ class DebuggingDirectivesSpec extends RoutingSpec {
         entity(as[String]) { s => complete(s) }) ~> check {
         responseAs[String] shouldEqual json
         normalizedDebugMsg() shouldEqual
-        """|HTTP/1.1 POST /login Headers(Content-Length: 37, Content-Type: application/json) body="{"use" ... (37 bytes total)
+        """|HTTP/1.1 POST /login Headers(Content-Length: 37, Content-Type: application/json, Host: example.com) body="{"use" ... (37 bytes total)
            |HTTP/1.1 200 OK Headers(Content-Length: 37, Content-Type: text/plain; charset=UTF-8) body="{"use" ... (37 bytes total)
            |""".stripMarginWithNewline("\n")
       }
