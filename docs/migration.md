@@ -79,9 +79,6 @@ instead. Other differences that remain:
 - There is no default request-body size limit (Pekko: `max-content-length`, 8 MiB): `entity(as[String])` reads a body
   of any size. Wrap the routes that read bodies, or the whole route, in `withSizeLimit`
   (`withSizeLimit(8L * 1024 * 1024)(route).toHttpApp`).
-- `extractClientIP` also reads a client-sent `Remote-Address` header (after `X-Forwarded-For` and `X-Real-Ip`);
-  Pekko ignores that header and falls back to the connection address its server records. Like `X-Forwarded-For`,
-  it is only trustworthy behind a proxy that sets or strips it.
 - The testkit's `~>` sends the request URI as given, with no default host (Pekko's testkit uses
   `http://example.com`): `extractUri` is relative and `host(...)` needs the request to name its host.
 - `withRequestTimeout` cancels the inner route when it fires and its default answer is an empty 503; Pekko keeps the
@@ -97,6 +94,8 @@ instead. Other differences that remain:
   for the host directives (`extractHost` gives `""`, `host(...)` rejects): Ember 0.23.36 drops `:authority`.
 - A request whose URI authority and `Host` header disagree is answered 400 by Pekko; stir names no host for it
   (`extractHost` gives `""`, so `host(...)` rejects).
+- `extractClientIP` skips an `X-Forwarded-For` whose first entry is not an address (`unknown`) and goes on to
+  `X-Real-Ip` and the connection; Pekko returns `RemoteAddress.Unknown` for it.
 - Content negotiation differs from Pekko for wildcard ranges with parameters: stir ignores `charset` on every range
   (Pekko only on `type/subtype` ranges, so its `text/*;charset=...` never matches) and does not count a wildcard
   range's parameters towards its specificity.
@@ -109,6 +108,10 @@ instead. Other differences that remain:
 - `CredentialsHelper.Provided#verify` compares the secrets character by character. It compared the low 8 bits of
   each character, as Pekko does, so a password whose characters differ from the secret's only in their high byte was
   accepted (`Aukasz` for `Łukasz`). Correct passwords verify as before.
+- `extractClientIP` no longer reads a `Remote-Address` header (Pekko ignores it too): a client could send one and
+  choose the address it reported. Without a usable `X-Forwarded-For` or `X-Real-Ip` it gives the connection's address.
+  Those two headers can be sent by clients too, so use `extractDirectClientIP` for access control unless a proxy sets
+  or strips them.
 
 ## Behaviour changes in 0.7
 
