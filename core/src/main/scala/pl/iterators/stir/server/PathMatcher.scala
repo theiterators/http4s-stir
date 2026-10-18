@@ -164,13 +164,30 @@ object PathMatcher extends ImplicitPathMatcherConstruction {
         val pathRendered = path.renderString
         if (pathRendered.startsWith(prefixRendered)) {
           val remaining = pathRendered.substring(prefixRendered.length)
-          Matched(Path.unsafeFromString(remaining), extractions)(ev)
+          Matched(restPath(remaining), extractions)(ev)
         } else if (!prefixHasEscape && pathRendered.indexOf('%') < 0) Unmatched // decoded == encoded
         else
           dropDecodedPrefix(tokens(path), prefixTokens) match {
-            case Some(rest) => Matched(Path.unsafeFromString(rest.map(_.encoded).mkString), extractions)(ev)
+            case Some(rest) => Matched(restPath(rest.map(_.encoded).mkString), extractions)(ev)
             case None       => Unmatched
           }
+      }
+    }
+
+  /**
+   * The unmatched rest of a path from its rendered form, keeping empty segments: `Path.unsafeFromString` drops a
+   * trailing empty one, so `"//"` would become `"/"`.
+   */
+  private def restPath(rendered: String): Path =
+    if (rendered.isEmpty) Path.empty
+    else {
+      val absolute = rendered.charAt(0) == '/'
+      val body = if (absolute) rendered.substring(1) else rendered
+      if (body.isEmpty) Path.Root
+      else {
+        val endsWithSlash = body.endsWith("/")
+        val inner = if (endsWithSlash) body.substring(0, body.length - 1) else body
+        Path(inner.split("/", -1).toVector.map(Path.Segment.encoded), absolute, endsWithSlash)
       }
     }
 
@@ -366,7 +383,7 @@ trait ImplicitPathMatcherConstruction {
     regex.pattern.matcher("").groupCount() match {
       case 0 => new PathMatcher1[String] {
           def apply(path: Path) = path.segments match {
-            case segment +: tail if !path.absolute =>
+            case segment +: tail if !path.absolute && !segment.isEmpty =>
               regex.findPrefixOf(segment.decoded()) match {
                 case Some(m) if segment.decoded().substring(m.length).nonEmpty =>
                   Matched(pathWithSegments(path, Path.Segment(segment.decoded().substring(m.length)) +: tail),
@@ -380,7 +397,7 @@ trait ImplicitPathMatcherConstruction {
         }
       case 1 => new PathMatcher1[String] {
           def apply(path: Path) = path.segments match {
-            case segment +: tail if !path.absolute =>
+            case segment +: tail if !path.absolute && !segment.isEmpty =>
               regex.findPrefixMatchOf(segment.decoded()) match {
                 case Some(m) if segment.decoded().substring(m.end).nonEmpty =>
                   Matched(pathWithSegments(path, Path.Segment(segment.decoded().substring(m.end)) +: tail),
@@ -444,11 +461,19 @@ trait PathMatchers {
    * @group pathmatcher
    */
   object Slash extends PathMatcher0 {
-    def apply(path: Path) = {
-      if (!path.absolute) Unmatched
-      else if (path.segments.isEmpty) Matched(Path.empty, ())
-      else Matched(Path(path.segments, absolute = false, path.endsWithSlash), ())
-    }
+    def apply(path: Path) =
+      if (path.absolute) {
+        if (path.segments.isEmpty) Matched(Path.empty, ())
+        else Matched(Path(path.segments, absolute = false, path.endsWithSlash), ())
+      } else
+        path.segments match {
+          // the second slash of a `//`: a relative path starting with an empty segment, as Pekko's Slash(Slash(...))
+          case first +: tail if first.isEmpty =>
+            if (tail.nonEmpty) Matched(Path(tail, absolute = false, path.endsWithSlash), ())
+            else if (path.endsWithSlash) Matched(Path.empty, ())
+            else Unmatched
+          case _ => Unmatched
+        }
   }
 
   /**
@@ -612,7 +637,7 @@ trait PathMatchers {
    */
   object Segment extends PathMatcher1[String] {
     def apply(path: Path) = path.segments match {
-      case segment +: tail if !path.absolute =>
+      case segment +: tail if !path.absolute && !segment.isEmpty => // an empty `//` segment is no segment, as in Pekko
         Matched(Path(tail, tail.nonEmpty, path.endsWithSlash), Tuple1(segment.decoded()))
       case _ => Unmatched
     }
