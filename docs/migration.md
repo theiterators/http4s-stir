@@ -112,6 +112,9 @@ instead. Other differences that remain:
   choose the address it reported. Without a usable `X-Forwarded-For` or `X-Real-Ip` it gives the connection's address.
   Those two headers can be sent by clients too, so use `extractDirectClientIP` for access control unless a proxy sets
   or strips them.
+- Literal path segments are compared decoded, as Pekko does: `path("café")` also matches `/caf%c3%a9` (lower-case
+  escapes) and `path("foo")` matches `/fo%6F`. They were compared in http4s' encoding, so only the escapes it
+  produces itself matched.
 
 ## Behaviour changes in 0.7
 

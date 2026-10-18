@@ -149,20 +149,71 @@ object PathMatcher extends ImplicitPathMatcherConstruction {
 
   /**
    * Creates a PathMatcher that matches and consumes the given path prefix and extracts the given list of extractions.
-   * If the given prefix is empty the returned PathMatcher matches always and consumes nothing.
+   * If the given prefix is empty the returned PathMatcher matches always and consumes nothing. Segments are compared
+   * decoded, as in Pekko, so `"café"` matches `/caf%C3%A9` and `/caf%c3%a9`, and `"foo"` matches `/fo%6F`; the last
+   * segment of the prefix may match the start of a segment.
    */
   def apply[L: Tuple](prefix: Path, extractions: L): PathMatcher[L] =
     if (prefix.isEmpty) provide(extractions)
     else new PathMatcher[L] {
+      private val prefixRendered = prefix.renderString
+      private lazy val prefixTokens = tokens(prefix)
+
       def apply(path: Path) = {
         val pathRendered = path.renderString
-        val prefixRendered = prefix.renderString
         if (pathRendered.startsWith(prefixRendered)) {
           val remaining = pathRendered.substring(prefixRendered.length)
           Matched(Path.unsafeFromString(remaining), extractions)(ev)
-        } else Unmatched
+        } else if (pathRendered.indexOf('%') < 0 && prefixRendered.indexOf('%') < 0) Unmatched // decoded == encoded
+        else
+          dropDecodedPrefix(tokens(path), prefixTokens) match {
+            case Some(rest) => Matched(Path.unsafeFromString(rest.map(_.encoded).mkString), extractions)(ev)
+            case None       => Unmatched
+          }
       }
     }
+
+  // a path as Pekko sees it: slashes and non-empty segments, each segment kept in its encoded form
+  private sealed trait PathToken { def encoded: String }
+  private case object SlashToken extends PathToken { def encoded = "/" }
+  private final case class SegmentToken(encoded: String) extends PathToken {
+    lazy val decoded: String = Path.Segment.encoded(encoded).decoded()
+  }
+
+  private def tokens(path: Path): List[PathToken] =
+    if (path.segments.isEmpty) { if (path.absolute || path.endsWithSlash) List(SlashToken) else Nil }
+    else {
+      val inner = path.segments.toList.zipWithIndex.flatMap { case (segment, ix) =>
+        (if (ix > 0) List(SlashToken) else Nil) ++
+        (if (segment.isEmpty) Nil else List(SegmentToken(segment.encoded)))
+      }
+      (if (path.absolute) SlashToken :: inner else inner) ++ (if (path.endsWithSlash) List(SlashToken) else Nil)
+    }
+
+  @tailrec private def dropDecodedPrefix(path: List[PathToken], prefix: List[PathToken]): Option[List[PathToken]] =
+    (path, prefix) match {
+      case (_, Nil)                                                           => Some(path)
+      case (SlashToken :: pathTail, SlashToken :: prefixTail)                 => dropDecodedPrefix(pathTail, prefixTail)
+      case ((segment: SegmentToken) :: pathTail, (last: SegmentToken) :: Nil) =>
+        if (segment.decoded == last.decoded) Some(pathTail)
+        else if (segment.decoded.startsWith(last.decoded))
+          encodedRest(segment.encoded, last.decoded).map(rest => SegmentToken(rest) :: pathTail)
+        else None
+      case ((segment: SegmentToken) :: pathTail, (next: SegmentToken) :: prefixTail)
+          if segment.decoded == next.decoded =>
+        dropDecodedPrefix(pathTail, prefixTail)
+      case _ => None
+    }
+
+  // the encoded remainder of a segment after the part that decodes to `decodedPrefix`, keeping the client's encoding
+  private def encodedRest(encoded: String, decodedPrefix: String): Option[String] = {
+    @tailrec def rec(ix: Int): Option[String] =
+      if (ix > encoded.length) None
+      else if (Path.Segment.encoded(encoded.substring(0, ix)).decoded() == decodedPrefix) Some(encoded.substring(ix))
+      else if (ix < encoded.length && encoded.charAt(ix) == '%') rec(ix + 3)
+      else rec(ix + 1)
+    rec(0)
+  }
 
   /** Provoke implicit conversions to PathMatcher to be applied */
   def apply[L](magnet: PathMatcher[L]): PathMatcher[L] = magnet

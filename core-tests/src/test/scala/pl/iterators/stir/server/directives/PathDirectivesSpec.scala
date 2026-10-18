@@ -30,6 +30,49 @@ class PathDirectivesSpec extends RoutingSpec with Inside {
     "reject [/foo/]".inThe(test())
   }
 
+  """path("café") (literal segments are compared decoded, as in Pekko)""" should {
+    val test = testFor(path("café") {
+      echoUnmatchedPath
+    })
+    "accept [/caf%C3%A9] and clear the unmatchedPath".inThe(test(""))
+    "accept [/caf%c3%a9] and clear the unmatchedPath".inThe(test(""))
+    "reject [/caf%C3%A9x]".inThe(test())
+    "reject [/cafe]".inThe(test())
+  }
+
+  """path("a b")""" should {
+    val test = testFor(path("a b") {
+      echoUnmatchedPath
+    })
+    "accept [/a%20b] and clear the unmatchedPath".inThe(test(""))
+    "reject [/a+b]".inThe(test())
+  }
+
+  """pathPrefix("foo")""" should {
+    "accept [/fo%6F/bar] (an unreserved character percent-encoded) and leave /bar unmatched".inThe(
+      testFor(pathPrefix("foo") { echoUnmatchedPath })("/bar"))
+    "accept [/fo%6Fbar] and leave the rest of the segment unmatched".inThe(
+      testFor(pathPrefix("foo") { echoUnmatchedPath })("bar"))
+    "accept [/foo%2Fbar] and leave the rest of the segment unmatched".inThe(
+      testFor(pathPrefix("foo") { echoUnmatchedPath })("%2Fbar"))
+  }
+
+  """pathPrefix("café" / "x")""" should {
+    val test = testFor(pathPrefix("café" / "x") {
+      echoUnmatchedPath
+    })
+    "accept [/caf%C3%A9/x/y] and leave /y unmatched".inThe(test("/y"))
+    "reject [/caf%C3%A9/y]".inThe(test())
+  }
+
+  """path("a/b") (a slash inside a literal is part of the segment)""" should {
+    val test = testFor(path("a/b") {
+      echoUnmatchedPath
+    })
+    "accept [/a%2Fb] and clear the unmatchedPath".inThe(test(""))
+    "reject [/a/b]".inThe(test())
+  }
+
   """pathPrefix("")""" should {
     val test = testFor(pathPrefix("") {
       echoUnmatchedPath
