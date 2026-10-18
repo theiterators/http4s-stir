@@ -141,7 +141,7 @@ class MiscDirectivesSpec extends RoutingSpec {
         extractClientIP { echoComplete }
       } ~> check { responseAs[String] shouldEqual "Some(1.2.3.4)" }
     }
-    "select X-Real-Ip when both X-Real-Ip and Remote-Address headers are present" in {
+    "ignore Remote-Address when X-Real-Ip is present" in {
       Get()                                                ~> addHeaders(Header.Raw(CIString("X-Real-Ip"), "1.2.3.4"),
         Header.Raw(CIString("Remote-Address"), "5.6.7.8")) ~> {
         extractClientIP { echoComplete }

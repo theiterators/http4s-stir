@@ -108,10 +108,10 @@ instead. Other differences that remain:
 - `CredentialsHelper.Provided#verify` compares the secrets character by character. It compared the low 8 bits of
   each character, as Pekko does, so a password whose characters differ from the secret's only in their high byte was
   accepted (`Aukasz` for `Łukasz`). Correct passwords verify as before.
-- `extractClientIP` no longer reads a `Remote-Address` header, as Pekko does: a client could send one and choose the
-  address it reported. Without a usable `X-Forwarded-For` or `X-Real-Ip` it gives the connection's address. Those two
-  headers can be sent by clients too, so use `extractDirectClientIP` for access control unless a proxy sets or strips
-  them.
+- `extractClientIP` no longer reads a `Remote-Address` header (Pekko ignores it too): a client could send one and
+  choose the address it reported. Without a usable `X-Forwarded-For` or `X-Real-Ip` it gives the connection's address.
+  Those two headers can be sent by clients too, so use `extractDirectClientIP` for access control unless a proxy sets
+  or strips them.
 
 ## Behaviour changes in 0.7
 
