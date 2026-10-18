@@ -204,8 +204,9 @@ Builders that accept an entity require an implicit `EntityEncoder[IO, T]` for th
 
 A request built with a body (`Post("/", body)`) carries the `Content-Type` and `Content-Length` the body's
 `EntityEncoder` produces, as a real client would send; override with `addHeader`, which replaces those entity headers
-(`Content-Type`, `Content-Length`, `Transfer-Encoding`). As in Pekko, `addHeader` puts any other header before those
-of the same name (so a later `addHeader` is the one a typed lookup finds) and `addHeaders` puts them after.
+(`Content-Type`, `Content-Length`, `Transfer-Encoding`). As in Pekko, `addHeader` puts any other header before all of
+the request's headers, keeping those of the same name (so a later `addHeader` is the one a typed lookup finds), and
+`addHeaders` puts them after the request's headers.
 
 ## Request Transformers
 
@@ -213,7 +214,7 @@ Transform requests before sending them to a route:
 
 | Transformer | Description |
 |---|---|
-| `addHeader(header)` | Add a header before any of the same name, which stay (an entity header replaces the request's). |
+| `addHeader(header)` | Add a header before the request's headers, keeping any of the same name (an entity header replaces the request's). |
 | `addHeader(name, value)` | Add a header by name and value strings. |
 | `addHeaders(first, more*)` | Add headers after the request's own. |
 | `removeHeader(name)` | Remove headers by name. |

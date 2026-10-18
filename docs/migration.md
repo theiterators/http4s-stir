@@ -146,11 +146,12 @@ instead. Other differences that remain:
   `426 Upgrade Required` after the route had accepted it.
 - Testkit: `~>` adds `Host: example.com` to a request that names no host (`host(...)` used to reject and
   `extractHost` to give `""`; declare an implicit `DefaultHostInfo` for another host), so tests that check every
-  request header or a logged request line now see it. As in Pekko, `addHeader` puts the header before one of the same
-  name instead of replacing it (a typed lookup still finds the latest) and `addHeaders` after it; an entity header
-  such as `Content-Type` still replaces. `response` no longer shows a `Transfer-Encoding: chunked` the route did not
-  send, and `evaluateTo`, `haveFailedWith` and the marshalling helpers fail after `marshallingTimeout` (one second, as
-  Pekko) instead of waiting forever.
+  request header or a logged request line now see it. As in Pekko, `addHeader` puts the header before the request's
+  headers instead of replacing one of the same name (a typed lookup still finds the latest, but the logged header
+  order changes) and `addHeaders` after them; an entity header such as `Content-Type` still replaces. `response` no
+  longer shows a `Transfer-Encoding: chunked` the route did not send, and `evaluateTo`, `haveFailedWith` and the
+  marshalling helpers fail after `marshallingTimeout` (one second, as Pekko) instead of waiting forever; a suite that
+  defines its own `def marshallingTimeout` now needs `override`.
 
 ## Behaviour changes in 0.7
 
