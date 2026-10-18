@@ -4,12 +4,15 @@ import io.circe.Json
 import org.http4s.Status
 import org.http4s.server.websocket.WebSocketBuilder2
 import org.specs2.mutable.Specification
-import pl.iterators.stir.testkit.Specs2RouteTest
+import pl.iterators.stir.testkit.{ RouteTestTimeout, Specs2RouteTest }
 
 import java.util.UUID
+import scala.concurrent.duration._
 
 class ServiceRoutesSpec extends Specification with Specs2RouteTest {
   override implicit val runtime: IORuntime = IORuntime.global
+  // the first request warms up a cold JVM, which on a busy CI runner can take longer than the 1 s default
+  implicit val routeTestTimeout: RouteTestTimeout = RouteTestTimeout(5.seconds)
   import Main._
   import org.http4s.circe.CirceEntityEncoder._
   import org.http4s.circe.CirceEntityDecoder._
