@@ -53,8 +53,26 @@ class PathDirectivesSpec extends RoutingSpec with Inside {
       testFor(pathPrefix("foo") { echoUnmatchedPath })("/bar"))
     "accept [/fo%6Fbar] and leave the rest of the segment unmatched".inThe(
       testFor(pathPrefix("foo") { echoUnmatchedPath })("bar"))
-    "accept [/foo%2Fbar] and leave the rest of the segment unmatched".inThe(
+    "accept [/foo%2Fbar] (matched encoded) and leave the rest of the segment unmatched".inThe(
       testFor(pathPrefix("foo") { echoUnmatchedPath })("%2Fbar"))
+    "accept [/fo%6F%2Fbar] (matched decoded) and keep the encoded slash in the rest of the segment".inThe(
+      testFor(pathPrefix("foo") { echoUnmatchedPath })("%2Fbar"))
+  }
+
+  """pathPrefix("é")""" should {
+    "accept [/%c3%a9%C3%A9x] and leave the rest of the segment in the client's encoding".inThe(
+      testFor(pathPrefix("é") { echoUnmatchedPath })("%C3%A9x"))
+  }
+
+  """pathPrefix("café") with an empty segment after it""" should {
+    "accept [/caf%c3%a9//x] and leave //x unmatched".inThe(
+      testFor(pathPrefix("café") { echoUnmatchedPath })("//x"))
+  }
+
+  """path(Map("café" -> 1, "tea" -> 2))""" should {
+    val test = testFor(path(Map("café" -> 1, "tea" -> 2)) { value => complete(value.toString) })
+    "accept [/caf%c3%a9] and extract 1".inThe(test("1"))
+    "accept [/te%61] and extract 2".inThe(test("2"))
   }
 
   """pathPrefix("café" / "x")""" should {

@@ -157,7 +157,7 @@ object PathMatcher extends ImplicitPathMatcherConstruction {
     if (prefix.isEmpty) provide(extractions)
     else new PathMatcher[L] {
       private val prefixRendered = prefix.renderString
-      private lazy val prefixTokens = tokens(prefix)
+      private lazy val prefixTokens = tokens(prefix).toList
 
       def apply(path: Path) = {
         val pathRendered = path.renderString
@@ -180,37 +180,51 @@ object PathMatcher extends ImplicitPathMatcherConstruction {
     lazy val decoded: String = Path.Segment.encoded(encoded).decoded()
   }
 
-  private def tokens(path: Path): List[PathToken] =
-    if (path.segments.isEmpty) { if (path.absolute || path.endsWithSlash) List(SlashToken) else Nil }
+  // lazy, so a miss only looks at as much of the path as the prefix needs
+  private def tokens(path: Path): LazyList[PathToken] =
+    if (path.segments.isEmpty) { if (path.absolute || path.endsWithSlash) LazyList(SlashToken) else LazyList.empty }
     else {
-      val inner = path.segments.toList.zipWithIndex.flatMap { case (segment, ix) =>
-        (if (ix > 0) List(SlashToken) else Nil) ++
-        (if (segment.isEmpty) Nil else List(SegmentToken(segment.encoded)))
+      val inner = LazyList.from(path.segments.indices).flatMap { ix =>
+        val segment = path.segments(ix)
+        (if (ix > 0) LazyList(SlashToken) else LazyList.empty) ++
+        (if (segment.isEmpty) LazyList.empty else LazyList(SegmentToken(segment.encoded)))
       }
-      (if (path.absolute) SlashToken :: inner else inner) ++ (if (path.endsWithSlash) List(SlashToken) else Nil)
+      (if (path.absolute) SlashToken +: inner else inner) ++
+      (if (path.endsWithSlash) LazyList(SlashToken) else LazyList.empty)
     }
 
-  @tailrec private def dropDecodedPrefix(path: List[PathToken], prefix: List[PathToken]): Option[List[PathToken]] =
-    (path, prefix) match {
-      case (_, Nil)                                                           => Some(path)
-      case (SlashToken :: pathTail, SlashToken :: prefixTail)                 => dropDecodedPrefix(pathTail, prefixTail)
-      case ((segment: SegmentToken) :: pathTail, (last: SegmentToken) :: Nil) =>
-        if (segment.decoded == last.decoded) Some(pathTail)
-        else if (segment.decoded.startsWith(last.decoded))
-          encodedRest(segment.encoded, last.decoded).map(rest => SegmentToken(rest) :: pathTail)
-        else None
-      case ((segment: SegmentToken) :: pathTail, (next: SegmentToken) :: prefixTail)
-          if segment.decoded == next.decoded =>
-        dropDecodedPrefix(pathTail, prefixTail)
-      case _ => None
+  @tailrec private def dropDecodedPrefix(path: LazyList[PathToken],
+      prefix: List[PathToken]): Option[LazyList[PathToken]] =
+    prefix match {
+      case Nil                    => Some(path)
+      case _ if path.isEmpty      => None
+      case expected :: prefixTail =>
+        (path.head, expected) match {
+          case (SlashToken, SlashToken)                                          => dropDecodedPrefix(path.tail, prefixTail)
+          case (segment: SegmentToken, last: SegmentToken) if prefixTail.isEmpty =>
+            if (segment.decoded == last.decoded) Some(path.tail)
+            else if (segment.decoded.startsWith(last.decoded))
+              encodedRest(segment.encoded, last.decoded).map(rest => SegmentToken(rest) +: path.tail)
+            else None
+          case (segment: SegmentToken, next: SegmentToken) if segment.decoded == next.decoded =>
+            dropDecodedPrefix(path.tail, prefixTail)
+          case _ => None
+        }
     }
 
   // the encoded remainder of a segment after the part that decodes to `decodedPrefix`, keeping the client's encoding
   private def encodedRest(encoded: String, decodedPrefix: String): Option[String] = {
+    def isHex(c: Char) =
+      (c >= '0' && c <= '9') ||
+      (c >= 'a' && c <= 'f') ||
+      (c >= 'A' && c <= 'F')
+    def isEscape(ix: Int) =
+      encoded.charAt(ix) == '%' && ix + 2 < encoded.length && isHex(encoded.charAt(ix + 1)) &&
+      isHex(encoded.charAt(ix + 2))
     @tailrec def rec(ix: Int): Option[String] =
       if (ix > encoded.length) None
       else if (Path.Segment.encoded(encoded.substring(0, ix)).decoded() == decodedPrefix) Some(encoded.substring(ix))
-      else if (ix < encoded.length && encoded.charAt(ix) == '%') rec(ix + 3)
+      else if (ix < encoded.length && isEscape(ix)) rec(ix + 3)
       else rec(ix + 1)
     rec(0)
   }
