@@ -166,6 +166,22 @@ class RouteDirectivesSpec extends AnyWordSpec with GenericRoutingSpec {
 
     "refuse a status that is not a redirection" in {
       an[IllegalArgumentException] should be thrownBy redirect(Uri.unsafeFromString("/foo"), Status.Ok)
+      an[IllegalArgumentException] should be thrownBy redirectToTrailingSlashIfMissing(Status.Ok)
+      an[IllegalArgumentException] should be thrownBy redirectToNoTrailingSlashIfPresent(Status.Ok)
+    }
+
+    "fail the request when RequestContext.redirect gets a status that is not a redirection" in {
+      Get() ~> Route.seal { ctx => ctx.redirect(Uri.unsafeFromString("/foo"), Status.Ok) } ~> check {
+        status shouldEqual Status.InternalServerError
+      }
+    }
+
+    "send no body for a redirection without a template" in {
+      Get() ~> redirect(Uri.unsafeFromString("/foo"), Status.fromInt(399).toOption.get) ~> check {
+        status.code shouldEqual 399
+        responseAs[String] shouldEqual ""
+        header[`Content-Type`] shouldEqual None
+      }
     }
 
     "produce proper 'NotModified' redirections" in {
