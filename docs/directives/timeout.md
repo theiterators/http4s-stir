@@ -10,7 +10,7 @@ Timeout directives set a request timeout for a route. stir has no server-level r
 
 ## withRequestTimeout
 
-Sets a timeout for the inner route. If the inner route does not complete within the specified duration, the timeout response is returned: the one set by `withRequestTimeoutResponse` inside, else the handler given here, else `503 Service Unavailable`.
+Sets a timeout for the inner route. If the inner route does not complete within the specified duration, the timeout response is returned: the one set by `withRequestTimeoutResponse` inside, else the handler given here, else an empty `503 Service Unavailable`. The inner route is cancelled when the timeout fires (its finalizers run); Pekko lets it keep running and answers its default timeout with a text body.
 
 ```scala
 import scala.concurrent.duration._
