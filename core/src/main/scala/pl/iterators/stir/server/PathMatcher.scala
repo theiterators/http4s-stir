@@ -149,20 +149,86 @@ object PathMatcher extends ImplicitPathMatcherConstruction {
 
   /**
    * Creates a PathMatcher that matches and consumes the given path prefix and extracts the given list of extractions.
-   * If the given prefix is empty the returned PathMatcher matches always and consumes nothing.
+   * If the given prefix is empty the returned PathMatcher matches always and consumes nothing. Segments are compared
+   * decoded, as in Pekko, so `"café"` matches `/caf%C3%A9` and `/caf%c3%a9`, and `"foo"` matches `/fo%6F`; the last
+   * segment of the prefix may match the start of a segment.
    */
   def apply[L: Tuple](prefix: Path, extractions: L): PathMatcher[L] =
     if (prefix.isEmpty) provide(extractions)
     else new PathMatcher[L] {
+      private val prefixRendered = prefix.renderString
+      private val prefixHasEscape = prefixRendered.indexOf('%') >= 0
+      private lazy val prefixTokens = tokens(prefix).toList
+
       def apply(path: Path) = {
         val pathRendered = path.renderString
-        val prefixRendered = prefix.renderString
         if (pathRendered.startsWith(prefixRendered)) {
           val remaining = pathRendered.substring(prefixRendered.length)
           Matched(Path.unsafeFromString(remaining), extractions)(ev)
-        } else Unmatched
+        } else if (!prefixHasEscape && pathRendered.indexOf('%') < 0) Unmatched // decoded == encoded
+        else
+          dropDecodedPrefix(tokens(path), prefixTokens) match {
+            case Some(rest) => Matched(Path.unsafeFromString(rest.map(_.encoded).mkString), extractions)(ev)
+            case None       => Unmatched
+          }
       }
     }
+
+  // a path as Pekko sees it: slashes and non-empty segments, each segment kept in its encoded form
+  private sealed trait PathToken { def encoded: String }
+  private case object SlashToken extends PathToken { def encoded = "/" }
+  private final case class SegmentToken(encoded: String) extends PathToken {
+    lazy val decoded: String = Path.Segment.encoded(encoded).decoded()
+  }
+
+  // lazy, so a miss only looks at as much of the path as the prefix needs
+  private def tokens(path: Path): LazyList[PathToken] =
+    if (path.segments.isEmpty) { if (path.absolute || path.endsWithSlash) LazyList(SlashToken) else LazyList.empty }
+    else {
+      val inner = LazyList.from(path.segments.indices).flatMap { ix =>
+        val segment = path.segments(ix)
+        (if (ix > 0) LazyList(SlashToken) else LazyList.empty) ++
+        (if (segment.isEmpty) LazyList.empty else LazyList(SegmentToken(segment.encoded)))
+      }
+      (if (path.absolute) SlashToken +: inner else inner) ++
+      (if (path.endsWithSlash) LazyList(SlashToken) else LazyList.empty)
+    }
+
+  @tailrec private def dropDecodedPrefix(path: LazyList[PathToken],
+      prefix: List[PathToken]): Option[LazyList[PathToken]] =
+    prefix match {
+      case Nil                    => Some(path)
+      case _ if path.isEmpty      => None
+      case expected :: prefixTail =>
+        (path.head, expected) match {
+          case (SlashToken, SlashToken)                                          => dropDecodedPrefix(path.tail, prefixTail)
+          case (segment: SegmentToken, last: SegmentToken) if prefixTail.isEmpty =>
+            if (segment.decoded == last.decoded) Some(path.tail)
+            else if (segment.decoded.startsWith(last.decoded))
+              encodedRest(segment.encoded, last.decoded).map(rest => SegmentToken(rest) +: path.tail)
+            else None
+          case (segment: SegmentToken, next: SegmentToken) if segment.decoded == next.decoded =>
+            dropDecodedPrefix(path.tail, prefixTail)
+          case _ => None
+        }
+    }
+
+  // the encoded remainder of a segment after the part that decodes to `decodedPrefix`, keeping the client's encoding
+  private def encodedRest(encoded: String, decodedPrefix: String): Option[String] = {
+    def isHex(c: Char) =
+      (c >= '0' && c <= '9') ||
+      (c >= 'a' && c <= 'f') ||
+      (c >= 'A' && c <= 'F')
+    def isEscape(ix: Int) =
+      encoded.charAt(ix) == '%' && ix + 2 < encoded.length && isHex(encoded.charAt(ix + 1)) &&
+      isHex(encoded.charAt(ix + 2))
+    @tailrec def rec(ix: Int): Option[String] =
+      if (ix > encoded.length) None
+      else if (Path.Segment.encoded(encoded.substring(0, ix)).decoded() == decodedPrefix) Some(encoded.substring(ix))
+      else if (ix < encoded.length && isEscape(ix)) rec(ix + 3)
+      else rec(ix + 1)
+    rec(0)
+  }
 
   /** Provoke implicit conversions to PathMatcher to be applied */
   def apply[L](magnet: PathMatcher[L]): PathMatcher[L] = magnet

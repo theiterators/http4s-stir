@@ -189,6 +189,10 @@ val route: Route = redirectToNoTrailingSlashIfPresent(Status.Found) {
 
 Path matchers are applied to the unmatched portion of the request path. They consume path segments, extract typed values, and can be composed with operators.
 
+A string literal matches the decoded path segment, as in Pekko: `path("café")` matches `/caf%C3%A9` and
+`/caf%c3%a9`, and `path("a b")` matches `/a%20b`. A `/` inside a literal is part of the segment (`"a/b"` matches
+`/a%2Fb`, not `/a/b`); use `"a" / "b"` or `separateOnSlashes("a/b")` for two segments.
+
 ### Slash
 
 Matches a single slash character (`/`).
