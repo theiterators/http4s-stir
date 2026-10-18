@@ -12,7 +12,8 @@ Every form directive (fields as well as `formFieldMap`, `formFieldSeq` and `form
 body in memory first (ten seconds timeout and 8 MiB limit, through `toStrictEntity`), so form directives nested
 inside one another read the same buffered body. Alternatives (`formField("a") { ... } ~ formField("b") { ... }`)
 each start from the request as received and read the body again, which a streamed body allows once (the second
-read fails with 500, as in Pekko); wrap such alternatives in `toStrictEntity(10.seconds)` so they share one buffered
+read fails, as in Pekko: a 500 for `formField(s)`, a `MalformedRequestContentRejection` for `formFieldMap`,
+`formFieldSeq` and `formFieldMultiMap`); wrap such alternatives in `toStrictEntity(10.seconds)` so they share one buffered
 body. A body that does not arrive in time fails the request with `408 Request Timeout`; a larger one with
 `413 Payload Too Large`.
 A body whose `Content-Type` is neither `application/x-www-form-urlencoded` nor `multipart/form-data` is rejected

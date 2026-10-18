@@ -219,8 +219,9 @@ instead. Other differences that remain:
   length-less body with bytes (HTTP/2 included) can be read once, and a body of known length cannot be read again
   after a read that stopped partway (it failed mid-stream, or the reader stopped before asking for the end). An empty
   body is readable again, and so is a body of known length read to its end when it is in memory (the testkit) or
-  arrived over Ember together with the request head; a larger one fails the later read with Ember's "Body Has Been
-  Consumed Completely Already" (500), much as Pekko re-reads only an entity that arrived strict. Alternatives that
+  arrived over Ember together with the request head; a later read of a larger one fails with Ember's "Body Has Been
+  Consumed Completely Already" (a 500, or a `MalformedRequestContentRejection` under `entity` and the form map
+  directives), much as Pekko re-reads only an entity that arrived strict. Alternatives that
   each run a form directive read the body anew each (`formField(...) ~ formField(...)`), so wrap them in
   `toStrictEntity` to let several of them read the body.
   This applies to in-memory test bodies too (a body built with `withBodyStream` has no length, so it can be read

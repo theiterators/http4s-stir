@@ -114,6 +114,12 @@ class FormFieldDirectivesSpec extends RoutingSpec {
           formFields("firstName", "age".as[Int]) { (firstName, age) => complete(firstName + age) })
       } ~> check { status shouldEqual Status.InternalServerError }
     }
+    "reject formFieldMap alternatives that each read a body that can be read once (as Pekko)" in {
+      val body = Stream.emits("firstName=Mike&age=42".getBytes("UTF-8")).covary[IO]
+      Post().withBodyStream(body) ~> addHeader(`Content-Type`(MediaType.application.`x-www-form-urlencoded`)) ~> {
+        concat(formFieldMap(_ => reject), formFieldMap(fields => complete(fields.toString)))
+      } ~> check { rejection shouldBe a[MalformedRequestContentRejection] }
+    }
     "work even for alternatives when the entity is not strict" in pendingUntilFixed {
       // pending, as in Pekko: the second alternative reads the original body again, which a network body allows once
       val read = new AtomicBoolean(false)
