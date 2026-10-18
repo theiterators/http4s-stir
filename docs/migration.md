@@ -217,9 +217,12 @@ instead. Other differences that remain:
   `IllegalStateException` ("The request entity was read before ...") instead of waiting on the connection until the
   idle timeout or arriving truncated, as Pekko fails the second materialization of a streamed entity: a chunked or
   length-less body with bytes (HTTP/2 included) can be read once, and a body of known length cannot be read again
-  after a read that stopped partway (it failed mid-stream, or the reader stopped before asking for the end). A body
-  of known length read to its end, and an empty body, are readable again as before. Alternatives that each run a form
-  directive read the body anew each, so wrap them in `toStrictEntity` to let several of them read a streamed body.
+  after a read that stopped partway (it failed mid-stream, or the reader stopped before asking for the end). An empty
+  body is readable again, and so is a body of known length read to its end when it is in memory (the testkit) or
+  arrived over Ember together with the request head; a larger one fails the later read with Ember's "Body Has Been
+  Consumed Completely Already" (500), much as Pekko re-reads only an entity that arrived strict. Alternatives that
+  each run a form directive read the body anew each (`formField(...) ~ formField(...)`), so wrap them in
+  `toStrictEntity` to let several of them read the body.
   This applies to in-memory test bodies too (a body built with `withBodyStream` has no length, so it can be read
   once); `toHttpRoutes` hands the next routes the request as received and is not covered.
 - `extractHost` and `host` read the authority of the request URI first, then the `Host` header, as Pekko reads the
