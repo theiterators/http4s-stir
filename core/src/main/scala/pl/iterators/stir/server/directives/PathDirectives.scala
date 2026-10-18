@@ -165,7 +165,8 @@ trait PathDirectives extends PathMatchers with ImplicitPathMatcherConstruction {
    *
    * @group path
    */
-  def redirectToTrailingSlashIfMissing(redirectionType: Status): Directive0 =
+  def redirectToTrailingSlashIfMissing(redirectionType: Status): Directive0 = {
+    RequestContext.requireRedirection(redirectionType)
     extractUri.flatMap { uri =>
       if (uri.path.endsWithSlash) pass
       else {
@@ -174,6 +175,7 @@ trait PathDirectives extends PathMatchers with ImplicitPathMatcherConstruction {
         redirect(newUri, redirectionType)
       }
     }
+  }
 
   /**
    * If the request path ends with a slash, redirect to the same uri without trailing slash in the path.
@@ -188,12 +190,14 @@ trait PathDirectives extends PathMatchers with ImplicitPathMatcherConstruction {
    *
    * @group path
    */
-  def redirectToNoTrailingSlashIfPresent(redirectionType: Status): Directive0 =
+  def redirectToNoTrailingSlashIfPresent(redirectionType: Status): Directive0 = {
+    RequestContext.requireRedirection(redirectionType)
     extractUri.flatMap { uri =>
       if (uri.path.endsWithSlash && !uri.path.isEmpty) {
         redirect(uri.withPath(uri.path.dropEndsWithSlash), redirectionType)
       } else pass
     }
+  }
 
   /**
    * Tries to match the inner route and if it fails with an empty rejection, it tries it again

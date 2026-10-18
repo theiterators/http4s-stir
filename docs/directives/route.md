@@ -97,7 +97,9 @@ val route: Route = reject(
 
 ## redirect
 
-Redirects the request to a different URI with the given status code.
+Redirects the request to a different URI with the given status code: a `Location` header and, as in Pekko, a short
+`text/html` body linking to the URI (none for `304 Not Modified`). The status must be a redirection (3xx); any other
+throws an `IllegalArgumentException` when the route is built.
 
 ```scala
 val route: Route = path("old") {
