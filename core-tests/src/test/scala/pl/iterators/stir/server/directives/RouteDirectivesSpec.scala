@@ -2,7 +2,8 @@ package pl.iterators.stir.server.directives
 
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import org.http4s.{ Header, Headers, Method, Request, Response, Status, Uri }
+import org.http4s.{ Charset, Header, Headers, MediaType, Method, Request, Response, Status, Uri }
+import org.http4s.headers.`Content-Type`
 import org.scalatest.wordspec.AnyWordSpec
 import org.typelevel.ci.CIString
 import pl.iterators.stir.marshalling.ToResponseMarshallable
@@ -131,7 +132,55 @@ class RouteDirectivesSpec extends AnyWordSpec with GenericRoutingSpec {
         redirect(Uri.unsafeFromString("/foo"), Status.Found)
       } ~> check {
         status shouldEqual Status.Found
-        headers.headers.head shouldEqual Header.Raw(CIString("Location"), "/foo")
+        headers.get(CIString("Location")).map(_.head.value) shouldEqual Some("/foo")
+        header[`Content-Type`] shouldEqual Some(`Content-Type`(MediaType.text.html, Charset.`UTF-8`))
+        responseAs[String] shouldEqual "The requested resource temporarily resides under <a href=\"/foo\">this URI</a>."
+      }
+    }
+
+    "produce Pekko's HTML body for each redirection that has one" in {
+      val bodies = List(
+        Status.MultipleChoices ->
+        "There are multiple options for the resource that the client may follow. The preferred one is <a href=\"/foo\">this URI</a>.",
+        Status.MovedPermanently -> "This and all future requests should be directed to <a href=\"/foo\">this URI</a>.",
+        Status.SeeOther ->
+        "The response to the request can be found under <a href=\"/foo\">this URI</a> using a GET method.",
+        Status.UseProxy -> "This single request is to be repeated via the proxy under <a href=\"/foo\">this URI</a>.",
+        Status.TemporaryRedirect ->
+        "The request should be repeated with <a href=\"/foo\">this URI</a>, but future requests can still use the original URI.",
+        Status.PermanentRedirect ->
+        "The request, and all future requests should be repeated using <a href=\"/foo\">this URI</a>.")
+      bodies.foreach { case (redirection, body) =>
+        Get() ~> redirect(Uri.unsafeFromString("/foo"), redirection) ~> check { responseAs[String] shouldEqual body }
+      }
+    }
+
+    "escape the URI in the HTML body" in {
+      // a Uri built from raw parts renders them as given
+      val uri = Uri(path = Uri.Path(Vector(Uri.Path.Segment.encoded("\"><script>&"))))
+      Get() ~> redirect(uri, Status.Found) ~> check {
+        responseAs[String] shouldEqual
+        "The requested resource temporarily resides under <a href=\"&quot;&gt;&lt;script&gt;&amp;\">this URI</a>."
+      }
+    }
+
+    "refuse a status that is not a redirection" in {
+      an[IllegalArgumentException] should be thrownBy redirect(Uri.unsafeFromString("/foo"), Status.Ok)
+      an[IllegalArgumentException] should be thrownBy redirectToTrailingSlashIfMissing(Status.Ok)
+      an[IllegalArgumentException] should be thrownBy redirectToNoTrailingSlashIfPresent(Status.Ok)
+    }
+
+    "fail the request when RequestContext.redirect gets a status that is not a redirection" in {
+      Get() ~> Route.seal { ctx => ctx.redirect(Uri.unsafeFromString("/foo"), Status.Ok) } ~> check {
+        status shouldEqual Status.InternalServerError
+      }
+    }
+
+    "send no body for a redirection without a template" in {
+      Get() ~> redirect(Uri.unsafeFromString("/foo"), Status.fromInt(399).toOption.get) ~> check {
+        status.code shouldEqual 399
+        responseAs[String] shouldEqual ""
+        header[`Content-Type`] shouldEqual None
       }
     }
 
@@ -141,6 +190,8 @@ class RouteDirectivesSpec extends AnyWordSpec with GenericRoutingSpec {
       } ~> check {
         status shouldEqual Status.NotModified
         headers.headers.head shouldEqual Header.Raw(CIString("Location"), "/foo")
+        header[`Content-Type`] shouldEqual None
+        responseAs[String] shouldEqual ""
       }
     }
   }

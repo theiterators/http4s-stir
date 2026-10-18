@@ -122,6 +122,10 @@ instead. Other differences that remain:
   `pathPrefix("a" / Segment)` rejects `/a//b` (it extracted `""`), and `Segments` stops before an empty segment.
   `Slash` matches each slash of a `//` (`"a" ~ Slash ~ Slash ~ "b"` matches `/a//b`), and `ignoreTrailingSlash` turns
   a trailing `//` into `/`, as in Pekko.
+- `redirect` (and `redirectToTrailingSlashIfMissing` / `redirectToNoTrailingSlashIfPresent`) send Pekko's short
+  `text/html` body linking to the URI (HTML-escaped: `&` is `&amp;`, where Pekko inserts the URI as is), and throw an
+  `IllegalArgumentException` for a status that is not a redirection (Pekko's `Redirection` type rules it out at
+  compile time); they sent an empty body and accepted any status.
 
 ## Behaviour changes in 0.7
 

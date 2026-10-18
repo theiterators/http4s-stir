@@ -154,7 +154,7 @@ val route: Route = ignoreTrailingSlash {
 
 ### redirectToTrailingSlashIfMissing
 
-If the request path does not end with a slash, redirects to the same URI with a trailing slash appended.
+If the request path does not end with a slash, redirects to the same URI with a trailing slash appended. The status must be a redirection (3xx); any other throws an `IllegalArgumentException` when the route is built.
 
 ```scala
 val route: Route = redirectToTrailingSlashIfMissing(Status.MovedPermanently) {
@@ -167,7 +167,7 @@ val route: Route = redirectToTrailingSlashIfMissing(Status.MovedPermanently) {
 
 ### redirectToNoTrailingSlashIfPresent
 
-If the request path ends with a slash (and is not the root path `/`), redirects to the same URI without the trailing slash.
+If the request path ends with a slash (and is not the root path `/`), redirects to the same URI without the trailing slash. The status must be a redirection (3xx); any other throws an `IllegalArgumentException` when the route is built.
 
 ```scala
 val route: Route = redirectToNoTrailingSlashIfPresent(Status.Found) {

@@ -1,7 +1,8 @@
 package pl.iterators.stir.server
 
 import cats.effect.{ IO, SyncIO }
-import org.http4s.{ EmptyBody, Request, Response, Status, Uri }
+import org.http4s.{ Charset, EmptyBody, MediaType, Request, Response, Status, Uri }
+import org.http4s.headers.{ `Content-Type`, Location }
 import org.http4s.Uri.Path
 import org.typelevel.vault.Key
 import pl.iterators.stir.marshalling.{ ContentNegotiation, ToResponseMarshallable, ToResponseMarshaller }
@@ -44,10 +45,12 @@ case class RequestContext(request: Request[IO], unmatchedPath: Path) {
   def reject(rejections: Rejection*): IO[RouteResult] = IO.pure(RouteResult.Rejected(rejections))
 
   /**
-   * Completes the request with redirection response of the given type to the given URI.
+   * Completes the request with a redirection response of the given type to the given URI: a `Location` header and,
+   * as in Pekko, a short `text/html` body linking to the (HTML-escaped) URI. Fails with an `IllegalArgumentException`
+   * if the status is not a redirection (3xx).
    */
   def redirect(uri: Uri, redirectionType: Status): IO[RouteResult] =
-    IO.pure(RouteResult.Complete(Response[IO](status = redirectionType).putHeaders(org.http4s.headers.Location(uri))))
+    IO(RequestContext.redirectResponse(uri, redirectionType)).map(RouteResult.Complete(_))
 
   /**
    * Bubbles the given error up the response chain where it is dealt with by the closest `handleExceptions`
@@ -57,6 +60,48 @@ case class RequestContext(request: Request[IO], unmatchedPath: Path) {
 }
 
 object RequestContext {
+
+  // Pekko's `htmlTemplate` of each redirection; 304 and redirections without one get no body
+  private val RedirectTemplates: Map[Int, String] = Map(
+    300 ->
+    "There are multiple options for the resource that the client may follow. The preferred one is <a href=\"%s\">this URI</a>.",
+    301 -> "This and all future requests should be directed to <a href=\"%s\">this URI</a>.",
+    302 -> "The requested resource temporarily resides under <a href=\"%s\">this URI</a>.",
+    303 -> "The response to the request can be found under <a href=\"%s\">this URI</a> using a GET method.",
+    305 -> "This single request is to be repeated via the proxy under <a href=\"%s\">this URI</a>.",
+    307 ->
+    "The request should be repeated with <a href=\"%s\">this URI</a>, but future requests can still use the original URI.",
+    308 -> "The request, and all future requests should be repeated using <a href=\"%s\">this URI</a>.")
+
+  /**
+   * The response `redirect` completes with: the status, a `Location` header and, as Pekko sends it, a short
+   * `text/html` body linking to the URI (HTML-escaped). Throws an `IllegalArgumentException` for a status that is
+   * not a redirection (3xx), which Pekko's `Redirection` type rules out at compile time.
+   */
+  private[stir] def redirectResponse(uri: Uri, redirectionType: Status): Response[IO] = {
+    requireRedirection(redirectionType)
+    val response = Response[IO](status = redirectionType).putHeaders(Location(uri))
+    RedirectTemplates.get(redirectionType.code) match {
+      case Some(template) =>
+        response.withEntity(template.replace("%s", escapeHtml(uri.renderString)))
+          .withContentType(`Content-Type`(MediaType.text.html, Charset.`UTF-8`))
+      case None => response
+    }
+  }
+
+  private[stir] def requireRedirection(status: Status): Unit =
+    require(status.responseClass == Status.Redirection, s"$status is not a redirection (3xx) status")
+
+  private def escapeHtml(s: String): String =
+    s.flatMap {
+      case '&'  => "&amp;"
+      case '<'  => "&lt;"
+      case '>'  => "&gt;"
+      case '"'  => "&quot;"
+      case '\'' => "&#39;"
+      case c    => c.toString
+    }
+
   def apply(request: Request[IO]): RequestContext =
     RequestContext(request, request.pathInfo)
 
