@@ -518,6 +518,14 @@ class PathDirectivesSpec extends RoutingSpec with Inside {
     })
     "accept [/a/b/c]".inThe(test("List(b, c):"))
     "reject [/a//b]".inThe(test())
+    "reject [/a//] (a trailing // after a literal is kept)".inThe(test())
+  }
+
+  """pathPrefix("x") with a trailing //""" should {
+    "accept [/x//] and leave // unmatched".inThe(testFor(pathPrefix("x") { echoUnmatchedPath })("//"))
+    "reject [/x//] in pathSingleSlash".inThe(testFor(pathPrefix("x") { pathSingleSlash { completeOk } })())
+    "accept [/caf%c3%a9//] (matched decoded) and leave // unmatched".inThe(
+      testFor(pathPrefix("café") { echoUnmatchedPath })("//"))
   }
 
   "pathPrefix(Segments)" should {

@@ -164,13 +164,30 @@ object PathMatcher extends ImplicitPathMatcherConstruction {
         val pathRendered = path.renderString
         if (pathRendered.startsWith(prefixRendered)) {
           val remaining = pathRendered.substring(prefixRendered.length)
-          Matched(Path.unsafeFromString(remaining), extractions)(ev)
+          Matched(restPath(remaining), extractions)(ev)
         } else if (!prefixHasEscape && pathRendered.indexOf('%') < 0) Unmatched // decoded == encoded
         else
           dropDecodedPrefix(tokens(path), prefixTokens) match {
-            case Some(rest) => Matched(Path.unsafeFromString(rest.map(_.encoded).mkString), extractions)(ev)
+            case Some(rest) => Matched(restPath(rest.map(_.encoded).mkString), extractions)(ev)
             case None       => Unmatched
           }
+      }
+    }
+
+  /**
+   * The unmatched rest of a path from its rendered form, keeping empty segments: `Path.unsafeFromString` drops a
+   * trailing empty one, so `"//"` would become `"/"`.
+   */
+  private def restPath(rendered: String): Path =
+    if (rendered.isEmpty) Path.empty
+    else {
+      val absolute = rendered.charAt(0) == '/'
+      val body = if (absolute) rendered.substring(1) else rendered
+      if (body.isEmpty) Path.Root
+      else {
+        val endsWithSlash = body.endsWith("/")
+        val inner = if (endsWithSlash) body.substring(0, body.length - 1) else body
+        Path(inner.split("/", -1).toVector.map(Path.Segment.encoded), absolute, endsWithSlash)
       }
     }
 
