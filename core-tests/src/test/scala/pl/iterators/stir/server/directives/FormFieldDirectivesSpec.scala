@@ -91,6 +91,43 @@ class FormFieldDirectivesSpec extends RoutingSpec {
       }
     }
 
+    "work for alternatives on a body that can be read once when they are wrapped in toStrictEntity" in {
+      val read = new AtomicBoolean(false)
+      val oneShot = Stream.eval(IO(read.getAndSet(true))).flatMap { again =>
+        if (again) Stream.raiseError[IO](new IllegalStateException("read twice"))
+        else Stream.emits("firstName=Mike&age=42".getBytes("UTF-8")).covary[IO]
+      }
+      Post().withBodyStream(oneShot) ~> addHeader(`Content-Type`(MediaType.application.`x-www-form-urlencoded`)) ~> {
+        toStrictEntity(1.second) {
+          concat(
+            formFields("firstName", "age".as[Int]) { (_, _) => reject },
+            formFields("firstName", "age".as[Int]) { (firstName, age) => complete(firstName + age) })
+        }
+      } ~> check { responseAs[String] shouldEqual "Mike42" }
+    }
+    "fail alternatives that each read a body that can be read once (500, as Pekko)" in {
+      val read = new AtomicBoolean(false)
+      val body = Stream.eval(IO(read.getAndSet(true))).flatMap { again =>
+        if (again) Stream.raiseError[IO](new IllegalStateException("read twice"))
+        else Stream.emits("firstName=Mike&age=42".getBytes("UTF-8")).covary[IO]
+      }
+      Post().withBodyStream(body) ~> addHeader(`Content-Type`(MediaType.application.`x-www-form-urlencoded`)) ~>
+      Route.seal {
+        concat(
+          formFields("firstName", "age".as[Int]) { (_, _) => reject },
+          formFields("firstName", "age".as[Int]) { (firstName, age) => complete(firstName + age) })
+      } ~> check { status shouldEqual Status.InternalServerError }
+    }
+    "reject formFieldMap alternatives that each read a body that can be read once (as Pekko)" in {
+      val read = new AtomicBoolean(false)
+      val body = Stream.eval(IO(read.getAndSet(true))).flatMap { again =>
+        if (again) Stream.raiseError[IO](new IllegalStateException("read twice"))
+        else Stream.emits("firstName=Mike&age=42".getBytes("UTF-8")).covary[IO]
+      }
+      Post().withBodyStream(body) ~> addHeader(`Content-Type`(MediaType.application.`x-www-form-urlencoded`)) ~> {
+        concat(formFieldMap(_ => reject), formFieldMap(fields => complete(fields.toString)))
+      } ~> check { rejection shouldBe a[MalformedRequestContentRejection] }
+    }
     "work even for alternatives when the entity is not strict" in pendingUntilFixed {
       // pending, as in Pekko: the second alternative reads the original body again, which a network body allows once
       val read = new AtomicBoolean(false)
