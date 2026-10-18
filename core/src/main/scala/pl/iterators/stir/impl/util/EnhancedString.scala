@@ -61,7 +61,8 @@ private[stir] class EnhancedString(val underlying: String) extends AnyVal {
     if (underlying eq null) "" else underlying
 
   /**
-   * Returns the ASCII encoded bytes of this string. Truncates characters to 8-bit byte value.
+   * Returns the ASCII encoded bytes of this string. Truncates characters to 8-bit byte value. Not used for comparing
+   * secrets (see `secure_==`); kept as ported from Pekko.
    */
   def asciiBytes: Array[Byte] = {
     val array = new Array[Byte](underlying.length)
@@ -88,13 +89,22 @@ private[stir] class EnhancedString(val underlying: String) extends AnyVal {
    * Simple equality testing will stop at the end of a matching prefix thereby leaking information
    * about the length of the matching prefix which can be exploited for per-byte progressive brute-forcing.
    *
+   * The strings are compared char by char (UTF-16 code units), so they are equal exactly when the strings are. Pekko
+   * compares the low 8 bits of each char, so there two strings whose chars differ only in their high byte (`"Łukasz"`
+   * and `"Aukasz"`) are equal.
+   *
    * @note This function leaks information about the length of each string as well as
    *       whether the two string have the same length.
    * @see [[http://codahale.com/a-lesson-in-timing-attacks/]]
    * @see [[http://rdist.root.org/2009/05/28/timing-attack-in-google-keyczar-library/]]
    * @see [[http://emerose.com/timing-attacks-explained]]
    */
-  def secure_==(other: String): Boolean = asciiBytes.secure_==(other.asciiBytes)
+  def secure_==(other: String): Boolean = {
+    @tailrec def xor(ix: Int = 0, result: Int = 0): Int =
+      if (ix < underlying.length) xor(ix + 1, result | (underlying.charAt(ix) ^ other.charAt(ix))) else result
+
+    other.length == underlying.length && xor() == 0
+  }
 
   /**
    * Determines whether the underlying String starts with the given character.

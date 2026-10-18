@@ -104,6 +104,12 @@ instead. Other differences that remain:
   Pekko creates them owner-only. The spool files of the other upload directives are owner-only.
 - `Route.seal` takes no log action; use `handleExceptions(ExceptionHandler.seal(handler)(logAction))` around the route.
 
+## Behaviour changes in 0.7.1
+
+- `CredentialsHelper.Provided#verify` compares the secrets character by character. It compared the low 8 bits of
+  each character, as Pekko does, so a password whose characters differ from the secret's only in their high byte was
+  accepted (`Aukasz` for `Łukasz`). Correct passwords verify as before.
+
 ## Behaviour changes in 0.7
 
 - `EntityRejection` is gone. `entity(as[T])` rejects an unsupported `Content-Type` with

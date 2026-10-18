@@ -23,7 +23,7 @@ val myAuthenticator: CredentialsHelper => Option[User] = {
 }
 ```
 
-`CredentialsHelper.Provided` exposes a `verify(secret)` method that performs a timing-safe comparison. A `verify(secret, hasher)` variant is available for hashed secrets. For custom comparison logic, `provideVerify(verifier: String => Boolean)` and `provideVerify(secret: String, verifier: (String, String) => Boolean)` methods allow supplying a custom verification function. `CredentialsHelper.Missing` represents the absence of credentials.
+`CredentialsHelper.Provided` exposes a `verify(secret)` method that performs a timing-safe comparison of the two strings, character by character (Pekko compares only the low 8 bits of each character). A `verify(secret, hasher)` variant is available for hashed secrets. For custom comparison logic, `provideVerify(verifier: String => Boolean)` and `provideVerify(secret: String, verifier: (String, String) => Boolean)` methods allow supplying a custom verification function. `CredentialsHelper.Missing` represents the absence of credentials.
 
 ## extractCredentials
 
