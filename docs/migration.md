@@ -49,6 +49,8 @@ instead. Other differences that remain:
 - `complete(status)` and `complete((status, headers))` for a status that allows an entity send an empty body, and so
   does the default exception handler's 500; Pekko sends the status's default message as `text/plain` (for example
   "The requested resource could not be found." for 404, "There was an internal server error." for 500).
+- `HeaderMagnet` and `ModeledCustomHeader` are not ported: `headerValueByType[T]` and `optionalHeaderValueByType[T]`
+  use http4s' `Header[T, _]` type class; define a custom header with `Header.create`.
 - `parameter("x".repeated)` returns the values in the order of the query string; Pekko returns them reversed.
 - A header that http4s cannot parse is ignored where Pekko may parse it leniently (`selectPreferredLanguage` reads
   `Accept-Language` q-values as leniently as Pekko).
@@ -130,6 +132,9 @@ instead. Other differences that remain:
 - `complete(status, value)` (with or without headers) sends no entity when the status allows none (1xx, 204, 205, 304),
   as Pekko does; the value used to be sent as the body. Without an entity such a response is not negotiated either
   (Pekko still answers a 204 with an unacceptable value's type with 406).
+- `headerValueByType[T]` rejects with `MissingHeaderRejection` naming the header as its http4s `Header` instance does
+  (`X-Custom-Header`), as Pekko names a modeled custom header; it used the Scala class name (`XCustomHeader`), which
+  only matched for http4s' own header classes. It now needs a `Header[T, _]` instance instead of a `ClassTag`.
 - `complete` negotiates the response's `Content-Type` against the request's `Accept` header, as Pekko does: a
   representation the client does not accept is rejected with `UnacceptedResponseContentTypeRejection` (406 when sealed,
   "Resource representation is only available with these types:" followed by the types). Clients sending `*/*` or no
