@@ -159,7 +159,8 @@ trait PathDirectives extends PathMatchers with ImplicitPathMatcherConstruction {
   def pathSingleSlash: Directive0 = pathPrefix(PathEnd)
 
   /**
-   * If the request path doesn't end with a slash, redirect to the same uri with trailing slash in the path.
+   * If the request path doesn't end with a slash, redirect to the same uri with trailing slash in the path. The status
+   * must be a redirection (3xx); any other throws an `IllegalArgumentException` when the directive is built.
    *
    * '''Caveat''': [[path]] without trailing slash and [[pathEnd]] directives will not match inside of this directive.
    *
@@ -178,7 +179,8 @@ trait PathDirectives extends PathMatchers with ImplicitPathMatcherConstruction {
   }
 
   /**
-   * If the request path ends with a slash, redirect to the same uri without trailing slash in the path.
+   * If the request path ends with a slash, redirect to the same uri without trailing slash in the path. The status
+   * must be a redirection (3xx); any other throws an `IllegalArgumentException` when the directive is built.
    *
    * Note, however, that this directive doesn't apply to a URI consisting of just a single slash.
    * HTTP does not support empty target paths, so that browsers will convert

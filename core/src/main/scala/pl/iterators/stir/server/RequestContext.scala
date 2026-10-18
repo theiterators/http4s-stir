@@ -101,6 +101,7 @@ object RequestContext {
       case '\'' => "&#39;"
       case c    => c.toString
     }
+
   def apply(request: Request[IO]): RequestContext =
     RequestContext(request, request.pathInfo)
 

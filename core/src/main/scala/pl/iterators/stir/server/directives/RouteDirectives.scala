@@ -24,8 +24,8 @@ trait RouteDirectives {
 
   /**
    * Completes the request with redirection response of the given type to the given URI: a `Location` header and,
-   * as in Pekko, a short `text/html` body linking to the URI (none for `304 Not Modified`). Throws an
-   * `IllegalArgumentException` when the route is built if the status is not a redirection (3xx).
+   * as in Pekko, a short `text/html` body linking to the URI (none for `304 Not Modified` or a 3xx without one).
+   * Throws an `IllegalArgumentException` when the route is built if the status is not a redirection (3xx).
    *
    * @group route
    */
