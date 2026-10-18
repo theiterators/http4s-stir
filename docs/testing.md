@@ -63,8 +63,9 @@ Get("/hello") ~> route ~> check {
 The `~>` operator applies the request to the route without starting an HTTP server. The route is sealed for exceptions but not for rejections, allowing rejection inspection in tests.
 
 A request that names no host (no `Host` header and a relative URI) gets `Host: example.com`, as every HTTP/1.1
-request to a server carries one and as Pekko's testkit defaults to `example.com`, so `host(...)` and `extractHost`
-work in tests. The URI stays as given (`extractUri` is `/hello`), as stir's server hands routes the URI as received.
+request to a server carries one, so `host(...)` and `extractHost` work in tests. Pekko's testkit uses the same host
+but puts it into an absolute request URI instead; stir keeps the URI as given (`extractUri` is `/hello`), as stir's
+server hands routes the URI as received.
 Declare an implicit `DefaultHostInfo` in the suite to use another host:
 
 ```scala
@@ -203,7 +204,8 @@ Builders that accept an entity require an implicit `EntityEncoder[IO, T]` for th
 
 A request built with a body (`Post("/", body)`) carries the `Content-Type` and `Content-Length` the body's
 `EntityEncoder` produces, as a real client would send; override with `addHeader`, which replaces those entity headers
-(`Content-Type`, `Content-Length`, `Transfer-Encoding`) and adds every other header after any of the same name.
+(`Content-Type`, `Content-Length`, `Transfer-Encoding`). As in Pekko, `addHeader` puts any other header before those
+of the same name (so a later `addHeader` is the one a typed lookup finds) and `addHeaders` puts them after.
 
 ## Request Transformers
 
@@ -211,9 +213,9 @@ Transform requests before sending them to a route:
 
 | Transformer | Description |
 |---|---|
-| `addHeader(header)` | Add a single header, keeping any of the same name (an entity header replaces the request's). |
+| `addHeader(header)` | Add a header before any of the same name, which stay (an entity header replaces the request's). |
 | `addHeader(name, value)` | Add a header by name and value strings. |
-| `addHeaders(first, more*)` | Add multiple headers. |
+| `addHeaders(first, more*)` | Add headers after the request's own. |
 | `removeHeader(name)` | Remove headers by name. |
 | `removeHeader[T]` | Remove headers by typed header type. |
 | `removeHeaders(names*)` | Remove headers by multiple names. |

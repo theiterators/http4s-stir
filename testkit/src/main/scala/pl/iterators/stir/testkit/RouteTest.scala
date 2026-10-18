@@ -155,9 +155,9 @@ trait RouteTest extends RequestBuilding with WSTestRequestBuilding with RouteTes
 
   /**
    * The `Host` header `~>` adds to a request that has neither a `Host` header nor an absolute URI, as every HTTP/1.1
-   * request to a server carries one (`example.com` by default, as Pekko's testkit; declare an implicit
-   * `DefaultHostInfo` to change it). Unlike Pekko's testkit the request URI stays as given, as stir's server hands
-   * routes the URI as received.
+   * request to a server carries one (`example.com` by default, the host Pekko's testkit uses; declare an implicit
+   * `DefaultHostInfo` to change it). Pekko's testkit puts the host into an absolute request URI instead; stir keeps
+   * the URI as given, as stir's server hands routes the URI as received.
    */
   case class DefaultHostInfo(host: Host)
   object DefaultHostInfo {
@@ -230,7 +230,7 @@ private[stir] object RouteTest {
 
   /** The request with the default `Host` header when it names no host itself. */
   def withDefaultHost(request: Request[IO], defaultHost: Host): Request[IO] =
-    if (request.uri.authority.isDefined || request.headers.get[Host].isDefined) request
+    if (request.uri.authority.isDefined || request.headers.get(CIString("Host")).isDefined) request
     else request.putHeaders(defaultHost)
 
   def runRouteClientServer(request: Request[IO], route: Route, timeout: FiniteDuration): IO[Response[IO]] = {

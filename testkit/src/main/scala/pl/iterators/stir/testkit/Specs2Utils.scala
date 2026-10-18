@@ -19,11 +19,14 @@ trait Specs2Utils extends MarshallingTestUtils {
   }
 
   def haveFailedWith(t: Throwable)(implicit runtime: IORuntime): Matcher[IO[_]] = new Matcher[IO[_]] {
-    override def apply[S <: IO[_]](s: Expectable[S]): MatchResult[S] = result(
-      Try(runWithinMarshallingTimeout(s.value)) == Failure(t),
-      s"${s.description} should have failed with $t",
-      s"${s.description} should not have failed with $t",
-      s)
+    override def apply[S <: IO[_]](s: Expectable[S]): MatchResult[S] = {
+      val outcome = Try(runWithinMarshallingTimeout(s.value))
+      result(
+        outcome == Failure(t),
+        s"${s.description} should have failed with $t",
+        s"${s.description} should have failed with $t, but gave $outcome",
+        s)
+    }
   }
 
   def unmarshalToValue[T](value: T)(implicit um: EntityDecoder[IO, T], runtime: IORuntime): Matcher[Request[IO]] =

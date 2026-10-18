@@ -2,7 +2,7 @@ package pl.iterators.stir.testkit
 
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import org.http4s.{ Header, Headers, MediaType, Response }
+import org.http4s.{ BasicCredentials, Header, Headers, MediaType, Response }
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
@@ -12,7 +12,7 @@ import pl.iterators.stir.server._
 import org.http4s.Status._
 import fs2._
 import org.http4s.Method.{ GET, PUT }
-import org.http4s.headers.{ `Content-Type`, `X-Forwarded-Proto` }
+import org.http4s.headers.{ `Content-Type`, `X-Forwarded-Proto`, Authorization }
 
 import java.util.Locale
 import scala.concurrent.duration._
@@ -199,12 +199,34 @@ class ScalatestRouteTestSpec extends AnyFreeSpec with Matchers with ScalatestRou
       }
     }
 
-    "adding a header twice keeps both, as Pekko" in {
+    "addHeader prepending and addHeaders appending, keeping headers of the same name, as Pekko" in {
       Get() ~> addHeader("X-A", "1") ~> addHeader("X-A", "2") ~> addHeaders(Header.Raw(CIString("X-A"), "3")) ~> {
         extractRequest(request =>
           complete(request.headers.get(CIString("X-A")).toList.flatMap(_.toList).map(_.value)
             .mkString(",")))
-      } ~> check { responseAs[String] shouldEqual "1,2,3" }
+      } ~> check { responseAs[String] shouldEqual "2,1,3" }
+    }
+
+    "a later addHeader overriding an earlier one for a typed lookup, as Pekko" in {
+      Get()                                                  ~> addHeader(Authorization(BasicCredentials("alice", "x"))) ~>
+      addHeader(Authorization(BasicCredentials("bob", "y"))) ~> {
+        extractRequest(r => complete(r.headers.get[Authorization].fold("")(_.credentials.toString)))
+      } ~> check { responseAs[String] should include(BasicCredentials("bob", "y").token) }
+    }
+
+    "an entity header from addHeader replacing the body's" in {
+      Post("/", "text") ~> addHeader(`Content-Type`(MediaType.application.json)) ~> {
+        extractRequest(request =>
+          complete(request.headers.get(CIString("Content-Type")).toList.flatMap(_.toList).size
+            .toString))
+      } ~> check { responseAs[String] shouldEqual "1" }
+    }
+
+    "a request's own unparseable Host header kept" in {
+      Get("/x")                                                                                        ~> addHeader("Host", "bad host") ~> extractRequest(r =>
+        complete(r.headers.get(CIString("Host")).toList.flatMap(_.toList).map(_.value).mkString(","))) ~> check {
+        responseAs[String] shouldEqual "bad host"
+      }
     }
 
     "a response with only the headers the route sent" in {
