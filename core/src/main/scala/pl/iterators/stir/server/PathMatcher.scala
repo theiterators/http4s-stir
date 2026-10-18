@@ -157,6 +157,7 @@ object PathMatcher extends ImplicitPathMatcherConstruction {
     if (prefix.isEmpty) provide(extractions)
     else new PathMatcher[L] {
       private val prefixRendered = prefix.renderString
+      private val prefixHasEscape = prefixRendered.indexOf('%') >= 0
       private lazy val prefixTokens = tokens(prefix).toList
 
       def apply(path: Path) = {
@@ -164,7 +165,7 @@ object PathMatcher extends ImplicitPathMatcherConstruction {
         if (pathRendered.startsWith(prefixRendered)) {
           val remaining = pathRendered.substring(prefixRendered.length)
           Matched(Path.unsafeFromString(remaining), extractions)(ev)
-        } else if (pathRendered.indexOf('%') < 0 && prefixRendered.indexOf('%') < 0) Unmatched // decoded == encoded
+        } else if (!prefixHasEscape && pathRendered.indexOf('%') < 0) Unmatched // decoded == encoded
         else
           dropDecodedPrefix(tokens(path), prefixTokens) match {
             case Some(rest) => Matched(Path.unsafeFromString(rest.map(_.encoded).mkString), extractions)(ev)

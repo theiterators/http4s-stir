@@ -38,6 +38,7 @@ class PathDirectivesSpec extends RoutingSpec with Inside {
     "accept [/caf%c3%a9] and clear the unmatchedPath".inThe(test(""))
     "reject [/caf%C3%A9x]".inThe(test())
     "reject [/cafe]".inThe(test())
+    "reject [/caf%c3%a8] (a different character, compared decoded)".inThe(test())
   }
 
   """path("a b")""" should {
@@ -55,6 +56,7 @@ class PathDirectivesSpec extends RoutingSpec with Inside {
       testFor(pathPrefix("foo") { echoUnmatchedPath })("bar"))
     "accept [/foo%2Fbar] (matched encoded) and leave the rest of the segment unmatched".inThe(
       testFor(pathPrefix("foo") { echoUnmatchedPath })("%2Fbar"))
+    "reject [/bar/%41] (a '%' only in a later segment)".inThe(testFor(pathPrefix("foo") { echoUnmatchedPath })())
     "accept [/fo%6F%2Fbar] (matched decoded) and keep the encoded slash in the rest of the segment".inThe(
       testFor(pathPrefix("foo") { echoUnmatchedPath })("%2Fbar"))
   }
