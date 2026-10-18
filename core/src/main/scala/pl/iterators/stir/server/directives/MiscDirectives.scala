@@ -312,8 +312,8 @@ object MiscDirectives extends MiscDirectives {
    * order of the header, with `*` last.
    */
   private def sortedLanguageRanges(acceptLanguage: `Accept-Language`): List[LanguageTag] =
-    acceptLanguage.values.toList.map(lowerCase).sortBy { range =>
-      if (range.primaryTag == "*") 1.0 else -(2.0 * range.subTags.size + range.q.thousandths / 1000.0)
+    acceptLanguage.values.toList.map(lowerCase).sortBy { range => // Pekko's -(2 * subTags + q), exactly
+      if (range.primaryTag == "*") (1, 0, 0) else (0, -range.subTags.size, -range.q.thousandths)
     }
 
   /** The q-value of the first range matching the language, as Pekko's `qValueFor`; zero when none matches. */

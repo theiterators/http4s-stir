@@ -77,6 +77,10 @@ class MiscDirectivesSpec extends RoutingSpec {
       // equally specific ranges for the same language: the higher q-value wins, as in Pekko
       selectFrom("de", "en") shouldEqual "en"
     }
+    "Accept-Language: en-US;q=0.1, de;q=0.15, en-us;q=0.2".test { selectFrom =>
+      // the later, higher en-us outranks the earlier en-US, so en-US beats de, as in Pekko
+      selectFrom("de", "en-US") shouldEqual "en-US"
+    }
     "Accept-Language: en-US;q=0.2, en;q=0.9, en-us;q=0.1".test { selectFrom =>
       selectFrom("en", "en-US") shouldEqual "en"
       selectFrom("en-US", "de") shouldEqual "en-US"
