@@ -26,8 +26,10 @@ Extracts the client's IP address as an `Option[IpAddress]`. The IP is resolved f
 
 1. `X-Forwarded-For` header
 2. `X-Real-Ip` header
-3. `Remote-Address` header
-4. TCP connection remote address
+3. TCP connection remote address
+
+A `Remote-Address` header is ignored, as in Pekko, since any client can send one. The two forwarding headers are only
+trustworthy behind a proxy that sets or strips them; use `extractDirectClientIP` to ignore them.
 
 ```scala
 import com.comcast.ip4s.IpAddress

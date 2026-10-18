@@ -121,10 +121,20 @@ class MiscDirectivesSpec extends RoutingSpec {
         extractClientIP { echoComplete }
       } ~> check { responseAs[String] shouldEqual "Some(2.3.4.5)" }
     }
-    "extract from a (synthetic) Remote-Address header" in {
+    "ignore a client-sent Remote-Address header and use the connection address" in {
+      Get() ~> addHeader(Header.Raw(CIString("Remote-Address"), "1.2.3.4")) ~> withConnection("5.6.7.8") ~> {
+        extractClientIP { echoComplete }
+      } ~> check { responseAs[String] shouldEqual "Some(5.6.7.8)" }
+    }
+    "ignore a client-sent Remote-Address header without a recorded connection" in {
       Get() ~> addHeader(Header.Raw(CIString("Remote-Address"), "1.2.3.4")) ~> {
         extractClientIP { echoComplete }
-      } ~> check { responseAs[String] shouldEqual "Some(1.2.3.4)" }
+      } ~> check { responseAs[String] shouldEqual "None" }
+    }
+    "fall back to the connection address without forwarding headers" in {
+      Get() ~> withConnection("5.6.7.8") ~> {
+        extractClientIP { echoComplete }
+      } ~> check { responseAs[String] shouldEqual "Some(5.6.7.8)" }
     }
     "extract from a X-Real-IP header" in {
       Get() ~> addHeader(Header.Raw(CIString("X-Real-Ip"), "1.2.3.4")) ~> {
@@ -133,7 +143,7 @@ class MiscDirectivesSpec extends RoutingSpec {
     }
     "select X-Real-Ip when both X-Real-Ip and Remote-Address headers are present" in {
       Get()                                                ~> addHeaders(Header.Raw(CIString("X-Real-Ip"), "1.2.3.4"),
-        Header.Raw(CIString("Remote-Address"), "1.2.3.4")) ~> {
+        Header.Raw(CIString("Remote-Address"), "5.6.7.8")) ~> {
         extractClientIP { echoComplete }
       } ~> check { responseAs[String] shouldEqual "Some(1.2.3.4)" }
     }

@@ -26,8 +26,10 @@ trait MiscDirectives {
     Directive { inner => if (check) inner(()) else reject(ValidationRejection(errorMsg, None)) }
 
   /**
-   * Extracts the client's IP from the X-Forwarded-For, X-Real-Ip or Remote-Address header, or the TCP connection the
-   * request was received from (in that order of priority).
+   * Extracts the client's IP from the X-Forwarded-For or X-Real-Ip header, or the TCP connection the request was
+   * received from (in that order of priority). A `Remote-Address` header is ignored, as in Pekko: clients can send one,
+   * and only the server knows the connection's address. The forwarding headers are only trustworthy behind a proxy
+   * that sets or strips them.
    *
    * @group misc
    */
@@ -142,13 +144,10 @@ object MiscDirectives extends MiscDirectives {
   private val _extractClientIP: Directive1[Option[IpAddress]] =
     optionalHeaderValueByType[`X-Forwarded-For`].flatMap { xForwardedFor =>
       optionalHeaderValueByName("X-Real-Ip").flatMap { xRealIp =>
-        optionalHeaderValueByName("Remote-Address").flatMap { remoteAddress =>
-          extractRequest.map { request =>
-            xForwardedFor.flatMap(_.values.head)
-              .orElse(xRealIp.flatMap(IpAddress.fromString))
-              .orElse(remoteAddress.flatMap(IpAddress.fromString))
-              .orElse(request.remote.map(_.host))
-          }
+        extractRequest.map { request =>
+          xForwardedFor.flatMap(_.values.head)
+            .orElse(xRealIp.flatMap(IpAddress.fromString))
+            .orElse(request.remote.map(_.host))
         }
       }
     }
