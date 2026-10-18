@@ -1,5 +1,6 @@
 package pl.iterators.stir.impl.util
 
+import java.nio.charset.StandardCharsets
 import java.util.Locale
 import scala.annotation.tailrec
 import scala.collection.immutable
@@ -88,13 +89,17 @@ private[stir] class EnhancedString(val underlying: String) extends AnyVal {
    * Simple equality testing will stop at the end of a matching prefix thereby leaking information
    * about the length of the matching prefix which can be exploited for per-byte progressive brute-forcing.
    *
+   * The strings are compared as UTF-8 bytes. Pekko compares the low 8 bits of each char, so there two strings differing
+   * only above U+00FF (`"Łukasz"` and `"Aukasz"`) are equal.
+   *
    * @note This function leaks information about the length of each string as well as
    *       whether the two string have the same length.
    * @see [[http://codahale.com/a-lesson-in-timing-attacks/]]
    * @see [[http://rdist.root.org/2009/05/28/timing-attack-in-google-keyczar-library/]]
    * @see [[http://emerose.com/timing-attacks-explained]]
    */
-  def secure_==(other: String): Boolean = asciiBytes.secure_==(other.asciiBytes)
+  def secure_==(other: String): Boolean =
+    underlying.getBytes(StandardCharsets.UTF_8).secure_==(other.getBytes(StandardCharsets.UTF_8))
 
   /**
    * Determines whether the underlying String starts with the given character.
