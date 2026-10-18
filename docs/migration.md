@@ -115,6 +115,8 @@ instead. Other differences that remain:
 - Literal path segments are compared decoded, as Pekko does: `path("café")` also matches `/caf%c3%a9` (lower-case
   escapes) and `path("foo")` matches `/fo%6F`. They were compared in http4s' encoding, so only the escapes it
   produces itself matched.
+- `selectPreferredLanguage` compares language tags case-insensitively, as Pekko does: `Accept-Language: EN-us`
+  selects `en-US`. It still returns the alternative as it was given.
 
 ## Behaviour changes in 0.7
 

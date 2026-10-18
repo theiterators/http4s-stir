@@ -66,6 +66,17 @@ class MiscDirectivesSpec extends RoutingSpec {
       selectFrom("hu", "es") shouldEqual "hu"
       selectFrom("es", "hu") shouldEqual "es"
     }
+    "Accept-Language: EN-us, de;q=0.5".test { selectFrom =>
+      // language tags are case-insensitive (RFC 4647 2.1); the alternative is returned as given
+      selectFrom("de", "en-US") shouldEqual "en-US"
+      selectFrom("de", "en-us-x") shouldEqual "en-us-x"
+      selectFrom("de", "en") shouldEqual "de" // the range en-US does not match the less specific en
+      selectFrom("fr", "DE") shouldEqual "DE"
+    }
+    "Accept-Language: de-DE;q=0, DE;q=0.4, en;q=0.3".test { selectFrom =>
+      selectFrom("en", "de-de") shouldEqual "en"
+      selectFrom("en", "de-AT") shouldEqual "de-AT"
+    }
     "Accept-Language: en, *;q=.5, de;q=0".test { selectFrom =>
       selectFrom("es", "de") shouldEqual "es"
       selectFrom("de", "es") shouldEqual "es"

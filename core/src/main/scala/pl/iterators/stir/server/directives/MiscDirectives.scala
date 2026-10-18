@@ -10,6 +10,7 @@ import org.typelevel.ci.CIString
 import org.typelevel.vault.Key
 import pl.iterators.stir.server._
 
+import java.util.Locale
 import java.util.concurrent.CancellationException
 
 trait MiscDirectives {
@@ -77,8 +78,9 @@ trait MiscDirectives {
    * If there are several best language alternatives that the client
    * has equal preference for (even if this preference is zero!)
    * the order of the arguments is used as a tie breaker (First one wins).
-   * q-values are read as leniently as Pekko does (`q=.5`, more than three decimals, spaces around `=`); a header
-   * that still cannot be parsed is ignored.
+   * Tags are compared case-insensitively and the alternative is returned as given. q-values are read as leniently
+   * as Pekko does (`q=.5`, more than three decimals, spaces around `=`); a header that still cannot be parsed is
+   * ignored.
    *
    * @group misc
    */
@@ -86,8 +88,10 @@ trait MiscDirectives {
     extract(ctx => MiscDirectives.acceptLanguage(ctx.request)).flatMap {
       case Some(acceptLanguage) =>
         val availableLanguages = first +: more
-        val preferredLanguage =
-          availableLanguages.map(l => (l, acceptLanguage.qValue(l))).filter(_._2.isAcceptable).maxByOption(_._2)
+        // language tags are case-insensitive (RFC 4647 2.1), http4s compares them as given
+        val lowered = `Accept-Language`(acceptLanguage.values.map(MiscDirectives.lowerCase))
+        val preferredLanguage = availableLanguages.map(l => (l, lowered.qValue(MiscDirectives.lowerCase(l))))
+          .filter(_._2.isAcceptable).maxByOption(_._2)
         provide(preferredLanguage.map(_._1).getOrElse(first))
       case None => provide(first)
     }
@@ -299,6 +303,10 @@ object MiscDirectives extends MiscDirectives {
 
   private val _requestEntityPresent: Directive0 =
     knownEmpty.flatMap(if (_) reject(RequestEntityExpectedRejection) else pass)
+
+  private def lowerCase(tag: LanguageTag): LanguageTag =
+    tag.copy(primaryTag = tag.primaryTag.toLowerCase(Locale.ROOT),
+      subTags = tag.subTags.map(_.toLowerCase(Locale.ROOT)))
 
   /**
    * The `Accept-Language` header with its q-values read as Pekko reads them: http4s rejects `.5` and spaces around
