@@ -8,6 +8,8 @@ import org.typelevel.ci.CIString
 import pl.iterators.stir.marshalling.ToResponseMarshallable
 import pl.iterators.stir.server._
 
+import java.util.concurrent.atomic.AtomicReference
+
 class RouteDirectivesSpec extends AnyWordSpec with GenericRoutingSpec {
   override implicit def runtime: IORuntime = IORuntime.global
 
@@ -75,21 +77,15 @@ class RouteDirectivesSpec extends AnyWordSpec with GenericRoutingSpec {
         Get() ~> complete(IO.pure("yes")) ~> check { responseAs[String] shouldEqual "yes" }
       }
       object TestException extends RuntimeException("Boom")
-      "for failed futures and marshalling" in // EventFilter[TestException.type](
-//        occurrences = 1,
-//        message = BasicRouteSpecs.defaultExnHandler500Error("Boom")).intercept {
-      Get() ~> complete(IO.raiseError[String](TestException)) ~>
-      check {
-        status shouldEqual Status.InternalServerError
-        responseAs[String] shouldEqual ""
+      "for failed futures and marshalling" in {
+        val lines = new AtomicReference[List[String]](Nil)
+        Get() ~> handleExceptions(recordingDefaultHandler(lines))(complete(IO.raiseError[String](TestException))) ~>
+        check {
+          status shouldEqual Status.InternalServerError
+          responseAs[String] shouldEqual "" // Pekko: "There was an internal server error."
+          lines.get shouldEqual List(logged500("Boom"))
+        }
       }
-//      }
-//      "for futures failed with a RejectionError" in {
-//        Get() ~> complete(IO.raiseError[String](RejectionError(AuthorizationFailedRejection)).future) ~>
-//          check {
-//            rejection shouldEqual AuthorizationFailedRejection
-//          }
-//      }
     }
 
     "allow easy handling of futured ToResponseMarshallers" in {
@@ -113,17 +109,6 @@ class RouteDirectivesSpec extends AnyWordSpec with GenericRoutingSpec {
                 case AlreadyRegistered =>
                   import org.http4s.circe.CirceEntityEncoder._
 
-                  //                  import SprayJsonSupport._
-                  //
-                  //                  // FIXME: Scala 3 workaround, which cannot figure out the implicit itself
-                  //                  // Needs to avoid importing more implicits accidentally from DefaultJsonProtocol to avoid ambiguity in
-                  //                  // Scala 2
-                  //                  implicit val mapFormat: spray.json.RootJsonFormat[Map[String, String]] = {
-                  //                    import spray.json.DefaultJsonProtocol
-                  //                    import DefaultJsonProtocol._
-                  //                    DefaultJsonProtocol.mapFormat
-                  //                  }
-
                   Status.BadRequest -> Map[String, String]("error" -> "User already Registered")
               }
             }
@@ -138,45 +123,6 @@ class RouteDirectivesSpec extends AnyWordSpec with GenericRoutingSpec {
         responseAs[String] shouldEqual ""
       }
     }
-//    "do Content-Type negotiation for multi-marshallers" in {
-//      val route = get & complete(Data("Ida", 83))
-//
-//      import pekko.http.scaladsl.model.headers.Accept
-//      Get().withHeaders(Accept(MediaTypes.`application/json`)) ~> route ~> check {
-//        responseAs[String] shouldEqual
-//          """{"age":83,"name":"Ida"}"""
-//      }
-//      Get().withHeaders(Accept(MediaTypes.`text/xml`)) ~> route ~> check {
-//        responseAs[xml.NodeSeq] shouldEqual <data><name>Ida</name><age>83</age></data>
-//      }
-//      Get().withHeaders(Accept(MediaTypes.`text/plain`)) ~> Route.seal(route) ~> check {
-//        status shouldEqual StatusCodes.NotAcceptable
-//      }
-//    }
-//    "avoid marshalling too eagerly for multi-marshallers" in {
-//      case class MyClass(value: String)
-//
-//      implicit val superMarshaller = {
-//        val jsonMarshaller =
-//          Marshaller.stringMarshaller(MediaTypes.`application/json`)
-//            .compose[MyClass] { mc =>
-//              println(s"jsonMarshaller marshall $mc")
-//              mc.value
-//            }
-//        val textMarshaller = Marshaller.stringMarshaller(MediaTypes.`text/html`)
-//          .compose[MyClass] { mc =>
-//            println(s"textMarshaller marshall $mc")
-//            throw new IllegalArgumentException(s"Unexpected value $mc")
-//          }
-//
-//        Marshaller.oneOf(jsonMarshaller, textMarshaller)
-//      }
-//      val request =
-//        HttpRequest(uri = "/test")
-//          .withHeaders(Accept(MediaTypes.`application/json`))
-//      val response = Await.result(Marshal(MyClass("test")).toResponseFor(request), 1.second)
-//      response.status shouldEqual StatusCodes.OK
-//    }
   }
 
   "the redirect directive" should {
@@ -248,17 +194,21 @@ class RouteDirectivesSpec extends AnyWordSpec with GenericRoutingSpec {
       }
     }
 
-    "fail if the function returns a failure" in // EventFilter[RuntimeException](occurrences = 1).intercept {
-    Get("/fail") ~> route ~> check {
-      status shouldBe Status.InternalServerError
+    "fail if the function returns a failure" in {
+      val lines = new AtomicReference[List[String]](Nil)
+      Get("/fail") ~> handleExceptions(recordingDefaultHandler(lines))(route) ~> check {
+        status shouldBe Status.InternalServerError
+        lines.get shouldEqual List(logged500("failure!"))
+      }
     }
-//    }
 
-    "fail if the function throws" in // EventFilter[RuntimeException](occurrences = 1).intercept {
-    Get("/throw") ~> route ~> check {
-      status shouldBe Status.InternalServerError
+    "fail if the function throws" in {
+      val lines = new AtomicReference[List[String]](Nil)
+      Get("/throw") ~> handleExceptions(recordingDefaultHandler(lines))(route) ~> check {
+        status shouldBe Status.InternalServerError
+        lines.get shouldEqual List(logged500("oops"))
+      }
     }
-//    }
   }
 
   "the handleSync directive with PartialFunction" should {
@@ -283,26 +233,12 @@ class RouteDirectivesSpec extends AnyWordSpec with GenericRoutingSpec {
       }
     }
 
-    "fail if the function throws" in // EventFilter[RuntimeException](occurrences = 1).intercept {
-    Get("/throw") ~> route ~> check {
-      status shouldEqual Status.InternalServerError
+    "fail if the function throws" in {
+      val lines = new AtomicReference[List[String]](Nil)
+      Get("/throw") ~> handleExceptions(recordingDefaultHandler(lines))(route) ~> check {
+        status shouldBe Status.InternalServerError
+        lines.get shouldEqual List(logged500("oops"))
+      }
     }
-//    }
   }
-
-//  case class Data(name: String, age: Int)
-//  object Data {
-//    import spray.json.DefaultJsonProtocol._
-//    import SprayJsonSupport._
-//    import ScalaXmlSupport._
-//
-//    val jsonMarshaller: ToEntityMarshaller[Data] = jsonFormat2(Data.apply)
-//
-//    val xmlMarshaller: ToEntityMarshaller[Data] = Marshaller.combined { (data: Data) =>
-//      <data><name>{data.name}</name><age>{data.age}</age></data>
-//    }
-//
-//    implicit val dataMarshaller: ToResponseMarshaller[Data] =
-//      Marshaller.oneOf(jsonMarshaller, xmlMarshaller)
-//  }
 }
