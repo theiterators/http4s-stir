@@ -106,7 +106,11 @@ class FormFieldDirectivesSpec extends RoutingSpec {
       } ~> check { responseAs[String] shouldEqual "Mike42" }
     }
     "fail alternatives that each read a body that can be read once (500, as Pekko)" in {
-      val body = Stream.emits("firstName=Mike&age=42".getBytes("UTF-8")).covary[IO]
+      val read = new AtomicBoolean(false)
+      val body = Stream.eval(IO(read.getAndSet(true))).flatMap { again =>
+        if (again) Stream.raiseError[IO](new IllegalStateException("read twice"))
+        else Stream.emits("firstName=Mike&age=42".getBytes("UTF-8")).covary[IO]
+      }
       Post().withBodyStream(body) ~> addHeader(`Content-Type`(MediaType.application.`x-www-form-urlencoded`)) ~>
       Route.seal {
         concat(
@@ -115,7 +119,11 @@ class FormFieldDirectivesSpec extends RoutingSpec {
       } ~> check { status shouldEqual Status.InternalServerError }
     }
     "reject formFieldMap alternatives that each read a body that can be read once (as Pekko)" in {
-      val body = Stream.emits("firstName=Mike&age=42".getBytes("UTF-8")).covary[IO]
+      val read = new AtomicBoolean(false)
+      val body = Stream.eval(IO(read.getAndSet(true))).flatMap { again =>
+        if (again) Stream.raiseError[IO](new IllegalStateException("read twice"))
+        else Stream.emits("firstName=Mike&age=42".getBytes("UTF-8")).covary[IO]
+      }
       Post().withBodyStream(body) ~> addHeader(`Content-Type`(MediaType.application.`x-www-form-urlencoded`)) ~> {
         concat(formFieldMap(_ => reject), formFieldMap(fields => complete(fields.toString)))
       } ~> check { rejection shouldBe a[MalformedRequestContentRejection] }
