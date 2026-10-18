@@ -197,16 +197,12 @@ object RejectionHandler {
       }
       .handle {
         case MissingAttributeRejection(_) =>
-          rejectRequestEntityAndComplete((InternalServerError, "Internal Server Error"))
+          rejectRequestEntityAndComplete((InternalServerError, "There was an internal server error."))
       }
       .handle {
         case InvalidOriginRejection(allowedOrigins) =>
           rejectRequestEntityAndComplete((Forbidden,
             s"Allowed `Origin` header values: ${allowedOrigins.mkString(", ")}"))
-      }
-      .handle {
-        case RequestEntityExpectedRejection =>
-          rejectRequestEntityAndComplete((BadRequest, "Request entity expected but not supplied"))
       }
       .handle {
         case MissingQueryParamRejection(paramName) =>
@@ -216,6 +212,10 @@ object RejectionHandler {
         case InvalidRequiredValueForQueryParamRejection(paramName, requiredValue, _) =>
           rejectRequestEntityAndComplete((NotFound,
             s"Request is missing required value '$requiredValue' for query parameter '$paramName'"))
+      }
+      .handle {
+        case RequestEntityExpectedRejection =>
+          rejectRequestEntityAndComplete((BadRequest, "Request entity expected but not supplied"))
       }
       .handle {
         case TooManyRangesRejection(_) =>
