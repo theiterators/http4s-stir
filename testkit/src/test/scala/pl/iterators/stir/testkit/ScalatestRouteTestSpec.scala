@@ -199,5 +199,56 @@ class ScalatestRouteTestSpec extends AnyFreeSpec with Matchers with ScalatestRou
       }
     }
 
+    "adding a header twice keeps both, as Pekko" in {
+      Get() ~> addHeader("X-A", "1") ~> addHeader("X-A", "2") ~> addHeaders(Header.Raw(CIString("X-A"), "3")) ~> {
+        extractRequest(request =>
+          complete(request.headers.get(CIString("X-A")).toList.flatMap(_.toList).map(_.value)
+            .mkString(",")))
+      } ~> check { responseAs[String] shouldEqual "1,2,3" }
+    }
+
+    "a response with only the headers the route sent" in {
+      Get() ~> complete("hi") ~> check {
+        response.headers.headers.map(_.name.toString).sorted shouldEqual List("Content-Length", "Content-Type")
+      }
+    }
+
+    "a default Host header for a request that names no host, as Pekko (example.com)" in {
+      Get("/x?a=1") ~> extractUri(uri => complete(uri.renderString)) ~> check {
+        responseAs[String] shouldEqual "/x?a=1"
+      }
+      Get("/x") ~> extractHost(host => complete(host)) ~> check { responseAs[String] shouldEqual "example.com" }
+      Get("/x") ~> host("example.com")(complete("ok")) ~> check { status shouldEqual Ok }
+    }
+
+    "the request's own Host header" in {
+      Get("/x")                                                                                        ~> addHeader("Host", "api.test:8080") ~> extractRequest(r =>
+        complete(r.headers.get(CIString("Host")).toList.flatMap(_.toList).map(_.value).mkString(","))) ~> check {
+        responseAs[String] shouldEqual "api.test:8080"
+      }
+    }
+
+    "no Host header for an absolute request URI" in {
+      Get("https://other.test/x")                                                       ~>
+      extractRequest(r => complete(r.headers.get(CIString("Host")).isDefined.toString)) ~>
+      check { responseAs[String] shouldEqual "false" }
+      Get("https://other.test/x") ~> extractHost(host => complete(host)) ~> check {
+        responseAs[String] shouldEqual "other.test"
+      }
+    }
+
+    "a custom default host" in {
+      implicit val defaultHost: DefaultHostInfo = DefaultHostInfo(org.http4s.headers.Host("custom.test"))
+      Get("/x") ~> extractHost(host => complete(host)) ~> check { responseAs[String] shouldEqual "custom.test" }
+    }
+
+    "evaluateTo failing instead of hanging on an IO that never completes" in {
+      val failure = intercept[Exception] { IO.never[Int] should evaluateTo(1) }
+      failure.getMessage should include("1 second")
+    }
+
+    "haveFailedWith failing instead of hanging on an IO that never completes" in {
+      intercept[Exception] { IO.never[Int] should haveFailedWith(new RuntimeException) }
+    }
   }
 }

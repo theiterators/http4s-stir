@@ -52,12 +52,21 @@ trait RequestBuilding {
   val Head = new RequestBuilder(HEAD)
   val Query = new RequestBuilder(QUERY)
 
-  def addHeader(header: Header.ToRaw): RequestTransformer = _.putHeaders(header)
+  /**
+   * Adds the header after the request's headers, keeping those of the same name, as Pekko's `addHeader`. The
+   * entity headers (`Content-Type`, `Content-Length`, `Transfer-Encoding`), which Pekko keeps in the entity rather
+   * than among the headers, replace the request's own instead.
+   */
+  def addHeader(header: Header.ToRaw): RequestTransformer = addHeaders(header)
 
   def addHeader(headerName: String, headerValue: String): RequestTransformer =
-    _.putHeaders(Header.Raw(CIString(headerName), headerValue))
+    addHeader(Header.Raw(CIString(headerName), headerValue))
 
-  def addHeaders(first: Header.ToRaw, more: Header.ToRaw*): RequestTransformer = _.putHeaders(Seq(first) ++ more: _*)
+  def addHeaders(first: Header.ToRaw, more: Header.ToRaw*): RequestTransformer = request => {
+    val added = (first +: more).flatMap(_.values)
+    val replaced = added.map(_.name).filter(RequestBuilding.EntityHeaders).toSet
+    request.withHeaders(Headers(request.headers.headers.filterNot(h => replaced(h.name)) ++ added))
+  }
 
   def mapHeaders(f: Headers => Headers): RequestTransformer = _.transformHeaders(f)
 
@@ -83,4 +92,7 @@ trait RequestBuilding {
   implicit def header2AddHeader(header: Header.ToRaw): RequestTransformer = addHeader(header)
 }
 
-object RequestBuilding extends RequestBuilding
+object RequestBuilding extends RequestBuilding {
+  private val EntityHeaders: Set[CIString] =
+    Set(CIString("Content-Type"), CIString("Content-Length"), CIString("Transfer-Encoding"))
+}

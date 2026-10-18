@@ -12,7 +12,7 @@ trait Specs2Utils extends MarshallingTestUtils {
 
   def evaluateTo[T](value: T)(implicit runtime: IORuntime): Matcher[IO[T]] = new Matcher[IO[T]] {
     override def apply[S <: IO[T]](s: Expectable[S]): MatchResult[S] = result(
-      s.value.unsafeRunSync() == value,
+      runWithinMarshallingTimeout(s.value) == value,
       s"${s.description} should evaluate to $value",
       s"${s.description} should not evaluate to $value",
       s)
@@ -20,7 +20,7 @@ trait Specs2Utils extends MarshallingTestUtils {
 
   def haveFailedWith(t: Throwable)(implicit runtime: IORuntime): Matcher[IO[_]] = new Matcher[IO[_]] {
     override def apply[S <: IO[_]](s: Expectable[S]): MatchResult[S] = result(
-      Try(s.value.unsafeRunSync()) == Failure(t),
+      Try(runWithinMarshallingTimeout(s.value)) == Failure(t),
       s"${s.description} should have failed with $t",
       s"${s.description} should not have failed with $t",
       s)

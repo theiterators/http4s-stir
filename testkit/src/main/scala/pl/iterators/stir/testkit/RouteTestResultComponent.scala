@@ -40,7 +40,7 @@ trait RouteTestResultComponent {
       }
     }
 
-    def response(implicit runtime: IORuntime): Response[IO] = rawResponse.withEntity(entity)
+    def response(implicit runtime: IORuntime): Response[IO] = rawResponse.withBodyStream(entity)
 
     /** Returns a "fresh" entity with a "fresh" unconsumed byte- or chunk stream (if not strict) */
     def entity(implicit runtime: IORuntime): EntityBody[IO] = entityRecreator(runtime)
