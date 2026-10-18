@@ -94,6 +94,14 @@ class SecurityDirectivesSpec extends RoutingSpec {
         doBasicAuthVerify("Łukasz") { echoComplete }
       } ~> check { rejection shouldEqual AuthenticationFailedRejection(CredentialsRejected, basicChallenge) }
     }
+    "reject a hashed password with a lone surrogate against a secret of '?'" in {
+      // UTF-8 encoding turns a lone surrogate into '?', so a byte comparison would take them as equal
+      val route = authenticateBasicPF("MyRealm",
+        { case p @ CredentialsHelper.Provided(identifier) if p.verify("?", _ => "\uD800") => identifier })
+      Get() ~> addHeader(Authorization(BasicCredentials("Alice", "anything"))) ~> route { echoComplete } ~> check {
+        rejection shouldEqual AuthenticationFailedRejection(CredentialsRejected, basicChallenge)
+      }
+    }
     "accept a password with characters outside Latin-1 that equals the secret" in {
       Get() ~> addHeader(Authorization(BasicCredentials("Alice", "zażółć gęślą jaźń 🔑"))) ~> {
         doBasicAuthVerify("zażółć gęślą jaźń 🔑") { echoComplete }
