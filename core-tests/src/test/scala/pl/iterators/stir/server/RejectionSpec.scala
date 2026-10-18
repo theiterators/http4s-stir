@@ -87,4 +87,19 @@ class RejectionSpec extends RoutingSpec {
       }
     }
   }
+
+  "RejectionHandler.default ranking" should {
+    "answer a missing query parameter before an expected entity, as Pekko" in {
+      Get() ~> Route.seal(reject(RequestEntityExpectedRejection, MissingQueryParamRejection("x"))) ~> check {
+        status shouldEqual Status.NotFound
+        responseAs[String] shouldEqual "Request is missing required query parameter 'x'"
+      }
+    }
+    "answer a missing required query value before an expected entity, as Pekko" in {
+      Get()                                                         ~> Route.seal(reject(RequestEntityExpectedRejection,
+        InvalidRequiredValueForQueryParamRejection("x", "1", "2"))) ~> check {
+        status shouldEqual Status.NotFound
+      }
+    }
+  }
 }

@@ -126,6 +126,8 @@ instead. Other differences that remain:
   `text/html` body linking to the URI (HTML-escaped: `&` is `&amp;`, where Pekko inserts the URI as is), and throw an
   `IllegalArgumentException` for a status that is not a redirection (Pekko's `Redirection` type rules it out at
   compile time); they sent an empty body and accepted any status.
+- The default rejection handler answers a `MissingQueryParamRejection` or
+  `InvalidRequiredValueForQueryParamRejection` (404) before a `RequestEntityExpectedRejection` (400), in Pekko's order.
 
 ## Behaviour changes in 0.7
 

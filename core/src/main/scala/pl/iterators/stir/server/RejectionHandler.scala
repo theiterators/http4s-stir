@@ -205,10 +205,6 @@ object RejectionHandler {
             s"Allowed `Origin` header values: ${allowedOrigins.mkString(", ")}"))
       }
       .handle {
-        case RequestEntityExpectedRejection =>
-          rejectRequestEntityAndComplete((BadRequest, "Request entity expected but not supplied"))
-      }
-      .handle {
         case MissingQueryParamRejection(paramName) =>
           rejectRequestEntityAndComplete((NotFound, "Request is missing required query parameter '" + paramName + '\''))
       }
@@ -216,6 +212,10 @@ object RejectionHandler {
         case InvalidRequiredValueForQueryParamRejection(paramName, requiredValue, _) =>
           rejectRequestEntityAndComplete((NotFound,
             s"Request is missing required value '$requiredValue' for query parameter '$paramName'"))
+      }
+      .handle {
+        case RequestEntityExpectedRejection =>
+          rejectRequestEntityAndComplete((BadRequest, "Request entity expected but not supplied"))
       }
       .handle {
         case TooManyRangesRejection(_) =>
