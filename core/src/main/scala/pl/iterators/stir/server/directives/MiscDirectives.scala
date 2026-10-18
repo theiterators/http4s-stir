@@ -4,10 +4,11 @@ import cats.syntax.all._
 import cats.effect.{ Deferred, IO, Outcome, Ref, SyncIO }
 import com.comcast.ip4s.IpAddress
 import fs2.{ Pull, Stream }
-import org.http4s.{ EmptyBody, EntityBody, LanguageTag, Request, Response }
+import org.http4s.{ EmptyBody, EntityBody, LanguageTag, QValue, Request, Response }
 import org.http4s.headers._
 import org.typelevel.ci.CIString
 import org.typelevel.vault.Key
+import pl.iterators.stir.impl.util._
 import pl.iterators.stir.server._
 
 import java.util.concurrent.CancellationException
@@ -77,8 +78,9 @@ trait MiscDirectives {
    * If there are several best language alternatives that the client
    * has equal preference for (even if this preference is zero!)
    * the order of the arguments is used as a tie breaker (First one wins).
-   * q-values are read as leniently as Pekko does (`q=.5`, more than three decimals, spaces around `=`); a header
-   * that still cannot be parsed is ignored.
+   * Tags are compared case-insensitively and the alternative is returned as given. q-values are read as leniently
+   * as Pekko does (`q=.5`, more than three decimals, spaces around `=`); a header that still cannot be parsed is
+   * ignored.
    *
    * @group misc
    */
@@ -86,8 +88,9 @@ trait MiscDirectives {
     extract(ctx => MiscDirectives.acceptLanguage(ctx.request)).flatMap {
       case Some(acceptLanguage) =>
         val availableLanguages = first +: more
-        val preferredLanguage =
-          availableLanguages.map(l => (l, acceptLanguage.qValue(l))).filter(_._2.isAcceptable).maxByOption(_._2)
+        val ranges = MiscDirectives.sortedLanguageRanges(acceptLanguage)
+        val preferredLanguage = availableLanguages.map(l => (l, MiscDirectives.qValueFor(ranges, l)))
+          .filter(_._2.isAcceptable).maxByOption(_._2)
         provide(preferredLanguage.map(_._1).getOrElse(first))
       case None => provide(first)
     }
@@ -299,6 +302,31 @@ object MiscDirectives extends MiscDirectives {
 
   private val _requestEntityPresent: Directive0 =
     knownEmpty.flatMap(if (_) reject(RequestEntityExpectedRejection) else pass)
+
+  private def lowerCase(tag: LanguageTag): LanguageTag =
+    tag.copy(primaryTag = tag.primaryTag.toRootLowerCase, subTags = tag.subTags.map(_.toRootLowerCase))
+
+  /**
+   * The header's ranges lower-cased (language tags are case-insensitive, RFC 4647 2.1; http4s compares them as given)
+   * and ordered as Pekko's `LanguageNegotiator` orders them: more subtags first, then the higher q-value, then the
+   * order of the header, with `*` last.
+   */
+  private def sortedLanguageRanges(acceptLanguage: `Accept-Language`): List[LanguageTag] =
+    acceptLanguage.values.toList.map(lowerCase).sortBy { range => // Pekko's -(2 * subTags + q), exactly
+      if (range.primaryTag == "*") (1, 0, 0) else (0, -range.subTags.size, -range.q.thousandths)
+    }
+
+  /** The q-value of the first range matching the language, as Pekko's `qValueFor`; zero when none matches. */
+  private def qValueFor(ranges: List[LanguageTag], language: LanguageTag): QValue = {
+    val lowered = lowerCase(language)
+    ranges.collectFirst {
+      case range
+          if range.primaryTag == "*" ||
+          (range.primaryTag == lowered.primaryTag &&
+          range.subTags.size <= lowered.subTags.size &&
+          range.subTags.zip(lowered.subTags).forall { case (a, b) => a == b }) => range.q
+    }.getOrElse(QValue.Zero)
+  }
 
   /**
    * The `Accept-Language` header with its q-values read as Pekko reads them: http4s rejects `.5` and spaces around
