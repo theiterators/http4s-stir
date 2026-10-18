@@ -118,6 +118,8 @@ instead. Other differences that remain:
 - `selectPreferredLanguage` compares language tags case-insensitively, as Pekko does: `Accept-Language: EN-us`
   selects `en-US`. It still returns the alternative as it was given. When equally specific ranges match the same
   language (`en;q=0.1, EN`) the higher q-value counts, as in Pekko; the first one in the header used to.
+- `Segment`, `Segments` and regex path matchers no longer match the empty segment of a `//`, as Pekko does:
+  `pathPrefix("a" / Segment)` rejects `/a//b` (it extracted `""`), and `Segments` stops before an empty segment.
 
 ## Behaviour changes in 0.7
 

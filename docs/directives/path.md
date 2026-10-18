@@ -192,6 +192,8 @@ Path matchers are applied to the unmatched portion of the request path. They con
 A string literal matches the decoded path segment, as in Pekko: `path("café")` matches `/caf%C3%A9` and
 `/caf%c3%a9`, and `path("a b")` matches `/a%20b`. A `/` inside a literal is part of the segment (`"a/b"` matches
 `/a%2Fb`, not `/a/b`); use `"a" / "b"` or `separateOnSlashes("a/b")` for two segments.
+An empty segment (the middle of `//`) is no segment: `Segment`, `Segments` and regex matchers do not match it, as in
+Pekko, so `/a//b` is not `"a" / Segment`.
 
 ### Slash
 

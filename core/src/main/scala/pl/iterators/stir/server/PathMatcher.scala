@@ -366,7 +366,7 @@ trait ImplicitPathMatcherConstruction {
     regex.pattern.matcher("").groupCount() match {
       case 0 => new PathMatcher1[String] {
           def apply(path: Path) = path.segments match {
-            case segment +: tail if !path.absolute =>
+            case segment +: tail if !path.absolute && !segment.isEmpty =>
               regex.findPrefixOf(segment.decoded()) match {
                 case Some(m) if segment.decoded().substring(m.length).nonEmpty =>
                   Matched(pathWithSegments(path, Path.Segment(segment.decoded().substring(m.length)) +: tail),
@@ -380,7 +380,7 @@ trait ImplicitPathMatcherConstruction {
         }
       case 1 => new PathMatcher1[String] {
           def apply(path: Path) = path.segments match {
-            case segment +: tail if !path.absolute =>
+            case segment +: tail if !path.absolute && !segment.isEmpty =>
               regex.findPrefixMatchOf(segment.decoded()) match {
                 case Some(m) if segment.decoded().substring(m.end).nonEmpty =>
                   Matched(pathWithSegments(path, Path.Segment(segment.decoded().substring(m.end)) +: tail),
@@ -612,7 +612,7 @@ trait PathMatchers {
    */
   object Segment extends PathMatcher1[String] {
     def apply(path: Path) = path.segments match {
-      case segment +: tail if !path.absolute =>
+      case segment +: tail if !path.absolute && !segment.isEmpty => // an empty `//` segment is no segment, as in Pekko
         Matched(Path(tail, tail.nonEmpty, path.endsWithSlash), Tuple1(segment.decoded()))
       case _ => Unmatched
     }

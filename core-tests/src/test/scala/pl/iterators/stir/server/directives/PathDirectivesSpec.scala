@@ -477,6 +477,49 @@ class PathDirectivesSpec extends RoutingSpec with Inside {
     "reject [/]".inThe(test())
   }
 
+  """pathPrefix("a" / Segment) (an empty segment is no segment, as in Pekko)""" should {
+    val test = testFor(pathPrefix("a" / Segment) {
+      echoCaptureAndUnmatchedPath
+    })
+    "accept [/a/b]".inThe(test("b:"))
+    "reject [/a//b]".inThe(test())
+    "reject [/a/]".inThe(test())
+  }
+
+  "pathPrefix(Segments) with an empty segment" should {
+    val test = testFor(pathPrefix(Segments) {
+      echoCaptureAndUnmatchedPath
+    })
+    "accept [/a//b] and stop before the empty segment".inThe(test("List(a)://b"))
+  }
+
+  """pathPrefix("x" / Segments) with an empty segment""" should {
+    val test = testFor(pathPrefix("x" / Segments) {
+      echoCaptureAndUnmatchedPath
+    })
+    "accept [/x//a] and leave /a unmatched".inThe(test("List():/a"))
+  }
+
+  """pathPrefix("a" / "[a-z]*".r) (a regex does not match an empty segment)""" should {
+    val test = testFor(pathPrefix("a" / "[a-z]*".r) {
+      echoCaptureAndUnmatchedPath
+    })
+    "accept [/a/bc]".inThe(test("bc:"))
+    "reject [/a//bc]".inThe(test())
+  }
+
+  """pathPrefix("a" / "([a-z]*)".r)""" should {
+    "reject [/a//bc]".inThe(testFor(pathPrefix("a" / "([a-z]*)".r) { echoCaptureAndUnmatchedPath })())
+  }
+
+  """path("a" / Segments)""" should {
+    val test = testFor(path("a" / Segments) {
+      echoCaptureAndUnmatchedPath
+    })
+    "accept [/a/b/c]".inThe(test("List(b, c):"))
+    "reject [/a//b]".inThe(test())
+  }
+
   "pathPrefix(Segments)" should {
     val test = testFor(pathPrefix(Segments) {
       echoCaptureAndUnmatchedPath
