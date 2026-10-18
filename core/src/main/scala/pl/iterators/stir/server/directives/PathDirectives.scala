@@ -215,7 +215,11 @@ trait PathDirectives extends PathMatchers with ImplicitPathMatcherConstruction {
      * Converts a URL that ends with `/` to one without. Or one that ends without `/` to one with it.
      */
     def flipTrailingSlash(path: Path): Path = {
-      if (path.endsWithSlash) path.dropEndsWithSlash else path.addEndsWithSlash
+      // a trailing `//` keeps its trailing empty segment as a segment; flipping drops one slash, as Pekko's
+      if (path.endsWithSlash && path.segments.lastOption.exists(_.isEmpty))
+        Path(path.segments.init, path.absolute, endsWithSlash = true)
+      else if (path.endsWithSlash) path.dropEndsWithSlash
+      else path.addEndsWithSlash
     }
 
     /**

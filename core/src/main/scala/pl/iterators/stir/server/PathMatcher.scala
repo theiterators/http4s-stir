@@ -461,11 +461,19 @@ trait PathMatchers {
    * @group pathmatcher
    */
   object Slash extends PathMatcher0 {
-    def apply(path: Path) = {
-      if (!path.absolute) Unmatched
-      else if (path.segments.isEmpty) Matched(Path.empty, ())
-      else Matched(Path(path.segments, absolute = false, path.endsWithSlash), ())
-    }
+    def apply(path: Path) =
+      if (path.absolute) {
+        if (path.segments.isEmpty) Matched(Path.empty, ())
+        else Matched(Path(path.segments, absolute = false, path.endsWithSlash), ())
+      } else
+        path.segments match {
+          // the second slash of a `//`: a relative path starting with an empty segment, as Pekko's Slash(Slash(...))
+          case first +: tail if first.isEmpty =>
+            if (tail.nonEmpty) Matched(Path(tail, absolute = false, path.endsWithSlash), ())
+            else if (path.endsWithSlash) Matched(Path.empty, ())
+            else Unmatched
+          case _ => Unmatched
+        }
   }
 
   /**

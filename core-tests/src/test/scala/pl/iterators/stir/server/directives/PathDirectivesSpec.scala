@@ -521,6 +521,20 @@ class PathDirectivesSpec extends RoutingSpec with Inside {
     "reject [/a//] (a trailing // after a literal is kept)".inThe(test())
   }
 
+  """Slash on a // (two slashes, as in Pekko)""" should {
+    "accept [/a//b] with pathPrefix(\"a\" ~ Slash ~ Slash ~ \"b\")".inThe(
+      testFor(pathPrefix("a" ~ Slash ~ Slash ~ "b") { echoUnmatchedPath })(""))
+    "accept [/x//y] with pathPrefix(\"x\" ~ Slash ~ Slash) and leave y unmatched".inThe(
+      testFor(pathPrefix("x" ~ Slash ~ Slash) { echoUnmatchedPath })("y"))
+    "accept [/x//a] in a nested pathPrefix(\"a\") after Segments stopped at the empty segment".inThe(
+      testFor(pathPrefix("x" / Segments) { _ => pathPrefix("a") { echoUnmatchedPath } })(""))
+  }
+
+  """ignoreTrailingSlash on a trailing //""" should {
+    "accept [/x//] with pathSingleSlash, as Pekko flips // to /".inThe(
+      testFor(pathPrefix("x") { ignoreTrailingSlash { pathSingleSlash { complete("ok") } } })("ok"))
+  }
+
   """pathPrefix("x") with a trailing //""" should {
     "accept [/x//] and leave // unmatched".inThe(testFor(pathPrefix("x") { echoUnmatchedPath })("//"))
     "reject [/x//] in pathSingleSlash".inThe(testFor(pathPrefix("x") { pathSingleSlash { completeOk } })())
