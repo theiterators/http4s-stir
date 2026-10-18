@@ -134,6 +134,13 @@ instead. Other differences that remain:
   `InvalidRequiredValueForQueryParamRejection` (404) before a `RequestEntityExpectedRejection` (400), in Pekko's order,
   and a `MissingAttributeRejection` with Pekko's "There was an internal server error." (it sent "Internal Server
   Error").
+- The WebSocket directives only take a request as an upgrade when Pekko's server would: a `GET` with
+  `Sec-WebSocket-Version: 13` and a `Sec-WebSocket-Key` of 16 base64-encoded bytes besides the `Connection` and
+  `Upgrade` headers. Others are rejected with `ExpectedWebSocketRequestRejection`: Ember used to upgrade a `POST` or a
+  key of the wrong length, and refused a missing key or version only after the route accepted the upgrade. A version
+  list (`Sec-WebSocket-Version: 8, 13`) is an upgrade, as in Pekko, but Ember's handshake refuses it (400). A client
+  offering only an older version now gets the 400 for a missing upgrade, as from Pekko, where Ember answered
+  `426 Upgrade Required` after the route had accepted it.
 
 ## Behaviour changes in 0.7
 
