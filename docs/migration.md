@@ -96,6 +96,10 @@ instead. Other differences that remain:
   (`extractHost` gives `""`, so `host(...)` rejects).
 - `extractClientIP` skips an `X-Forwarded-For` whose first entry is not an address (`unknown`) and goes on to
   `X-Real-Ip` and the connection; Pekko returns `RemoteAddress.Unknown` for it.
+- The default rejection handler lists each supported content type, encoding and method once in its 406 and 415
+  messages and the `Allow` header (Pekko repeats one offered by several alternatives), shows a request's media type
+  without its parameters in the 415 message, and sends no `Content-Range` with a 416 for a response of unknown
+  length (a case Pekko never reaches).
 - Content negotiation differs from Pekko for wildcard ranges with parameters: stir ignores `charset` on every range
   (Pekko only on `type/subtype` ranges, so its `text/*;charset=...` never matches) and does not count a wildcard
   range's parameters towards its specificity.
@@ -127,7 +131,9 @@ instead. Other differences that remain:
   `IllegalArgumentException` for a status that is not a redirection (Pekko's `Redirection` type rules it out at
   compile time); they sent an empty body and accepted any status.
 - The default rejection handler answers a `MissingQueryParamRejection` or
-  `InvalidRequiredValueForQueryParamRejection` (404) before a `RequestEntityExpectedRejection` (400), in Pekko's order.
+  `InvalidRequiredValueForQueryParamRejection` (404) before a `RequestEntityExpectedRejection` (400), in Pekko's order,
+  and a `MissingAttributeRejection` with Pekko's "There was an internal server error." (it sent "Internal Server
+  Error").
 
 ## Behaviour changes in 0.7
 

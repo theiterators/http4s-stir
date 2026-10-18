@@ -1,9 +1,11 @@
 package pl.iterators.stir.server
 
+import cats.effect.SyncIO
 import cats.effect.unsafe.IORuntime
 import fs2.Stream
 import org.http4s.{ Charset, MediaRange, MediaType, Status }
 import org.http4s.headers.{ `Content-Length`, `Content-Type` }
+import org.typelevel.vault.Key
 import pl.iterators.stir.server.directives.RoutingSpec
 
 /** Pekko's `RejectionSpec`: `mapRejectionResponse` and the `UnsupportedRequestContentTypeRejection` message. */
@@ -99,6 +101,13 @@ class RejectionSpec extends RoutingSpec {
       Get()                                                         ~> Route.seal(reject(RequestEntityExpectedRejection,
         InvalidRequiredValueForQueryParamRejection("x", "1", "2"))) ~> check {
         status shouldEqual Status.NotFound
+        responseAs[String] shouldEqual "Request is missing required value '1' for query parameter 'x'"
+      }
+    }
+    "answer a missing attribute with Pekko's 500 message" in {
+      Get() ~> Route.seal(reject(MissingAttributeRejection(Key.newKey[SyncIO, String].unsafeRunSync()))) ~> check {
+        status shouldEqual Status.InternalServerError
+        responseAs[String] shouldEqual "There was an internal server error."
       }
     }
   }

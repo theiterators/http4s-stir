@@ -197,7 +197,7 @@ object RejectionHandler {
       }
       .handle {
         case MissingAttributeRejection(_) =>
-          rejectRequestEntityAndComplete((InternalServerError, "Internal Server Error"))
+          rejectRequestEntityAndComplete((InternalServerError, "There was an internal server error."))
       }
       .handle {
         case InvalidOriginRejection(allowedOrigins) =>
