@@ -128,6 +128,8 @@ instead. Other differences that remain:
   `Content-Encoding: gzip`. They answer conditional requests (`ETag`, `Last-Modified`, 304 and 412) and `Range`
   requests (206, 416) as Pekko does.
 - `getFromResource` rejects a directory entry inside a jar instead of serving it as an empty body.
+- `getFromResource` / `getFromResourceDirectory` reject a directory on a class-path folder whose path has a space or a
+  non-ASCII character; they used to serve the JDK's listing of its file names.
 - `logRequestResultWith(show)` is new; a `show` that fails fails the request, as in Pekko.
 - `complete(status, value)` (with or without headers) sends no entity when the status allows none (1xx, 204, 205, 304),
   as Pekko does; the value used to be sent as the body. Without an entity such a response is not negotiated either

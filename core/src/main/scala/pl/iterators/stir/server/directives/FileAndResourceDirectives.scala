@@ -34,6 +34,7 @@ import pl.iterators.stir.server.{
 }
 
 import java.io.{ File, IOException }
+import java.net.URLDecoder
 
 /**
  * @groupname fileandresource File and resource directives
@@ -307,18 +308,26 @@ object FileAndResourceDirectives extends FileAndResourceDirectives {
   private def withTrailingSlash(path: String): String = if (path.endsWith("/")) path else path + '/'
 
   /**
-   * Whether the resource is a directory entry of a jar, as Pekko checks through `JarEntry.isDirectory`: a `jar:` URL
-   * whose name with a trailing slash resolves to the same entry of the same jar. Other protocols are left to http4s,
-   * which rejects file-system directories itself (and on the file system, and with some custom loaders, a trailing
-   * slash resolves for plain files too). The name is normalised as http4s normalises it, and the default loader is
-   * the one http4s uses.
+   * Whether the resource is a directory, as Pekko checks: a `file:` URL whose percent-decoded path is a directory (the
+   * file the JDK would open; Pekko's `new File(url.toURI)` fails on an unencoded URL), or a
+   * `jar:` URL whose name with a trailing slash resolves to the same entry of the same jar (Pekko's
+   * `JarEntry.isDirectory`; on the file system, and with some custom loaders, a trailing slash resolves for plain
+   * files too). Other protocols are left to http4s. The name is normalised as http4s normalises it, and the default
+   * loader is the one http4s uses.
    */
   private def isResourceDirectory(resourceName: String, classLoader: Option[ClassLoader]): IO[Boolean] =
     IO.blocking {
       val normalized = resourceName.split("/").filter(_.nonEmpty).mkString("/")
       val loader = classLoader.getOrElse(StaticFile.getClass.getClassLoader)
-      Option(loader.getResource(normalized)).filter(_.getProtocol == "jar").exists { url =>
-        Option(loader.getResource(normalized + "/")).exists(_.toString == url.toString + "/")
+      Option(loader.getResource(normalized)).exists { url =>
+        url.getProtocol match {
+          // decoded, as Pekko does: http4s checks the percent-encoded `url.getFile`, which misses a directory whose
+          // path has a space or a non-ASCII character, and the JDK then serves a listing of it
+          // the file the JDK's file: URL connection opens: the path percent-decoded, raw characters as they are
+          case "file" => new File(URLDecoder.decode(url.getPath.replace("+", "%2B"), "UTF-8")).isDirectory
+          case "jar"  => Option(loader.getResource(normalized + "/")).exists(_.toString == url.toString + "/")
+          case _      => false
+        }
       }
     }
 
